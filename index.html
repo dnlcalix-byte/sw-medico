@@ -380,7 +380,7 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
 
   <div class="card">
     <h3>Respaldo de datos — importante</h3>
-    <div class="aviso a-med">
+    <div class="aviso a-med" id="avisoRespaldoAjustes">
       Los datos viven en este navegador, en esta computadora. Si se borra el historial del navegador,
       se pierden. <strong>Descarga un respaldo al final de cada día</strong> y guárdalo en esta misma carpeta.
     </div>
@@ -1364,6 +1364,9 @@ function migrar(){
     if(p.pago === undefined) p.pago = null;
   });
   D.clientes.forEach(c => { if(c.credito === undefined) c.credito = false; });
+  // Los avisos de reposición no tenían identificador propio. La base compartida
+  // necesita uno por fila para saber cuál es cuál entre dispositivos.
+  D.avisos.forEach(a => { if(!a.id) a.id = (a.cliente_id||"x") + "|" + (a.codigo||"y") + "|" + (a.fecha||""); });
   // Tipo de unidad y contenido, derivados de la presentación (decisión 3)
   D.skus.forEach(s => {
     if(s.unidad === undefined || s.contenido === undefined){
@@ -1395,10 +1398,17 @@ function migrar(){
     });
   }
 }
-function guardar(){
+// Guardado en este navegador. Es el primer destino de todo cambio: aunque no
+// haya internet ni base compartida, la información queda a salvo aquí.
+function guardarLocal(){
   try{ localStorage.setItem(CLAVE, JSON.stringify(D)); }
   catch(e){ alert("No se pudieron guardar los datos en este navegador.\n\n"+
     "Descarga un respaldo ahora mismo desde Ajustes para no perder información."); }
+}
+function guardar(){
+  guardarLocal();
+  // Si el navegador está conectado a la base del equipo, empuja el cambio.
+  if(typeof nubeTocado === "function") nubeTocado();
 }
 
 /* ============================================================================
@@ -1781,7 +1791,9 @@ function confirmarPedido(){
   }
   const sla = c.nivel==="express" ? par("sla_express_min") : par("sla_ventana_min");
   const ped = {
-    id: uid(), numero: 1000 + D.pedidos.length,
+    // El número se toma del mayor que exista, no de la cantidad de pedidos:
+    // con varios dispositivos trabajando a la vez, contar produce repetidos.
+    id: uid(), numero: D.pedidos.reduce((m,p)=>Math.max(m, Number(p.numero)||0), 1000) + 1,
     fecha: new Date().toISOString(), cliente_id: P.cliente.id, cliente: P.cliente.nombre,
     telefono: P.cliente.telefono, direccion: P.cliente.direccion,
     lineas: JSON.parse(JSON.stringify(P.lineas)),
@@ -2569,7 +2581,7 @@ function armarPedidoSugerido(i){
 function marcarAvisado(i){
   const x = window._repo[i];
   D.avisos = D.avisos.filter(a=>!(a.cliente_id===x.cliente.id && a.codigo===x.codigo));
-  D.avisos.push({cliente_id:x.cliente.id, codigo:x.codigo, fecha:new Date().toISOString()});
+  D.avisos.push({id:uid(), cliente_id:x.cliente.id, codigo:x.codigo, fecha:new Date().toISOString()});
   guardar(); pintarReposicion();
 }
 
@@ -2771,8 +2783,16 @@ function exportarCatalogoCSV(){
 }
 function exportarTodoCSV(){ exportarPedidosCSV(); exportarClientesCSV(); exportarCatalogoCSV(); }
 function borrarTodo(){
+  const enNube = (typeof nubeActiva === "function" && nubeActiva());
   if(!confirm("Esto borra TODOS los datos: clientes, pedidos e inventario.\n\n¿Descargaste un respaldo?")) return;
+  if(enNube && !confirm("ATENCIÓN: este navegador está conectado a la base compartida.\n\n" +
+      "Se va a desconectar de la base antes de borrar, para NO borrar la información del equipo.\n\n" +
+      "¿Continuar?")) return;
   if(!confirm("Última confirmación. ¿Borrar todo y empezar de cero?")) return;
+  // El espejo es la foto de lo que la base ya tiene. Si se borra lo local sin
+  // borrar el espejo, al reconectar el sistema creería que el equipo borró todo
+  // y arrastraría ese borrado a los demás dispositivos.
+  try{ localStorage.removeItem("sdim_espejo"); localStorage.removeItem("sdim_sesion"); }catch(e){}
   localStorage.removeItem(CLAVE); location.reload();
 }
 
@@ -2789,6 +2809,576 @@ pintarCatalogoCompra();
 pintarHabituales();
 recalc();
 pintarInicio();
+</script>
+
+<script>
+"use strict";
+/* ============================================================================
+   BASE COMPARTIDA (NUBE)
+   ----------------------------------------------------------------------------
+   Sin esto, cada navegador guarda sus propios datos y nadie ve lo del otro.
+   Con esto, todos los dispositivos del equipo ven la misma información:
+   el pedido que entra en el teléfono aparece en el tablero de bodega.
+
+   Cómo funciona, en simple:
+     · Cada cambio se guarda PRIMERO en este navegador (nunca se pierde).
+     · Luego se empuja a la base compartida.
+     · Cada pocos segundos se pregunta "¿qué cambió en los demás?" y se trae.
+     · Si se cae el internet, se sigue trabajando local y se sincroniza al volver.
+
+   No hay servidor propio que mantener: la base es Supabase (plan gratuito).
+   ============================================================================ */
+
+const NUBE_CFG  = "sdim_nube";      // dirección y llave pública del proyecto
+const NUBE_SES  = "sdim_sesion";    // sesión del usuario en este navegador
+const NUBE_MARK = "sdim_espejo";    // última foto conocida de la base
+
+const COLECCIONES = [
+  {t:"skus",        campo:"skus",        clave:"codigo", nombre:"productos"},
+  {t:"clientes",    campo:"clientes",    clave:"id",     nombre:"clientes"},
+  {t:"pedidos",     campo:"pedidos",     clave:"id",     nombre:"pedidos"},
+  {t:"movimientos", campo:"movimientos", clave:"id",     nombre:"movimientos"},
+  {t:"avisos",      campo:"avisos",      clave:"id",     nombre:"avisos"}
+];
+
+const NUBE = {
+  url: "", key: "",
+  sesion: null,              // {access_token, refresh_token, expira, email}
+  estado: "local",           // local | conectando | en_linea | sin_red | error
+  detalle: "",
+  desde: "1970-01-01T00:00:00Z",
+  espejo: {},                // {tabla: {llave: firma}}
+  pendiente: false,          // hay cambios locales por subir
+  ocupado: false,
+  ultima: null,              // hora de la última sincronización correcta
+  vueltas: 0,
+  timer: null
+};
+
+/* ------------------------------------------------------------- utilidades */
+
+// Firma estable de un objeto: dos objetos iguales dan la misma cadena aunque
+// sus campos estén en distinto orden. Sirve para saber qué cambió de verdad
+// y no reenviar a la base cosas que no se tocaron.
+function nubeFirma(v){
+  if(v === null || typeof v !== "object") return JSON.stringify(v);
+  if(Array.isArray(v)) return "[" + v.map(nubeFirma).join(",") + "]";
+  return "{" + Object.keys(v).sort().map(k => JSON.stringify(k)+":"+nubeFirma(v[k])).join(",") + "}";
+}
+
+function nubeLeerCfg(){
+  try{
+    const c = JSON.parse(localStorage.getItem(NUBE_CFG) || "null");
+    if(c && c.url && c.key){ NUBE.url = c.url.replace(/\/+$/,""); NUBE.key = c.key; return true; }
+  }catch(e){}
+  return false;
+}
+function nubeLeerSesion(){
+  try{ NUBE.sesion = JSON.parse(localStorage.getItem(NUBE_SES) || "null"); }
+  catch(e){ NUBE.sesion = null; }
+  return !!(NUBE.sesion && NUBE.sesion.refresh_token);
+}
+function nubeGuardarSesion(s){
+  NUBE.sesion = s;
+  try{ s ? localStorage.setItem(NUBE_SES, JSON.stringify(s)) : localStorage.removeItem(NUBE_SES); }catch(e){}
+}
+function nubeLeerEspejo(){
+  try{
+    const e = JSON.parse(localStorage.getItem(NUBE_MARK) || "null");
+    if(e){ NUBE.espejo = e.espejo || {}; NUBE.desde = e.desde || NUBE.desde; return; }
+  }catch(e){}
+  COLECCIONES.forEach(c => NUBE.espejo[c.t] = {});
+  NUBE.espejo.config = {};
+}
+function nubeGuardarEspejo(){
+  try{ localStorage.setItem(NUBE_MARK, JSON.stringify({espejo:NUBE.espejo, desde:NUBE.desde})); }catch(e){}
+}
+function nubeOlvidarEspejo(){
+  NUBE.espejo = {}; COLECCIONES.forEach(c => NUBE.espejo[c.t] = {});
+  NUBE.espejo.config = {};
+  NUBE.desde = "1970-01-01T00:00:00Z";
+  nubeGuardarEspejo();
+}
+
+const nubeActiva = () => !!(NUBE.url && NUBE.key && NUBE.sesion && NUBE.sesion.access_token);
+
+/* ------------------------------------------------------- llamadas a la base */
+
+async function nubeToken(){
+  const s = NUBE.sesion;
+  if(!s) throw new Error("sin sesión");
+  if(s.expira && Date.now() < s.expira - 60000) return s.access_token;
+  // El token vence cada hora; se renueva solo con el refresh_token.
+  const r = await fetch(NUBE.url + "/auth/v1/token?grant_type=refresh_token", {
+    method:"POST",
+    headers:{"apikey":NUBE.key, "Content-Type":"application/json"},
+    body: JSON.stringify({refresh_token: s.refresh_token})
+  });
+  if(!r.ok){ nubeGuardarSesion(null); throw new Error("La sesión venció. Vuelve a entrar."); }
+  const j = await r.json();
+  nubeGuardarSesion({access_token:j.access_token, refresh_token:j.refresh_token,
+                     expira: Date.now() + (j.expires_in||3600)*1000, email: s.email});
+  return j.access_token;
+}
+
+async function nubeFetch(ruta, opciones){
+  const tk = await nubeToken();
+  const o = opciones || {};
+  const r = await fetch(NUBE.url + ruta, {
+    method: o.method || "GET",
+    headers: Object.assign({
+      "apikey": NUBE.key,
+      "Authorization": "Bearer " + tk,
+      "Content-Type": "application/json"
+    }, o.headers || {}),
+    body: o.body ? JSON.stringify(o.body) : undefined
+  });
+  if(!r.ok){
+    const txt = await r.text().catch(()=> "");
+    throw new Error("La base respondió " + r.status + (txt ? ": " + txt.slice(0,160) : ""));
+  }
+  if(r.status === 204) return null;
+  const t = await r.text();
+  return t ? JSON.parse(t) : null;
+}
+
+const nubeRpc = (fn, args) => nubeFetch("/rest/v1/rpc/" + fn, {method:"POST", body: args || {}});
+
+async function nubeEntrar(email, clave){
+  if(!NUBE.url || !NUBE.key) throw new Error("Falta configurar la dirección y la llave del proyecto.");
+  const r = await fetch(NUBE.url + "/auth/v1/token?grant_type=password", {
+    method:"POST",
+    headers:{"apikey":NUBE.key, "Content-Type":"application/json"},
+    body: JSON.stringify({email: email, password: clave})
+  });
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error_description || j.msg || j.message || "Usuario o contraseña incorrectos.");
+  nubeGuardarSesion({access_token:j.access_token, refresh_token:j.refresh_token,
+                     expira: Date.now() + (j.expires_in||3600)*1000, email: email});
+}
+
+function nubeSalir(){
+  nubeGuardarSesion(null);
+  NUBE.estado = "local"; NUBE.detalle = "";
+  if(NUBE.timer){ clearInterval(NUBE.timer); NUBE.timer = null; }
+  nubePintarPill();
+  if(typeof pintarAjustes === "function" && document.querySelector("#p-ajustes.on")) pintarAjustes();
+}
+
+/* --------------------------------------------------------------- subir --- */
+
+function nubeCambiosLocales(){
+  const lotes = {};
+  let n = 0;
+  COLECCIONES.forEach(c => {
+    const esp = NUBE.espejo[c.t] = NUBE.espejo[c.t] || {};
+    const filas = [];
+    const vivos = {};
+    (D[c.campo] || []).forEach(item => {
+      const k = item[c.clave];
+      if(k === undefined || k === null) return;
+      vivos[k] = true;
+      const f = nubeFirma(item);
+      if(esp[k] !== f){ filas.push({[c.clave]: String(k), datos: item}); n++; }
+    });
+    const borrar = Object.keys(esp).filter(k => !vivos[k]);
+    if(filas.length || borrar.length) lotes[c.t] = {c, filas, borrar};
+    n += borrar.length;
+  });
+  // Parámetros y cuenta bancaria
+  const esp = NUBE.espejo.config = NUBE.espejo.config || {};
+  const cfgFilas = [];
+  [["params", D.params], ["banco", D.banco]].forEach(([k, v]) => {
+    const f = nubeFirma(v);
+    if(esp[k] !== f){ cfgFilas.push({clave:k, datos:v}); n++; }
+  });
+  if(cfgFilas.length) lotes.config = {c:{t:"config", clave:"clave"}, filas:cfgFilas, borrar:[]};
+  return {lotes, n};
+}
+
+async function nubeSubir(){
+  const {lotes, n} = nubeCambiosLocales();
+  if(!n) return 0;
+  for(const t of Object.keys(lotes)){
+    const {c, filas, borrar} = lotes[t];
+    if(filas.length){
+      // De a 200 filas por envío, para no armar peticiones enormes.
+      for(let i = 0; i < filas.length; i += 200){
+        await nubeFetch("/rest/v1/" + t, {
+          method:"POST",
+          headers:{"Prefer":"resolution=merge-duplicates,return=minimal"},
+          body: filas.slice(i, i+200)
+        });
+      }
+      filas.forEach(f => NUBE.espejo[t][f[c.clave]] = nubeFirma(f.datos));
+    }
+    for(const k of borrar){
+      await nubeFetch("/rest/v1/" + t + "?" + c.clave + "=eq." + encodeURIComponent(k), {method:"DELETE"});
+      delete NUBE.espejo[t][k];
+    }
+  }
+  return n;
+}
+
+/* ---------------------------------------------------------------- bajar --- */
+
+function nubeAplicar(campo, clave, tabla, filas){
+  let n = 0;
+  filas.forEach(f => {
+    const item = f.d, k = String(f.k);
+    const fi = nubeFirma(item);
+    if(NUBE.espejo[tabla][k] === fi) return;      // ya lo teníamos igual
+    const arr = D[campo];
+    const i = arr.findIndex(x => String(x[clave]) === k);
+    if(i >= 0) arr[i] = item; else arr.push(item);
+    NUBE.espejo[tabla][k] = fi;
+    n++;
+  });
+  return n;
+}
+
+async function nubeBajar(){
+  const r = await nubeRpc("cambios", {desde: NUBE.desde});
+  let n = 0;
+  COLECCIONES.forEach(c => { n += nubeAplicar(c.campo, c.clave, c.t, r[c.t] || []); });
+  (r.config || []).forEach(f => {
+    const fi = nubeFirma(f.d);
+    if(NUBE.espejo.config[f.k] === fi) return;
+    if(f.k === "params") D.params = f.d;
+    if(f.k === "banco")  D.banco  = f.d;
+    NUBE.espejo.config[f.k] = fi;
+    n++;
+  });
+  NUBE.desde = r.ahora;
+  return n;
+}
+
+// Lo que otro borró. Se revisa cada tanto, no en cada vuelta.
+async function nubeReconciliar(){
+  const r = await nubeRpc("llaves", {});
+  let n = 0;
+  COLECCIONES.forEach(c => {
+    const vivos = new Set((r[c.t] || []).map(String));
+    const antes = D[c.campo].length;
+    D[c.campo] = D[c.campo].filter(x => {
+      const k = String(x[c.clave]);
+      if(vivos.has(k)) return true;
+      if(NUBE.espejo[c.t][k] === undefined) return true;   // creado aquí, aún sin subir
+      delete NUBE.espejo[c.t][k];
+      return false;
+    });
+    n += antes - D[c.campo].length;
+  });
+  return n;
+}
+
+/* -------------------------------------------------------- sincronización --- */
+
+async function nubeSincronizar(forzar){
+  if(!nubeActiva() || NUBE.ocupado) return;
+  if(!navigator.onLine){ nubeEstado("sin_red", "Sin internet — trabajando en este navegador"); return; }
+  NUBE.ocupado = true;
+  try{
+    const subidos = await nubeSubir();
+    let bajados = await nubeBajar();
+    NUBE.vueltas++;
+    if(forzar || NUBE.vueltas % 8 === 1) bajados += await nubeReconciliar();
+    if(subidos || bajados){
+      guardarLocal();
+      if(typeof recalc === "function") recalc();
+      nubeRepintar();
+    }
+    nubeGuardarEspejo();
+    NUBE.ultima = Date.now();
+    NUBE.pendiente = false;
+    nubeEstado("en_linea", "");
+  }catch(e){
+    const msg = String(e.message || e);
+    if(/Failed to fetch|NetworkError|Load failed/i.test(msg))
+      nubeEstado("sin_red", "Sin internet — trabajando en este navegador");
+    else
+      nubeEstado("error", msg);
+  }finally{
+    NUBE.ocupado = false;
+  }
+}
+
+// Vuelve a dibujar la pantalla que está abierta, para que el cambio de otro
+// dispositivo se vea sin tener que recargar.
+function nubeRepintar(){
+  const abierto = document.querySelector(".panel.on");
+  if(!abierto) return;
+  const p = abierto.id.replace("p-","");
+  const f = {inicio:"pintarInicio", despacho:"pintarDespacho", pedidos:"pintarPedidos",
+             clientes:"pintarClientes", catalogo:"pintarCatalogo", inventario:"pintarInventario",
+             reposicion:"pintarReposicion", ajustes:"pintarAjustes"}[p];
+  // En "Nuevo pedido" no se repinta: el usuario está escribiendo.
+  if(f && typeof window[f] === "function" && !document.querySelector("#modal.on")) window[f]();
+}
+
+function nubeEstado(e, detalle){
+  NUBE.estado = e; NUBE.detalle = detalle || "";
+  nubePintarPill();
+}
+
+// Se llama después de cada guardado local.
+let nubeTimerEmpuje = null;
+function nubeTocado(){
+  if(!nubeActiva()) return;
+  NUBE.pendiente = true;
+  nubePintarPill();
+  clearTimeout(nubeTimerEmpuje);
+  nubeTimerEmpuje = setTimeout(() => nubeSincronizar(false), 700);
+}
+
+function nubeArrancar(){
+  if(NUBE.timer) clearInterval(NUBE.timer);
+  NUBE.timer = setInterval(() => nubeSincronizar(false), 7000);
+  nubeSincronizar(true);
+}
+
+/* ------------------------------------------- primera conexión de un equipo */
+
+async function nubePrimeraVez(){
+  // ¿La base está vacía? Entonces esta computadora siembra los datos.
+  // ¿Ya tiene información? Entonces manda la base y lo local se reemplaza,
+  // para no pisar el inventario real con un catálogo recién instalado.
+  const vacia = await nubeRpc("esta_vacia", {});
+  nubeOlvidarEspejo();
+  if(vacia){
+    await nubeSubir();
+    nubeGuardarEspejo();
+    NUBE.ultima = Date.now();
+    nubeEstado("en_linea", "");
+    return {accion:"subio"};
+  }
+  D.clientes = []; D.pedidos = []; D.movimientos = []; D.avisos = [];
+  D.skus.forEach(s => { s.existencia = 0; });
+  const n = await nubeBajar();
+  await nubeReconciliar();
+  guardarLocal();
+  if(typeof recalc === "function") recalc();
+  nubeGuardarEspejo();
+  NUBE.ultima = Date.now();
+  nubeEstado("en_linea", "");
+  return {accion:"bajo", n};
+}
+
+/* ================================================================== UI === */
+
+function nubePintarPill(){
+  const el = document.getElementById("nubePill");
+  if(!el) return;
+  const mapa = {
+    local:      {t:"Solo este navegador", c:"#8A5A00", b:"#FFF4DB", p:"·"},
+    conectando: {t:"Conectando…",         c:"#1F3864", b:"#E8EEF8", p:"·"},
+    en_linea:   {t:"Compartido",          c:"#0E7A3C", b:"#E4F4EA", p:"●"},
+    sin_red:    {t:"Sin internet",        c:"#8A5A00", b:"#FFF4DB", p:"○"},
+    error:      {t:"Error de conexión",   c:"#B3261E", b:"#FDECEA", p:"!"}
+  };
+  const m = mapa[NUBE.estado] || mapa.local;
+  let extra = "";
+  if(NUBE.estado === "en_linea"){
+    if(NUBE.pendiente) extra = " · guardando";
+    else if(NUBE.ultima) extra = " · al día";
+  }
+  el.style.background = m.b; el.style.color = m.c;
+  el.textContent = m.p + " " + m.t + extra;
+  el.title = NUBE.detalle || (NUBE.sesion ? NUBE.sesion.email : "Los datos viven solo en este navegador");
+}
+
+function nubeMontarPill(){
+  const h = document.querySelector("header");
+  if(!h || document.getElementById("nubePill")) return;
+  const s = document.createElement("style");
+  s.textContent =
+    "#nubePill{font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;" +
+    "cursor:pointer;white-space:nowrap;border:0;font-family:inherit;margin-left:8px}" +
+    "#nubeCapa{position:fixed;inset:0;background:rgba(15,32,55,.55);z-index:200;" +
+    "display:flex;align-items:center;justify-content:center;padding:18px}" +
+    "#nubeCaja{background:#fff;border-radius:12px;padding:24px;max-width:420px;width:100%;" +
+    "box-shadow:0 18px 50px rgba(0,0,0,.28)}" +
+    "#nubeCaja h3{margin:0 0 4px;font-size:16px;color:#1F3864}" +
+    "#nubeCaja p.s{margin:0 0 16px;font-size:12.5px;color:#6B7A8F;line-height:1.5}" +
+    "" +
+    "#nubeErr{background:#FDECEA;color:#B3261E;font-size:12.5px;padding:9px 11px;" +
+    "border-radius:6px;margin-bottom:12px;display:none}";
+  document.head.appendChild(s);
+  const b = document.createElement("button");
+  b.id = "nubePill";
+  b.onclick = () => ir("ajustes");
+  // Antes del menú: así queda en la primera línea del encabezado y no se
+  // empuja a un renglón aparte en pantallas angostas.
+  const nav = h.querySelector("nav");
+  nav ? h.insertBefore(b, nav) : h.appendChild(b);
+  nubePintarPill();
+}
+
+/* --------------------------------------------------- tarjeta en Ajustes --- */
+
+function nubeTarjeta(){
+  const conectado = nubeActiva();
+  const cfg = !!(NUBE.url && NUBE.key);
+  const seg = NUBE.ultima ? Math.round((Date.now()-NUBE.ultima)/1000) : null;
+
+  if(conectado){
+    return '<div class="card" id="nubeCard">' +
+      '<h3>Base compartida</h3>' +
+      '<p style="margin:0 0 14px;color:#6B7A8F;font-size:13px">' +
+      'Este navegador está conectado a la base del equipo. Todo lo que registres aquí ' +
+      'lo ven los demás dispositivos en pocos segundos, y viceversa.</p>' +
+      '<div class="grid g3" style="margin-bottom:14px">' +
+        nubeDato("Estado", NUBE.estado==="en_linea" ? "Conectado" :
+                            NUBE.estado==="sin_red" ? "Sin internet" :
+                            NUBE.estado==="error"   ? "Con error" : "Conectando") +
+        nubeDato("Usuario", esc(NUBE.sesion.email)) +
+        nubeDato("Última sincronización", seg===null ? "—" : (seg<60 ? "hace "+seg+" s" : "hace "+Math.round(seg/60)+" min")) +
+      '</div>' +
+      (NUBE.detalle ? '<div style="background:#FDECEA;color:#B3261E;font-size:12.5px;padding:9px 11px;border-radius:6px;margin-bottom:12px">'+esc(NUBE.detalle)+'</div>' : '') +
+      '<button class="b" onclick="nubeSincronizar(true)">Sincronizar ahora</button> ' +
+      '<button class="s" onclick="nubeSalir()">Desconectar este navegador</button>' +
+      '<p style="margin:14px 0 0;color:#6B7A8F;font-size:12px">' +
+      'Desconectar no borra nada de la base: solo deja de sincronizar en este navegador.</p>' +
+    '</div>';
+  }
+
+  return '<div class="card" id="nubeCard">' +
+    '<h3>Base compartida</h3>' +
+    '<p style="margin:0 0 6px;color:#6B7A8F;font-size:13px">' +
+    'Hoy los datos de este navegador <strong>no se comparten</strong>: lo que registres aquí no ' +
+    'aparece en el teléfono ni en la computadora de bodega.</p>' +
+    '<p style="margin:0 0 14px;color:#6B7A8F;font-size:13px">' +
+    'Al conectar la base compartida, todos los dispositivos ven lo mismo al instante. ' +
+    'Sigue la guía <em>Conectar la base compartida</em> y pega aquí los dos datos que te da Supabase.</p>' +
+    '<div class="grid g2">' +
+      '<div style="margin-bottom:12px"><label>Dirección del proyecto (Project URL)</label>' +
+      '<input id="nbUrl" placeholder="https://xxxxxxxx.supabase.co" value="'+esc(NUBE.url)+'"></div>' +
+      '<div style="margin-bottom:12px"><label>Llave pública (anon public key)</label>' +
+      '<input id="nbKey" placeholder="eyJhbGciOi..." value="'+esc(NUBE.key)+'"></div>' +
+    '</div>' +
+    '<button class="b" onclick="nubeGuardarCfg()">Guardar conexión</button>' +
+    (cfg ? ' <button class="s" onclick="nubeLogin()">Entrar con mi usuario</button>' : '') +
+    '<p style="margin:14px 0 0;color:#6B7A8F;font-size:12px">' +
+    'La llave pública no es una contraseña: sirve para encontrar el proyecto. ' +
+    'Nadie puede leer ni escribir los datos sin iniciar sesión con usuario y contraseña.</p>' +
+  '</div>';
+}
+
+function nubeDato(t, v){
+  return '<div><div style="font-size:11px;color:#6B7A8F;font-weight:700;text-transform:uppercase;' +
+         'letter-spacing:.4px">'+esc(t)+'</div><div style="font-size:15px;font-weight:600;margin-top:2px">'+v+'</div></div>';
+}
+
+function nubeGuardarCfg(){
+  const u = (document.getElementById("nbUrl").value || "").trim().replace(/\/+$/,"");
+  const k = (document.getElementById("nbKey").value || "").trim();
+  if(!/^https:\/\/[a-z0-9-]+\.supabase\.(co|in)$/i.test(u)){
+    alert("La dirección debe verse así:\n\nhttps://abcdefghijkl.supabase.co\n\n" +
+          "La encuentras en Supabase, en Settings → API → Project URL."); return;
+  }
+  if(k.length < 40){
+    alert("La llave pública se ve larga, algo así como:\n\neyJhbGciOiJIUzI1NiIsInR5cCI6...\n\n" +
+          "La encuentras en Supabase, en Settings → API → anon public."); return;
+  }
+  try{ localStorage.setItem(NUBE_CFG, JSON.stringify({url:u, key:k})); }catch(e){}
+  NUBE.url = u; NUBE.key = k;
+  pintarAjustes();
+  nubeLogin();
+}
+
+function nubeLogin(){
+  if(document.getElementById("nubeCapa")) return;
+  const capa = document.createElement("div");
+  capa.id = "nubeCapa";
+  capa.innerHTML =
+    '<div id="nubeCaja">' +
+      '<h3>Entrar a la base compartida</h3>' +
+      '<p class="s">Usa el usuario y la contraseña que creaste en Supabase para ti o para tu equipo. ' +
+      'Solo hay que hacerlo una vez en cada dispositivo.</p>' +
+      '<div id="nubeErr"></div>' +
+      '<div style="margin-bottom:12px"><label>Correo</label><input id="nbMail" type="email" autocomplete="username"></div>' +
+      '<div style="margin-bottom:12px"><label>Contraseña</label><input id="nbPass" type="password" autocomplete="current-password"></div>' +
+      '<div style="margin-top:16px;display:flex;gap:8px">' +
+        '<button class="b" id="nbEntrar">Entrar</button>' +
+        '<button class="s" id="nbCancelar">Cancelar</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(capa);
+  const cerrar = () => capa.remove();
+  document.getElementById("nbCancelar").onclick = cerrar;
+  const err = m => { const e = document.getElementById("nubeErr"); e.textContent = m; e.style.display = "block"; };
+
+  document.getElementById("nbEntrar").onclick = async function(){
+    const b = this;
+    const mail = document.getElementById("nbMail").value.trim();
+    const pass = document.getElementById("nbPass").value;
+    if(!mail || !pass){ err("Escribe el correo y la contraseña."); return; }
+    b.disabled = true; b.textContent = "Entrando…";
+    try{
+      await nubeEntrar(mail, pass);
+      b.textContent = "Ordenando los datos…";
+      const r = await nubePrimeraVez();
+      cerrar();
+      nubeArrancar();
+      if(typeof pintarAjustes === "function") pintarAjustes();
+      alert(r.accion === "subio"
+        ? "Listo. La base estaba vacía, así que se subió la información de este navegador.\n\n" +
+          "Ahora puedes abrir el sistema en otro dispositivo, entrar con el mismo usuario, y verás lo mismo."
+        : "Listo. La base ya tenía información y se trajo a este navegador.\n\n" +
+          "Desde ahora este dispositivo y los demás ven lo mismo.");
+    }catch(e){
+      err(String(e.message || e));
+      b.disabled = false; b.textContent = "Entrar";
+    }
+  };
+  document.getElementById("nbPass").addEventListener("keydown", e => {
+    if(e.key === "Enter") document.getElementById("nbEntrar").click();
+  });
+  setTimeout(() => { const m = document.getElementById("nbMail"); if(m) m.focus(); }, 30);
+}
+
+/* ------------------------------------------------------------- arranque --- */
+
+// La tarjeta de la nube se agrega arriba de Ajustes sin tocar el resto.
+if(typeof pintarAjustes === "function"){
+  const _pintarAjustes = pintarAjustes;
+  pintarAjustes = function(){
+    _pintarAjustes.apply(this, arguments);
+    const p = document.getElementById("p-ajustes");
+    if(p){
+      // Quitar la tarjeta anterior antes de poner la nueva: pintarAjustes se
+      // llama muchas veces y si no, se van apilando copias.
+      const vieja = document.getElementById("nubeCard");
+      if(vieja) vieja.remove();
+      p.insertAdjacentHTML("afterbegin", nubeTarjeta());
+    }
+    // Con base compartida, el aviso de respaldo ya no es el mismo: la
+    // información deja de depender de una sola computadora.
+    const av = document.getElementById("avisoRespaldoAjustes");
+    if(av && nubeActiva())
+      av.innerHTML = "La información está en la base compartida, así que no depende de esta " +
+        "computadora. Aun así, <strong>descarga un respaldo una vez por semana</strong>: " +
+        "es lo que te protege de un borrado por error.";
+  };
+}
+
+window.addEventListener("online",  () => { if(nubeActiva()) nubeSincronizar(true); });
+window.addEventListener("offline", () => nubeEstado("sin_red", "Sin internet — trabajando en este navegador"));
+document.addEventListener("visibilitychange", () => {
+  if(!document.hidden && nubeActiva()) nubeSincronizar(false);
+});
+
+(function nubeInit(){
+  nubeMontarPill();
+  nubeLeerEspejo();
+  if(nubeLeerCfg() && nubeLeerSesion()){
+    nubeEstado("conectando", "");
+    nubeArrancar();
+  }else{
+    nubeEstado("local", "");
+  }
+})();
+
 </script>
 </body>
 </html>
