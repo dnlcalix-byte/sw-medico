@@ -1,0 +1,2794 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sistema de Distribución — Insumos Médicos</title>
+<style>
+:root{
+  --azul:#1F3864; --azul2:#2E5C8A; --claro:#F4F6FA; --borde:#D7DEE8;
+  --texto:#1a2332; --gris:#6B7A8F; --verde:#0E7A3C; --verdebg:#E4F4EA;
+  --rojo:#B3261E; --rojobg:#FDECEA; --ambar:#8A5A00; --ambarbg:#FFF4DB;
+  --blanco:#fff; --sombra:0 1px 3px rgba(16,24,40,.08),0 1px 2px rgba(16,24,40,.06);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;
+  background:var(--claro);color:var(--texto);font-size:14px;line-height:1.5}
+header{background:var(--azul);color:#fff;padding:10px 18px;display:flex;
+  align-items:center;gap:14px;flex-wrap:wrap;position:sticky;top:0;z-index:50}
+header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.2px}
+header .sub{font-size:11px;opacity:.75;margin-left:-8px}
+nav{display:flex;gap:2px;flex-wrap:wrap;margin-left:auto}
+nav button{background:transparent;border:0;color:#cfd9e8;padding:7px 12px;
+  border-radius:6px;cursor:pointer;font-size:13px;font-family:inherit}
+nav button:hover{background:rgba(255,255,255,.1);color:#fff}
+nav button.on{background:#fff;color:var(--azul);font-weight:600}
+main{padding:18px;max-width:1400px;margin:0 auto}
+.panel{display:none}.panel.on{display:block}
+h2{font-size:18px;margin:0 0 4px}
+.sub2{color:var(--gris);font-size:13px;margin:0 0 16px}
+.card{background:#fff;border:1px solid var(--borde);border-radius:10px;
+  padding:16px;margin-bottom:14px;box-shadow:var(--sombra)}
+.card h3{margin:0 0 12px;font-size:14px;color:var(--azul);
+  text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+.grid{display:grid;gap:12px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.g4{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+label{display:block;font-size:12px;color:var(--gris);margin-bottom:3px;font-weight:600}
+input,select,textarea{width:100%;padding:8px 10px;border:1px solid var(--borde);
+  border-radius:6px;font-size:14px;font-family:inherit;background:#fff;color:var(--texto)}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--azul2);outline-offset:-1px}
+input[readonly]{background:#F7F9FC;color:var(--gris)}
+button.b{background:var(--azul);color:#fff;border:0;padding:9px 16px;border-radius:6px;
+  cursor:pointer;font-size:14px;font-weight:600;font-family:inherit}
+button.b:hover{background:var(--azul2)}
+button.b:disabled{background:#B9C2CF;cursor:not-allowed}
+button.s{background:#fff;color:var(--azul);border:1px solid var(--borde);padding:7px 13px;
+  border-radius:6px;cursor:pointer;font-size:13px;font-family:inherit}
+button.s:hover{background:var(--claro)}
+button.d{background:#fff;color:var(--rojo);border:1px solid #F0C4C0}
+button.d:hover{background:var(--rojobg)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--azul2);color:#fff;text-align:left;padding:8px 10px;font-weight:600;
+  font-size:12px;position:sticky;top:0}
+td{padding:7px 10px;border-bottom:1px solid #EDF1F6;vertical-align:middle}
+tr:hover td{background:#FAFBFD}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.tabla-wrap{overflow-x:auto;max-height:520px;overflow-y:auto;border:1px solid var(--borde);border-radius:8px}
+.kpi{background:#fff;border:1px solid var(--borde);border-radius:10px;padding:14px;box-shadow:var(--sombra)}
+.kpi .v{font-size:26px;font-weight:700;color:var(--azul);font-variant-numeric:tabular-nums;line-height:1.2}
+.kpi .l{font-size:12px;color:var(--gris);margin-top:2px}
+.kpi .h{font-size:11px;color:var(--gris);margin-top:6px;line-height:1.35}
+.pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700}
+.p-ok{background:var(--verdebg);color:var(--verde)}
+.p-mal{background:var(--rojobg);color:var(--rojo)}
+.p-med{background:var(--ambarbg);color:var(--ambar)}
+.p-gris{background:#EDF1F6;color:var(--gris)}
+.aviso{padding:11px 14px;border-radius:8px;margin:10px 0;font-size:13px;border:1px solid}
+.a-ok{background:var(--verdebg);border-color:#B6E0C4;color:#0B5E2E}
+.a-mal{background:var(--rojobg);border-color:#F3C7C3;color:#8C1D18}
+.a-med{background:var(--ambarbg);border-color:#EBD4A0;color:#6B4500}
+.a-info{background:#EAF1FB;border-color:#C3D6F0;color:#183C6E}
+.fila{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.fila>*{flex:1;min-width:130px}
+.fila>.auto{flex:0 0 auto;min-width:0}
+.vacio{text-align:center;padding:34px;color:var(--gris);font-size:13px}
+.modal{position:fixed;inset:0;background:rgba(16,24,40,.5);display:none;
+  align-items:center;justify-content:center;z-index:100;padding:20px}
+.modal.on{display:flex}
+.modal .box{background:#fff;border-radius:12px;padding:22px;max-width:560px;width:100%;
+  max-height:88vh;overflow:auto}
+.mini{font-size:12px;color:var(--gris)}
+.right{text-align:right}
+hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
+.bar{height:7px;background:#EDF1F6;border-radius:4px;overflow:hidden;margin-top:5px}
+.bar i{display:block;height:100%;background:var(--azul2)}
+@media print{header,nav,.noprint{display:none!important}body{background:#fff}}
+.subtabs{display:flex;gap:4px;border-bottom:2px solid var(--borde);margin-bottom:14px;flex-wrap:wrap}
+.subtabs button{background:none;border:0;border-bottom:2px solid transparent;margin-bottom:-2px;
+  padding:8px 14px;cursor:pointer;font-size:13px;color:var(--gris);font-family:inherit;font-weight:600}
+.subtabs button.on{color:var(--azul);border-bottom-color:var(--azul)}
+.subtabs button:hover{color:var(--azul)}
+.sub-panel{display:none}.sub-panel.on{display:block}
+.tarjetas{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(215px,1fr))}
+.tar{border:1px solid var(--borde);border-radius:10px;padding:11px;background:#fff;
+  cursor:pointer;position:relative;transition:.12s;display:flex;gap:10px;align-items:flex-start}
+.tar:hover{border-color:var(--azul2);box-shadow:0 2px 8px rgba(31,56,100,.13);transform:translateY(-1px)}
+.tar.off{opacity:.62;cursor:not-allowed;background:#FAFBFC}
+.tar.off:hover{transform:none;box-shadow:none;border-color:var(--borde)}
+.ico{width:38px;height:38px;border-radius:9px;flex:0 0 38px;display:flex;align-items:center;
+  justify-content:center;background:#EAF1FB}
+.ico svg{width:21px;height:21px;stroke:var(--azul2);fill:none;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round}
+.tar .n{font-size:12.5px;font-weight:600;line-height:1.3;margin-bottom:3px}
+.tar .p{font-size:14px;font-weight:700;color:var(--azul)}
+.tar .m{font-size:11px;color:var(--gris)}
+.tar .tag{position:absolute;top:-7px;right:8px;font-size:9.5px;font-weight:800;padding:2px 7px;
+  border-radius:10px;letter-spacing:.4px}
+.t-of{background:#B3261E;color:#fff}
+.t-nu{background:#0E7A3C;color:#fff}
+.t-ag{background:#6B7A8F;color:#fff}
+.tachado{text-decoration:line-through;color:var(--gris);font-weight:400;font-size:12px}
+.tablero{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));align-items:start}
+.col{background:#EEF2F7;border-radius:10px;padding:10px;min-height:110px}
+.col h4{margin:0 0 9px;font-size:11.5px;text-transform:uppercase;letter-spacing:.6px;
+  color:var(--azul);display:flex;justify-content:space-between;align-items:center;font-weight:800}
+.col h4 span{background:var(--azul);color:#fff;border-radius:10px;padding:1px 8px;font-size:11px}
+.ped{background:#fff;border:1px solid var(--borde);border-radius:9px;padding:11px;margin-bottom:9px;
+  box-shadow:var(--sombra);border-left:4px solid var(--azul2)}
+.ped.urg{border-left-color:var(--rojo)}
+.ped.att{border-left-color:#D68910}
+.ped .t{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+.ped .num2{font-weight:800;font-size:15px;color:var(--azul)}
+.ped .cro{font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+.ped .cli{font-size:12.5px;font-weight:600;margin:3px 0 1px}
+.ped .dir{font-size:11px;color:var(--gris);line-height:1.35}
+.ped ul{margin:7px 0;padding-left:16px;font-size:12px}
+.ped ul li{margin:1px 0}
+.ped .acc{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+.ped .acc button{font-size:11.5px;padding:5px 9px}
+@media print{.col{background:#fff}.ped{page-break-inside:avoid}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SISTEMA DE DISTRIBUCIÓN</h1>
+  <span class="sub">Insumos médicos · Tegucigalpa</span>
+  <nav>
+    <button class="on" data-p="inicio">Inicio</button>
+    <button data-p="nuevo">Nuevo pedido</button>
+    <button data-p="despacho">Despacho</button>
+    <button data-p="pedidos">Pedidos</button>
+    <button data-p="clientes">Clientes</button>
+    <button data-p="catalogo">Catálogo</button>
+    <button data-p="inventario">Inventario</button>
+    <button data-p="reposicion">Reposición</button>
+    <button data-p="ajustes">Ajustes</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ============================================================ INICIO -->
+<section class="panel on" id="p-inicio">
+  <h2>Tablero</h2>
+  <p class="sub2">Lo que hay que mirar todos los días. Los números se calculan solos con los pedidos registrados.</p>
+  <div id="avisoRespaldo"></div>
+  <div class="grid g4" id="kpis"></div>
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card">
+      <h3>Pedidos de hoy</h3>
+      <div id="hoyLista"></div>
+    </div>
+    <div class="card">
+      <h3>Atención inmediata</h3>
+      <div id="pendientes"></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Últimos 14 días</h3>
+    <div id="serie"></div>
+  </div>
+</section>
+
+<!-- ============================================================ NUEVO -->
+<section class="panel" id="p-nuevo">
+  <h2>Nuevo pedido</h2>
+  <p class="sub2">El sistema calcula el peso y la contribución mientras armas el pedido, y no te deja confirmar uno que pierde dinero.</p>
+
+  <div class="card">
+    <h3>1 · Cliente</h3>
+    <div class="fila">
+      <div style="flex:2">
+        <label>Buscar por teléfono o nombre</label>
+        <input id="buscaCli" placeholder="Escribe para buscar…" autocomplete="off">
+      </div>
+      <div class="auto"><button class="s" onclick="abrirNuevoCliente()">+ Cliente nuevo</button></div>
+    </div>
+    <div id="resCli"></div>
+    <div id="cliSel"></div>
+  </div>
+
+  <div class="card">
+    <h3>2 · Productos</h3>
+    <div class="subtabs">
+      <button class="on" data-t="habituales" onclick="subtab('habituales')">Lo que suele pedir</button>
+      <button data-t="catalogo" onclick="subtab('catalogo')">Catálogo completo</button>
+      <button data-t="buscar" onclick="subtab('buscar')">Buscar</button>
+    </div>
+
+    <div class="sub-panel on" id="t-habituales">
+      <div id="habituales"></div>
+    </div>
+
+    <div class="sub-panel" id="t-catalogo">
+      <div class="fila" style="margin-bottom:10px">
+        <div><label>Categoría</label><select id="catCategoria" onchange="pintarCatalogoCompra()"></select></div>
+        <div><label>Mostrar</label><select id="catFiltro" onchange="pintarCatalogoCompra()">
+          <option value="">Todo el catálogo</option>
+          <option value="oferta">Solo ofertas</option>
+          <option value="nuevo">Solo productos nuevos</option>
+          <option value="disp">Solo disponibles</option>
+        </select></div>
+      </div>
+      <div id="catalogoCompra"></div>
+    </div>
+
+    <div class="sub-panel" id="t-buscar">
+      <div class="fila">
+        <div style="flex:2">
+          <label>Buscar por nombre, código o marca</label>
+          <input id="buscaSku" placeholder="Ej: guantes, jeringa, espéculo…" autocomplete="off">
+        </div>
+      </div>
+      <div id="resSku"></div>
+    </div>
+
+    <div class="fila" style="margin-top:10px;align-items:center">
+      <div class="auto" style="min-width:130px">
+        <label>Cantidad a agregar</label>
+        <input id="cant" type="number" value="1" min="1" step="1" style="width:110px">
+      </div>
+      <div class="auto mini" style="padding-bottom:8px">Se aplica al siguiente producto que agregues.</div>
+    </div>
+
+    <div id="lineas" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card">
+    <h3>3 · Entrega y economía</h3>
+    <div class="grid g3">
+      <div>
+        <label>Nivel de servicio</label>
+        <select id="nivel" onchange="recalc()">
+          <option value="express">Express — menos de 30 min</option>
+          <option value="ventana" selected>Ventana del día</option>
+          <option value="programado">Programado</option>
+        </select>
+      </div>
+      <div>
+        <label>Canal sugerido por el sistema</label>
+        <input id="canalSug" readonly>
+      </div>
+      <div>
+        <label>Costo de entrega estimado</label>
+        <input id="costoEnt" readonly>
+      </div>
+      <div>
+        <label>¿Quién hizo el pedido?</label>
+        <select id="hechoPor">
+          <option value="El médico">El médico</option>
+          <option value="Asistente del consultorio">Asistente del consultorio</option>
+          <option value="Nosotros (por teléfono)">Nosotros (por teléfono)</option>
+        </select>
+      </div>
+    </div>
+    <div id="economia" style="margin-top:14px"></div>
+    <div id="motorTexto"></div>
+    <hr>
+    <div class="fila">
+      <div class="auto"><button class="b" id="btnConfirmar" onclick="confirmarPedido()">Confirmar pedido</button></div>
+      <div class="auto"><button class="s" onclick="limpiarPedido()">Limpiar</button></div>
+      <div id="overrideZona"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ DESPACHO -->
+<section class="panel" id="p-despacho">
+  <h2>Despacho</h2>
+  <p class="sub2">El pedido avanza de izquierda a derecha, como el monitor de cocina de un autoservicio.
+    Cada tarjeta muestra qué recoger de bodega y cuánto tiempo lleva esperando.</p>
+  <div id="despachoAvisos"></div>
+  <div class="tablero" id="tablero"></div>
+</section>
+
+<!-- ============================================================ PEDIDOS -->
+<section class="panel" id="p-pedidos">
+  <h2>Pedidos</h2>
+  <p class="sub2">Al marcar entregado se registra el costo real, y el sistema compara contra lo estimado.</p>
+  <div class="card">
+    <div class="fila noprint">
+      <div><label>Buscar</label><input id="filtroPed" placeholder="Cliente, número…"></div>
+      <div><label>Estado</label><select id="filtroEst">
+        <option value="">Todos</option><option>confirmado</option><option>en_ruta</option>
+        <option>entregado</option><option>cancelado</option></select></div>
+      <div class="auto"><button class="s" onclick="exportarPedidosCSV()">Exportar CSV</button></div>
+    </div>
+    <div id="tablaPedidos" style="margin-top:12px"></div>
+  </div>
+</section>
+
+<!-- ============================================================ CLIENTES -->
+<section class="panel" id="p-clientes">
+  <h2>Clientes</h2>
+  <p class="sub2">El teléfono es el identificador. Una vez registrado, no se vuelven a pedir los datos.</p>
+  <div class="card">
+    <div class="fila noprint">
+      <div><label>Buscar</label><input id="filtroCli" placeholder="Nombre o teléfono…"></div>
+      <div class="auto"><button class="b" onclick="abrirNuevoCliente()">+ Nuevo cliente</button></div>
+      <div class="auto"><button class="s" onclick="exportarClientesCSV()">Exportar CSV</button></div>
+    </div>
+    <div id="tablaClientes" style="margin-top:12px"></div>
+  </div>
+</section>
+
+<!-- ============================================================ CATALOGO -->
+<section class="panel" id="p-catalogo">
+  <h2>Catálogo</h2>
+  <p class="sub2">Los precios son estimaciones de arranque. Reemplázalos con tus cotizaciones reales: haz clic en cualquier fila para editar.</p>
+  <div class="card">
+    <div class="fila noprint">
+      <div><label>Buscar</label><input id="filtroSku" placeholder="Nombre, código, marca…"></div>
+      <div><label>Canal</label><select id="filtroCanal">
+        <option value="">Todos</option><option value="express">Express</option>
+        <option value="volumen">Volumen</option><option value="bloqueado">Bloqueado</option></select></div>
+      <div class="auto"><button class="s" onclick="abrirNuevoSku()">+ Producto</button></div>
+      <div class="auto"><button class="s" onclick="exportarCatalogoCSV()">Exportar CSV</button></div>
+    </div>
+    <div id="tablaCatalogo" style="margin-top:12px"></div>
+  </div>
+</section>
+
+<!-- ============================================================ INVENTARIO -->
+<section class="panel" id="p-inventario">
+  <h2>Inventario</h2>
+  <p class="sub2">Las existencias bajan solas al entregar un pedido. Registra aquí las compras que ingresan.</p>
+  <div class="card">
+    <h3>Registrar ingreso de compra</h3>
+    <div class="fila">
+      <div style="flex:2"><label>Producto</label><input id="invSku" placeholder="Buscar producto…" autocomplete="off"></div>
+      <div><label>Cantidad</label><input id="invCant" type="number" min="1" value="1"></div>
+      <div><label>Costo unitario (L.)</label><input id="invCosto" type="number" min="0" step="0.01"></div>
+      <div class="auto"><button class="b" onclick="registrarIngreso()">Registrar</button></div>
+    </div>
+    <div id="invRes"></div>
+    <div id="invMsg"></div>
+  </div>
+  <div class="card">
+    <h3>Existencias</h3>
+    <div class="fila noprint">
+      <div><label>Buscar</label><input id="filtroInv" placeholder="Producto…"></div>
+      <div><label>Ver</label><select id="filtroInvEst">
+        <option value="">Todos</option>
+        <option value="bajo">Bajo mínimo</option>
+        <option value="cero">Sin disponibilidad</option>
+        <option value="prov">Con producto comprometido</option>
+        <option value="pago">Apartado esperando depósito</option></select></div>
+    </div>
+    <div id="tablaInventario" style="margin-top:12px"></div>
+  </div>
+</section>
+
+<!-- ============================================================ REPOSICION -->
+<section class="panel" id="p-reposicion">
+  <h2>Reposición</h2>
+  <p class="sub2">Clientes que están por quedarse sin producto, según su propio historial de compra. Es el motor de recurrencia del negocio.</p>
+  <div class="card">
+    <h3>Avisos sugeridos</h3>
+    <p class="mini">Se calcula con al menos dos compras del mismo producto. Copia el mensaje y envíalo por WhatsApp.</p>
+    <div id="tablaRepo" style="margin-top:12px"></div>
+  </div>
+</section>
+
+<!-- ============================================================ AJUSTES -->
+<section class="panel" id="p-ajustes">
+  <h2>Ajustes y respaldo</h2>
+  <p class="sub2">Aquí viven las reglas económicas. Cambiarlas aquí cambia el comportamiento de todo el sistema.</p>
+
+  <div class="card">
+    <h3>Respaldo de datos — importante</h3>
+    <div class="aviso a-med">
+      Los datos viven en este navegador, en esta computadora. Si se borra el historial del navegador,
+      se pierden. <strong>Descarga un respaldo al final de cada día</strong> y guárdalo en esta misma carpeta.
+    </div>
+    <div class="fila">
+      <div class="auto"><button class="b" onclick="descargarRespaldo()">Descargar respaldo</button></div>
+      <div class="auto"><button class="s" onclick="document.getElementById('archRespaldo').click()">Restaurar respaldo</button></div>
+      <input type="file" id="archRespaldo" accept=".json" style="display:none" onchange="restaurarRespaldo(event)">
+      <div class="auto"><button class="s" onclick="exportarTodoCSV()">Exportar todo a CSV</button></div>
+    </div>
+    <p class="mini" id="ultimoRespaldo" style="margin-top:8px"></p>
+  </div>
+
+  <div class="card">
+    <h3>Cuenta bancaria para depósitos</h3>
+    <p class="mini">Estos datos se incluyen en el mensaje que le pides al cliente. Sin ellos el aviso sale incompleto.</p>
+    <div class="grid g2" style="margin-top:10px">
+      <div><label>Banco</label><input id="bkBanco" placeholder="Ej: Banco Atlántida"></div>
+      <div><label>Número de cuenta</label><input id="bkCuenta" placeholder="Ej: 1234-5678-90"></div>
+      <div><label>Titular de la cuenta</label><input id="bkTitular"></div>
+      <div><label>Tipo de cuenta</label><input id="bkTipo" placeholder="Ahorro o cheques"></div>
+    </div>
+    <div class="fila" style="margin-top:12px">
+      <div class="auto"><button class="b" onclick="guardarBanco()">Guardar datos bancarios</button></div>
+    </div>
+    <div id="bancoMsg"></div>
+  </div>
+
+  <div class="card">
+    <h3>Reglas económicas</h3>
+    <div class="grid g3" id="params"></div>
+    <div class="fila" style="margin-top:14px">
+      <div class="auto"><button class="b" onclick="guardarParams()">Guardar reglas</button></div>
+      <div class="auto"><button class="s" onclick="restaurarParams()">Volver a los valores originales</button></div>
+    </div>
+    <div id="paramMsg"></div>
+  </div>
+
+  <div class="card">
+    <h3>Proveedores de entrega</h3>
+    <p class="mini">Con estos datos el sistema decide el canal de cada pedido y estima su costo.</p>
+    <div id="tablaProv" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <h3>Probar el sistema</h3>
+    <p class="mini">Carga clientes y pedidos de ejemplo en distintos estados para ver cómo funciona
+      cada pantalla. Después los borras con un clic y empiezas limpio.</p>
+    <div class="fila" style="margin-top:10px">
+      <div class="auto"><button class="b" onclick="cargarEjemplo()">Cargar datos de ejemplo</button></div>
+      <div class="auto"><button class="s" onclick="borrarEjemplo()">Borrar solo los ejemplos</button></div>
+    </div>
+    <div id="ejemploMsg"></div>
+  </div>
+
+  <div class="card">
+    <h3>Zona de riesgo</h3>
+    <div class="fila">
+      <div class="auto"><button class="s d" onclick="borrarTodo()">Borrar todos los datos y empezar de cero</button></div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<div class="modal" id="modal"><div class="box" id="modalBox"></div></div>
+
+<script>
+const CATALOGO_INICIAL = [
+{
+"codigo": "GUA-001",
+"nombre": "Guantes de examen nitrilo talla M, sin polvo",
+"categoria": "Guantes",
+"marca": "Genérico import.",
+"presentacion": "Caja 100 unidades",
+"peso": 0.5,
+"costo": 145.0,
+"precio": 185.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "GUA-002",
+"nombre": "Guantes de examen nitrilo talla L, sin polvo",
+"categoria": "Guantes",
+"marca": "Genérico import.",
+"presentacion": "Caja 100 unidades",
+"peso": 0.53,
+"costo": 145.0,
+"precio": 185.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "GUA-003",
+"nombre": "Guantes de examen látex talla M, con polvo",
+"categoria": "Guantes",
+"marca": "Maxter",
+"presentacion": "Caja 100 unidades",
+"peso": 0.62,
+"costo": 128.0,
+"precio": 165.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "GUA-004",
+"nombre": "Guantes de examen látex talla L, con polvo",
+"categoria": "Guantes",
+"marca": "Maxter",
+"presentacion": "Caja 100 unidades",
+"peso": 0.65,
+"costo": 128.0,
+"precio": 165.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "GUA-005",
+"nombre": "Guantes quirúrgicos estériles talla 7.5",
+"categoria": "Guantes",
+"marca": "Nipro",
+"presentacion": "Par estéril",
+"peso": 0.018,
+"costo": 21.0,
+"precio": 28.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "INY-001",
+"nombre": "Jeringa desechable 3 ml con aguja 21G",
+"categoria": "Inyección",
+"marca": "Nipro",
+"presentacion": "Caja 100 unidades",
+"peso": 0.55,
+"costo": 138.0,
+"precio": 180.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "INY-002",
+"nombre": "Jeringa desechable 5 ml con aguja 21G",
+"categoria": "Inyección",
+"marca": "Nipro",
+"presentacion": "Caja 100 unidades",
+"peso": 0.7,
+"costo": 162.0,
+"precio": 210.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "INY-003",
+"nombre": "Jeringa desechable 10 ml con aguja 21G",
+"categoria": "Inyección",
+"marca": "Nipro",
+"presentacion": "Caja 100 unidades",
+"peso": 1.0,
+"costo": 215.0,
+"precio": 280.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "INY-004",
+"nombre": "Jeringa de insulina 1 ml 100 UI",
+"categoria": "Inyección",
+"marca": "Nipro",
+"presentacion": "Caja 100 unidades",
+"peso": 0.3,
+"costo": 185.0,
+"precio": 240.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "INY-005",
+"nombre": "Agujas hipodérmicas 21G x 1½",
+"categoria": "Inyección",
+"marca": "Nipro",
+"presentacion": "Caja 100 unidades",
+"peso": 0.15,
+"costo": 72.0,
+"precio": 95.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "CUR-001",
+"nombre": "Cinta microporosa 1\" x 10 yd",
+"categoria": "Curación",
+"marca": "3M Micropore",
+"presentacion": "Caja 12 rollos",
+"peso": 0.35,
+"costo": 222.0,
+"precio": 290.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "CUR-002",
+"nombre": "Cinta microporosa 2\" x 10 yd",
+"categoria": "Curación",
+"marca": "3M Micropore",
+"presentacion": "Caja 6 rollos",
+"peso": 0.34,
+"costo": 208.0,
+"precio": 270.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "CUR-003",
+"nombre": "Esparadrapo de tela 2\" x 10 yd",
+"categoria": "Curación",
+"marca": "3M Durapore",
+"presentacion": "Rollo individual",
+"peso": 0.095,
+"costo": 50.0,
+"precio": 65.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "CUR-004",
+"nombre": "Gasa estéril 4x4\", sobre de 2 unidades",
+"categoria": "Curación",
+"marca": "Genérico import.",
+"presentacion": "Caja 100 sobres",
+"peso": 0.6,
+"costo": 177.0,
+"precio": 230.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "CUR-005",
+"nombre": "Gasa no estéril 10x10 cm",
+"categoria": "Curación",
+"marca": "Genérico import.",
+"presentacion": "Paquete 100 unidades",
+"peso": 0.35,
+"costo": 100.0,
+"precio": 130.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "CUR-006",
+"nombre": "Venda elástica 4\" x 5 yd",
+"categoria": "Curación",
+"marca": "Genérico import.",
+"presentacion": "Rollo individual",
+"peso": 0.09,
+"costo": 42.0,
+"precio": 55.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "CUR-007",
+"nombre": "Algodón absorbente en rollo 500 g",
+"categoria": "Curación",
+"marca": "La Enfermerita",
+"presentacion": "Rollo 500 g",
+"peso": 0.55,
+"costo": 88.0,
+"precio": 115.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "CUR-008",
+"nombre": "Apósito adhesivo transparente 6x7 cm",
+"categoria": "Curación",
+"marca": "3M Tegaderm",
+"presentacion": "Caja 100 unidades",
+"peso": 0.42,
+"costo": 540.0,
+"precio": 700.0,
+"rotacion": "C",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "ANT-001",
+"nombre": "Alcohol etílico 70% — 1000 ml",
+"categoria": "Antisépticos",
+"marca": "Genérico local",
+"presentacion": "Frasco 1 L",
+"peso": 0.95,
+"costo": 65.0,
+"precio": 85.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "ANT-002",
+"nombre": "Alcohol gel antibacterial 500 ml",
+"categoria": "Antisépticos",
+"marca": "Genérico local",
+"presentacion": "Frasco 500 ml",
+"peso": 0.55,
+"costo": 58.0,
+"precio": 75.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "ANT-003",
+"nombre": "Yodopovidona solución 10% — 120 ml",
+"categoria": "Antisépticos",
+"marca": "Genérico local",
+"presentacion": "Frasco 120 ml",
+"peso": 0.16,
+"costo": 73.0,
+"precio": 95.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "ANT-004",
+"nombre": "Agua oxigenada 10 vol — 500 ml",
+"categoria": "Antisépticos",
+"marca": "Genérico local",
+"presentacion": "Frasco 500 ml",
+"peso": 0.55,
+"costo": 42.0,
+"precio": 55.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "ANT-005",
+"nombre": "Jabón antiséptico clorhexidina 4% — 500 ml",
+"categoria": "Antisépticos",
+"marca": "Genérico local",
+"presentacion": "Frasco 500 ml",
+"peso": 0.56,
+"costo": 115.0,
+"precio": 150.0,
+"rotacion": "C",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "SIV-001",
+"nombre": "Solución salina 0.9% — 1000 ml",
+"categoria": "Soluciones IV",
+"marca": "Nipro",
+"presentacion": "Bolsa 1 L",
+"peso": 1.05,
+"costo": 37.0,
+"precio": 48.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "SIV-002",
+"nombre": "Solución salina 0.9% — 500 ml",
+"categoria": "Soluciones IV",
+"marca": "Nipro",
+"presentacion": "Bolsa 500 ml",
+"peso": 0.53,
+"costo": 29.0,
+"precio": 38.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "SIV-003",
+"nombre": "Solución salina 0.9% — 100 ml",
+"categoria": "Soluciones IV",
+"marca": "Nipro",
+"presentacion": "Bolsa 100 ml",
+"peso": 0.11,
+"costo": 19.0,
+"precio": 25.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "SIV-004",
+"nombre": "Dextrosa 5% — 1000 ml",
+"categoria": "Soluciones IV",
+"marca": "Nipro",
+"presentacion": "Bolsa 1 L",
+"peso": 1.05,
+"costo": 40.0,
+"precio": 52.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "SIV-005",
+"nombre": "Solución Hartmann (Lactato Ringer) — 1000 ml",
+"categoria": "Soluciones IV",
+"marca": "Nipro",
+"presentacion": "Bolsa 1 L",
+"peso": 1.05,
+"costo": 42.0,
+"precio": 55.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "SIV-006",
+"nombre": "Equipo de venoclisis con macrogotero",
+"categoria": "Soluciones IV",
+"marca": "Nipro",
+"presentacion": "Unidad",
+"peso": 0.075,
+"costo": 26.0,
+"precio": 34.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "GLU-001",
+"nombre": "Glucómetro digital con estuche",
+"categoria": "Glucometría",
+"marca": "Genérico import.",
+"presentacion": "Equipo completo",
+"peso": 0.15,
+"costo": 330.0,
+"precio": 450.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "GLU-002",
+"nombre": "Tiras reactivas para glucómetro",
+"categoria": "Glucometría",
+"marca": "Genérico import.",
+"presentacion": "Caja 50 tiras",
+"peso": 0.05,
+"costo": 320.0,
+"precio": 420.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "GLU-003",
+"nombre": "Lancetas estériles 28G",
+"categoria": "Glucometría",
+"marca": "Genérico import.",
+"presentacion": "Caja 100 unidades",
+"peso": 0.06,
+"costo": 98.0,
+"precio": 130.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "GLU-004",
+"nombre": "Dispositivo de punción para lancetas",
+"categoria": "Glucometría",
+"marca": "Genérico import.",
+"presentacion": "Unidad",
+"peso": 0.03,
+"costo": 68.0,
+"precio": 90.0,
+"rotacion": "C",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "PRO-001",
+"nombre": "Mascarilla quirúrgica tres capas",
+"categoria": "Protección",
+"marca": "Genérico import.",
+"presentacion": "Caja 50 unidades",
+"peso": 0.16,
+"costo": 65.0,
+"precio": 85.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "PRO-002",
+"nombre": "Mascarilla N95 / KN95",
+"categoria": "Protección",
+"marca": "Genérico import.",
+"presentacion": "Unidad",
+"peso": 0.012,
+"costo": 26.0,
+"precio": 35.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "PRO-003",
+"nombre": "Gorro quirúrgico desechable",
+"categoria": "Protección",
+"marca": "Genérico import.",
+"presentacion": "Caja 100 unidades",
+"peso": 0.1,
+"costo": 73.0,
+"precio": 95.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "PRO-004",
+"nombre": "Bata desechable no estéril",
+"categoria": "Protección",
+"marca": "Genérico import.",
+"presentacion": "Unidad",
+"peso": 0.055,
+"costo": 35.0,
+"precio": 45.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "PRO-005",
+"nombre": "Cubrezapatos desechable",
+"categoria": "Protección",
+"marca": "Genérico import.",
+"presentacion": "Caja 100 pares",
+"peso": 0.15,
+"costo": 80.0,
+"precio": 105.0,
+"rotacion": "C",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "CON-001",
+"nombre": "Baja lenguas de madera",
+"categoria": "Consultorio",
+"marca": "Genérico import.",
+"presentacion": "Caja 500 unidades",
+"peso": 1.2,
+"costo": 168.0,
+"precio": 220.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "CON-002",
+"nombre": "Hisopos con aplicador de madera",
+"categoria": "Consultorio",
+"marca": "Genérico import.",
+"presentacion": "Caja 500 unidades",
+"peso": 0.15,
+"costo": 68.0,
+"precio": 90.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "CON-003",
+"nombre": "Termómetro digital axilar",
+"categoria": "Consultorio",
+"marca": "Genérico import.",
+"presentacion": "Unidad",
+"peso": 0.05,
+"costo": 135.0,
+"precio": 180.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "CON-004",
+"nombre": "Recipiente para punzocortantes 1 L",
+"categoria": "Consultorio",
+"marca": "Genérico import.",
+"presentacion": "Unidad",
+"peso": 0.15,
+"costo": 64.0,
+"precio": 85.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "CON-005",
+"nombre": "Sábana desechable para camilla 60x180 cm",
+"categoria": "Consultorio",
+"marca": "Genérico import.",
+"presentacion": "Rollo",
+"peso": 0.9,
+"costo": 190.0,
+"precio": 250.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "CON-006",
+"nombre": "Papel para electrocardiógrafo",
+"categoria": "Consultorio",
+"marca": "Genérico import.",
+"presentacion": "Rollo",
+"peso": 0.22,
+"costo": 88.0,
+"precio": 115.0,
+"rotacion": "C",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "ODO-001",
+"nombre": "Eyectores de saliva desechables",
+"categoria": "Odontología",
+"marca": "Genérico import.",
+"presentacion": "Bolsa 100 unidades",
+"peso": 0.12,
+"costo": 50.0,
+"precio": 65.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "ODO-002",
+"nombre": "Baberos desechables para paciente",
+"categoria": "Odontología",
+"marca": "Genérico import.",
+"presentacion": "Caja 500 unidades",
+"peso": 1.3,
+"costo": 290.0,
+"precio": 380.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "ODO-003",
+"nombre": "Rollos de algodón dental n.° 2",
+"categoria": "Odontología",
+"marca": "Genérico import.",
+"presentacion": "Paquete 1000 unidades",
+"peso": 0.5,
+"costo": 142.0,
+"precio": 185.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "ODO-004",
+"nombre": "Vasos desechables para escupidera 5 oz",
+"categoria": "Odontología",
+"marca": "Genérico import.",
+"presentacion": "Paquete 100 unidades",
+"peso": 0.35,
+"costo": 65.0,
+"precio": 85.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "ODO-005",
+"nombre": "Agujas dentales cortas 27G",
+"categoria": "Odontología",
+"marca": "Genérico import.",
+"presentacion": "Caja 100 unidades",
+"peso": 0.1,
+"costo": 245.0,
+"precio": 320.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "ODO-006",
+"nombre": "Micro-aplicadores desechables",
+"categoria": "Odontología",
+"marca": "Genérico import.",
+"presentacion": "Bolsa 100 unidades",
+"peso": 0.03,
+"costo": 58.0,
+"precio": 75.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "ODO-007",
+"nombre": "Fundas barrera para sillón y jeringa triple",
+"categoria": "Odontología",
+"marca": "Genérico import.",
+"presentacion": "Caja 500 unidades",
+"peso": 0.7,
+"costo": 192.0,
+"precio": 250.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "ODO-008",
+"nombre": "Cepillos de profilaxis para contra-ángulo",
+"categoria": "Odontología",
+"marca": "Genérico import.",
+"presentacion": "Caja 100 unidades",
+"peso": 0.18,
+"costo": 222.0,
+"precio": 290.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "ODO-009",
+"nombre": "Ácido grabador ortofosfórico 37% — jeringa 3 ml",
+"categoria": "Odontología",
+"marca": "Genérico import.",
+"presentacion": "Jeringa 3 ml",
+"peso": 0.03,
+"costo": 92.0,
+"precio": 120.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "CON-007",
+"nombre": "Espéculo vaginal desechable talla M",
+"categoria": "Consultorio",
+"marca": "Genérico import.",
+"presentacion": "Unidad estéril",
+"peso": 0.045,
+"costo": 26.0,
+"precio": 35.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "CON-008",
+"nombre": "Espéculo vaginal desechable talla S",
+"categoria": "Consultorio",
+"marca": "Genérico import.",
+"presentacion": "Unidad estéril",
+"peso": 0.038,
+"costo": 25.0,
+"precio": 33.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "CON-009",
+"nombre": "Espéculo nasal desechable",
+"categoria": "Consultorio",
+"marca": "Genérico import.",
+"presentacion": "Caja 50 unidades",
+"peso": 0.18,
+"costo": 145.0,
+"precio": 190.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "CON-010",
+"nombre": "Conos para otoscopio desechables 4 mm",
+"categoria": "Consultorio",
+"marca": "Genérico import.",
+"presentacion": "Bolsa 100 unidades",
+"peso": 0.09,
+"costo": 88.0,
+"precio": 115.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "ODO-010",
+"nombre": "Cera para mordida en láminas",
+"categoria": "Odontología",
+"marca": "Genérico import.",
+"presentacion": "Caja 500 g",
+"peso": 0.52,
+"costo": 138.0,
+"precio": 180.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "ODO-011",
+"nombre": "Cera utilidad en barras",
+"categoria": "Odontología",
+"marca": "Genérico import.",
+"presentacion": "Caja 250 g",
+"peso": 0.27,
+"costo": 80.0,
+"precio": 105.0,
+"rotacion": "B",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "ODO-012",
+"nombre": "Pasta profiláctica con flúor",
+"categoria": "Odontología",
+"marca": "Genérico import.",
+"presentacion": "Frasco 200 g",
+"peso": 0.24,
+"costo": 122.0,
+"precio": 160.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "ODO-013",
+"nombre": "Alginato para impresiones",
+"categoria": "Odontología",
+"marca": "Genérico import.",
+"presentacion": "Bolsa 454 g",
+"peso": 0.48,
+"costo": 168.0,
+"precio": 220.0,
+"rotacion": "A",
+"restringido": false,
+"motivo_restriccion": ""
+},
+{
+"codigo": "RES-001",
+"nombre": "Sutura de nylon 3-0 con aguja",
+"categoria": "Restringido",
+"marca": "Johnson & Johnson",
+"presentacion": "Sobre individual",
+"peso": 0.012,
+"costo": 0.0,
+"precio": 0.0,
+"rotacion": "C",
+"restringido": true,
+"motivo_restriccion": "Distribución restringida. No comercializar hasta contar con confirmación escrita del titular de la marca."
+},
+{
+"codigo": "RES-002",
+"nombre": "Anestésico dental en cartucho (lidocaína con epinefrina)",
+"categoria": "Restringido",
+"marca": "Genérico import.",
+"presentacion": "Caja 50 cartuchos",
+"peso": 0.18,
+"costo": 0.0,
+"precio": 0.0,
+"rotacion": "C",
+"restringido": true,
+"motivo_restriccion": "Medicamento de venta regulada. Requiere validación sanitaria antes de incorporarlo al catálogo."
+}
+];
+</script>
+<script>
+"use strict";
+/* ============================================================================
+   SISTEMA DE DISTRIBUCIÓN DE INSUMOS MÉDICOS
+   Aplicación autocontenida. No requiere internet ni instalación.
+   Los datos se guardan en este navegador. Descargar respaldo a diario.
+   ============================================================================ */
+
+const CLAVE = "sdim_v1";
+
+const PARAMS_DEF = {
+  pedido_minimo_express:   {v:400,  u:"L.",    d:"Monto mínimo para entrega express sin cargo"},
+  cargo_urgencia:          {v:40,   u:"L.",    d:"Cargo por entrega express bajo el mínimo"},
+  limite_peso_on_demand:   {v:10,   u:"kg",    d:"Límite de carga por viaje del courier"},
+  umbral_densidad_canal:   {v:100,  u:"L./kg", d:"Densidad que separa canal express de volumen"},
+  dias_alerta_reposicion:  {v:7,    u:"días",  d:"Anticipación del aviso de reposición"},
+  dias_supresion_alerta:   {v:14,   u:"días",  d:"No repetir el mismo aviso antes de"},
+  compras_minimas_perfil:  {v:2,    u:"n",     d:"Compras necesarias para estimar consumo"},
+  sla_express_min:         {v:30,   u:"min",   d:"Promesa de entrega express"},
+  sla_ventana_min:         {v:240,  u:"min",   d:"Promesa de entrega en ventana"},
+  paradas_por_viaje:       {v:4,    u:"n",     d:"Paradas que se agrupan en un viaje típico"},
+  distancia_cluster_km:    {v:6,    u:"km",    d:"Distancia promedio del hub al cluster"},
+  isv_tasa:                {v:15,   u:"%",     d:"Impuesto sobre el flete"},
+  isv_es_costo:            {v:0,    u:"0 ó 1", d:"1 si el ISV del flete NO es crédito fiscal"}
+};
+
+const PROVEEDORES = [
+  {nombre:"PedidosYa Envíos", canal:"on_demand", tarifa_base:42.5, tarifa_km:6.5,
+   cargo_parada:17.5, costo_turno:0, entregas_turno:0, limite_peso:10, max_paradas:12,
+   hora_inicio:"07:00", hora_fin:"23:00"},
+  {nombre:"UrbanRide — moto dedicada", canal:"moto_dedicada", tarifa_base:0, tarifa_km:0,
+   cargo_parada:0, costo_turno:519.23, entregas_turno:24, limite_peso:0, max_paradas:0,
+   hora_inicio:"11:00", hora_fin:"19:00"}
+];
+
+let D = null;              // datos
+let P = {cliente:null, lineas:[], override:null};   // pedido en curso
+
+/* ------------------------------------------------------------ utilidades */
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const L  = n => "L." + (Number(n)||0).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:2});
+const L0 = n => "L." + Math.round(Number(n)||0).toLocaleString("es-HN");
+const KG = n => (Number(n)||0).toFixed(3) + " kg";
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const hoy = () => new Date().toISOString().slice(0,10);
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+const dias = (a,b) => Math.round((new Date(b) - new Date(a)) / 86400000);
+const par = k => Number(D.params[k]);
+
+function fecha(iso){
+  if(!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleDateString("es-HN",{day:"2-digit",month:"2-digit",year:"2-digit"}) +
+    " " + d.toLocaleTimeString("es-HN",{hour:"2-digit",minute:"2-digit"});
+}
+
+/* ------------------------------------------------------------ persistencia */
+function cargar(){
+  try{
+    const raw = localStorage.getItem(CLAVE);
+    if(raw){ D = JSON.parse(raw); migrar(); return; }
+  }catch(e){ console.warn("No se pudo leer el almacenamiento", e); }
+  D = {
+    version: 1,
+    params: Object.fromEntries(Object.entries(PARAMS_DEF).map(([k,o])=>[k,o.v])),
+    skus: CATALOGO_INICIAL.map(s => ({...s, existencia:0, oferta:false, nuevo:false,
+           precio_oferta:null, minimo: s.rotacion==="A"?20:s.rotacion==="B"?10:5})),
+    migrado_inventario_fisico: true,
+    clientes: [], pedidos: [], movimientos: [], avisos: [],
+    banco: {banco:"", cuenta:"", titular:"", tipo:""},
+    ultimoRespaldo: null
+  };
+  migrar();          // deriva unidad/contenido también en instalación nueva
+  guardar();
+}
+function migrar(){
+  D.params  = D.params  || {};
+  Object.entries(PARAMS_DEF).forEach(([k,o])=>{ if(D.params[k]===undefined) D.params[k]=o.v; });
+  ["skus","clientes","pedidos","movimientos","avisos"].forEach(k => { if(!D[k]) D[k]=[]; });
+  // Campos agregados tras la segunda revisión con el cliente
+  D.skus.forEach(s => {
+    if(s.oferta === undefined) s.oferta = false;
+    if(s.nuevo  === undefined) s.nuevo  = false;
+    if(s.precio_oferta === undefined) s.precio_oferta = null;
+  });
+  // Cobro por depósito bancario: la preparación no espera, el despacho sí
+  D.banco = D.banco || {banco:"", cuenta:"", titular:"", tipo:""};
+  D.pedidos.forEach(p => {
+    if(p.pago_estado === undefined) p.pago_estado = "pendiente";
+    if(p.pago === undefined) p.pago = null;
+  });
+  D.clientes.forEach(c => { if(c.credito === undefined) c.credito = false; });
+  // Tipo de unidad y contenido, derivados de la presentación (decisión 3)
+  D.skus.forEach(s => {
+    if(s.unidad === undefined || s.contenido === undefined){
+      const t = (s.presentacion||"Unidad").trim().split(/\s+/);
+      s.unidad = t[0] || "Unidad";
+      s.contenido = t.slice(1).join(" ") || "—";
+    }
+  });
+
+  // Inventario físico vs comprometido (decisión 2).
+  // Antes la existencia se descontaba al CONFIRMAR, lo que mezclaba dos cosas:
+  // lo que hay en bodega y lo que ya está apartado. Ahora se separan.
+  if(!D.migrado_inventario_fisico){
+    D.pedidos.filter(p=>ABIERTOS.includes(p.estado)).forEach(p=>{
+      p.lineas.forEach(l=>{
+        const s = D.skus.find(x=>x.codigo===l.codigo);
+        if(s) s.existencia += l.cantidad;   // devolver a existencia física
+      });
+    });
+    D.migrado_inventario_fisico = true;
+  }
+
+  // Incorporar SKU nuevos del catálogo sin tocar los que el usuario ya editó
+  if(typeof CATALOGO_INICIAL !== "undefined"){
+    CATALOGO_INICIAL.forEach(n => {
+      if(!D.skus.some(s => s.codigo === n.codigo))
+        D.skus.push({...n, existencia:0, oferta:false, nuevo:true, precio_oferta:null,
+                     minimo: n.rotacion==="A"?20:n.rotacion==="B"?10:5});
+    });
+  }
+}
+function guardar(){
+  try{ localStorage.setItem(CLAVE, JSON.stringify(D)); }
+  catch(e){ alert("No se pudieron guardar los datos en este navegador.\n\n"+
+    "Descarga un respaldo ahora mismo desde Ajustes para no perder información."); }
+}
+
+/* ============================================================================
+   INVENTARIO: FÍSICO, COMPROMETIDO Y DISPONIBLE
+   La existencia física solo baja cuando el producto SALE (se entrega).
+   Lo que está en un pedido confirmado y todavía no sale está COMPROMETIDO:
+   sigue en bodega pero ya tiene dueño. Lo que se puede vender es DISPONIBLE.
+   ============================================================================ */
+const ABIERTOS = ["confirmado","preparando","listo","en_ruta"];
+
+function comprometido(codigo){
+  let total = 0, esperandoPago = 0;
+  D.pedidos.forEach(p => {
+    if(!ABIERTOS.includes(p.estado)) return;
+    p.lineas.forEach(l => {
+      if(l.codigo !== codigo) return;
+      total += l.cantidad;
+      if(typeof pagoLibera === "function" && !pagoLibera(p)) esperandoPago += l.cantidad;
+    });
+  });
+  return {total, esperandoPago};
+}
+function disponible(sku){
+  return (sku.existencia||0) - comprometido(sku.codigo).total;
+}
+function estadoInv(sku){
+  const d = disponible(sku);
+  if(d <= 0)          return {cls:"p-mal",  txt:"Agotado"};
+  if(d <= sku.minimo) return {cls:"p-med",  txt:"Bajo mínimo"};
+  return {cls:"p-ok", txt:"Disponible"};
+}
+function presentacionDe(s){
+  return (s.unidad||"") + (s.contenido && s.contenido!=="—" ? " · "+s.contenido : "");
+}
+
+/* ------------------------------------------------------------ navegación */
+$$("nav button").forEach(b => b.onclick = () => ir(b.dataset.p));
+function ir(p){
+  $$("nav button").forEach(b => b.classList.toggle("on", b.dataset.p===p));
+  $$(".panel").forEach(s => s.classList.toggle("on", s.id==="p-"+p));
+  window.scrollTo(0,0);
+  ({inicio:pintarInicio, despacho:pintarDespacho, pedidos:pintarPedidos, clientes:pintarClientes,
+    catalogo:pintarCatalogo, inventario:pintarInventario,
+    reposicion:pintarReposicion, ajustes:pintarAjustes}[p]||(()=>{}))();
+}
+
+/* ============================================================================
+   MOTOR DE ASIGNACIÓN DE CANAL
+   Es el corazón económico del sistema: decide cómo entregar cada pedido
+   al menor costo que cumpla la promesa.
+   ============================================================================ */
+function motorCanal(pesoKg, nivel){
+  const lim   = par("limite_peso_on_demand");
+  const parad = Math.max(1, par("paradas_por_viaje"));
+  const km    = par("distancia_cluster_km");
+  const isv   = par("isv_es_costo") ? (1 + par("isv_tasa")/100) : 1;
+
+  const py  = PROVEEDORES[0], ur = PROVEEDORES[1];
+
+  // Courier on-demand: tarifa base + km, repartida entre las paradas del viaje
+  const viaje = py.tarifa_base + py.tarifa_km*km + py.cargo_parada*(parad-1);
+  const costoOnDemand = (viaje/parad) * isv;
+  const costoDedicada = (ur.costo_turno / ur.entregas_turno) * isv;
+
+  const opciones = [];
+  if(pesoKg <= lim) opciones.push({canal:"Courier on-demand", costo:costoOnDemand,
+    nota:`viaje de ${parad} paradas a ${km} km`});
+  opciones.push({canal:"Moto dedicada", costo:costoDedicada,
+    nota:`turno de ${ur.entregas_turno} entregas`});
+
+  // Express fuera del turno de la moto dedicada: solo on-demand
+  const h = new Date().getHours();
+  const dentroTurno = h >= 11 && h < 19;
+  let elegida;
+  let motivo;
+
+  if(pesoKg > lim){
+    elegida = opciones.find(o=>o.canal==="Moto dedicada");
+    motivo = `El pedido pesa ${pesoKg.toFixed(2)} kg y supera el límite de ${lim} kg del courier. Solo la moto dedicada puede llevarlo.`;
+  } else if(nivel==="express" && !dentroTurno){
+    elegida = opciones.find(o=>o.canal==="Courier on-demand");
+    motivo = "Pedido express fuera del turno de la moto dedicada (11:00 a 19:00). Va por courier.";
+  } else {
+    elegida = opciones.slice().sort((a,b)=>a.costo-b.costo)[0];
+    const otra = opciones.find(o=>o!==elegida);
+    motivo = otra
+      ? `Ambos canales pueden atenderlo. Se elige ${elegida.canal.toLowerCase()} por ser más barato (${L(elegida.costo)} contra ${L(otra.costo)}).`
+      : `Se asigna ${elegida.canal.toLowerCase()}.`;
+  }
+  return {canal:elegida.canal, costo:elegida.costo, motivo, opciones};
+}
+
+/* ============================================================================
+   PEDIDO EN CURSO
+   ============================================================================ */
+function calcularPedido(){
+  const sub  = P.lineas.reduce((a,l)=>a + l.cantidad*l.precio, 0);
+  const cost = P.lineas.reduce((a,l)=>a + l.cantidad*l.costo, 0);
+  const peso = P.lineas.reduce((a,l)=>a + l.cantidad*l.peso, 0);
+  const nivel = $("#nivel") ? $("#nivel").value : "ventana";
+
+  const minimo = par("pedido_minimo_express");
+  const cargo  = (nivel==="express" && sub < minimo) ? par("cargo_urgencia") : 0;
+
+  const m = motorCanal(peso, nivel);
+  const margen = sub - cost + cargo;
+  const contrib = margen - m.costo;
+
+  return {sub, cost, peso, nivel, cargo, minimo, margen, contrib,
+          canal:m.canal, costoEnt:m.costo, motivo:m.motivo, total:sub+cargo};
+}
+
+function recalc(){
+  const c = calcularPedido();
+  $("#canalSug").value = P.lineas.length ? c.canal : "—";
+  $("#costoEnt").value = P.lineas.length ? L(c.costoEnt) : "—";
+  pintarLineas();
+
+  if(!P.lineas.length){
+    $("#economia").innerHTML = "";
+    $("#motorTexto").innerHTML = "";
+    $("#overrideZona").innerHTML = "";
+    $("#btnConfirmar").disabled = true;
+    return;
+  }
+
+  const bajoMinimo = c.nivel==="express" && c.sub < c.minimo;
+  const pierde = c.contrib < 0;
+
+  $("#economia").innerHTML = `
+    <div class="grid g4">
+      ${kpi(L0(c.sub),"Subtotal")}
+      ${kpi(KG(c.peso),"Peso del pedido")}
+      ${kpi(L0(c.margen),"Margen bruto")}
+      ${kpi(L0(c.contrib), "Contribución", pierde?"mal":"ok")}
+    </div>
+    ${c.cargo ? `<div class="aviso a-med">El pedido es de ${L0(c.sub)} y el mínimo para express sin cargo
+      es ${L0(c.minimo)}. Se agrega un cargo de urgencia de ${L0(c.cargo)}.
+      <br><strong>Alternativa sin cargo:</strong> ofrecer entrega en la ventana del día.</div>` : ""}
+    ${pierde ? `<div class="aviso a-mal"><strong>Este pedido pierde ${L0(Math.abs(c.contrib))}.</strong>
+      El margen de ${L0(c.margen)} no cubre el costo de entrega de ${L0(c.costoEnt)}.
+      Sube el pedido, cámbialo a ventana programada, o autorízalo dejando constancia.</div>` : ""}
+  `;
+
+  $("#motorTexto").innerHTML =
+    `<div class="aviso a-info"><strong>Canal: ${esc(c.canal)}.</strong> ${esc(c.motivo)}</div>`;
+
+  if(pierde){
+    $("#overrideZona").innerHTML = `<div style="flex:2">
+      <label>Para confirmarlo igual, escribe el motivo y quién lo autoriza</label>
+      <input id="motivoOverride" placeholder="Ej: cliente estratégico, autoriza Daniel"
+        oninput="document.getElementById('btnConfirmar').disabled = this.value.trim().length < 8">
+    </div>`;
+    $("#btnConfirmar").disabled = true;
+  } else {
+    $("#overrideZona").innerHTML = "";
+    $("#btnConfirmar").disabled = !P.cliente;
+  }
+  if(!P.cliente) $("#btnConfirmar").disabled = true;
+}
+
+function kpi(v,l,est){
+  const col = est==="mal" ? "color:var(--rojo)" : est==="ok" ? "color:var(--verde)" : "";
+  return `<div class="kpi"><div class="v" style="${col}">${v}</div><div class="l">${l}</div></div>`;
+}
+
+function pintarLineas(){
+  if(!P.lineas.length){ $("#lineas").innerHTML = `<div class="vacio">Aún no has agregado productos.</div>`; return; }
+  $("#lineas").innerHTML = `<div class="tabla-wrap"><table>
+    <thead><tr><th>Producto</th><th class="num">Cant.</th><th class="num">Precio</th>
+    <th class="num">Peso</th><th class="num">Importe</th><th></th></tr></thead><tbody>
+    ${P.lineas.map((l,i)=>`<tr>
+      <td>${esc(l.nombre)}<br><span class="mini">${esc(l.codigo)}</span></td>
+      <td class="num">${l.cantidad}</td>
+      <td class="num">${L(l.precio)}</td>
+      <td class="num">${(l.cantidad*l.peso).toFixed(3)}</td>
+      <td class="num">${L(l.cantidad*l.precio)}</td>
+      <td><button class="s d" onclick="quitarLinea(${i})">Quitar</button></td></tr>`).join("")}
+    </tbody></table></div>`;
+}
+function quitarLinea(i){ P.lineas.splice(i,1); recalc(); }
+function limpiarPedido(){
+  P = {cliente:null, lineas:[], override:null};
+  $("#buscaCli").value=""; $("#buscaSku").value="";
+  $("#cliSel").innerHTML=""; $("#resCli").innerHTML=""; $("#resSku").innerHTML="";
+  recalc(); pintarHabituales();
+}
+
+/* ---------------------------------------------------- búsqueda de cliente */
+$("#buscaCli").oninput = function(){
+  const q = this.value.trim().toLowerCase();
+  if(q.length < 2){ $("#resCli").innerHTML=""; return; }
+  const r = D.clientes.filter(c =>
+    c.nombre.toLowerCase().includes(q) || c.telefono.includes(q)).slice(0,6);
+  $("#resCli").innerHTML = r.length
+    ? `<div style="margin-top:8px">${r.map(c=>`<button class="s" style="margin:3px"
+        onclick="elegirCliente('${c.id}')">${esc(c.nombre)} · ${esc(c.telefono)}</button>`).join("")}</div>`
+    : `<p class="mini" style="margin-top:8px">Sin resultados.
+        <button class="s" onclick="abrirNuevoCliente()">Registrar cliente nuevo</button></p>`;
+};
+function elegirCliente(id){
+  P.cliente = D.clientes.find(c=>c.id===id);
+  $("#resCli").innerHTML=""; $("#buscaCli").value="";
+  $("#cliSel").innerHTML = `<div class="aviso a-ok" style="margin-top:10px">
+    <strong>${esc(P.cliente.nombre)}</strong> · ${esc(P.cliente.telefono)}
+    · ${esc(P.cliente.direccion||"sin dirección")}
+    <button class="s" style="float:right" onclick="P.cliente=null;document.getElementById('cliSel').innerHTML='';recalc()">Cambiar</button>
+  </div>`;
+  recalc(); pintarHabituales();
+}
+
+/* --------------------------------------------------- búsqueda de producto */
+$("#buscaSku").oninput = function(){
+  const q = this.value.trim().toLowerCase();
+  if(q.length < 2){ $("#resSku").innerHTML=""; return; }
+  const r = D.skus.filter(s => !s.restringido &&
+    (s.nombre.toLowerCase().includes(q) || s.codigo.toLowerCase().includes(q) ||
+     (s.marca||"").toLowerCase().includes(q))).slice(0,8);
+  const bloq = D.skus.filter(s => s.restringido &&
+    (s.nombre.toLowerCase().includes(q) || s.codigo.toLowerCase().includes(q)));
+  $("#resSku").innerHTML =
+    (r.length ? `<div class="tarjetas" style="margin-top:10px">${r.map(tarjeta).join("")}</div>`
+              : `<p class="mini" style="margin-top:8px">Sin resultados.</p>`) +
+    (bloq.length ? `<div class="aviso a-mal" style="margin-top:8px">
+        <strong>${esc(bloq[0].nombre)}</strong> no se puede vender.
+        ${esc(bloq[0].motivo_restriccion||"Producto restringido.")}</div>` : "");
+};
+function agregarLinea(codigo){
+  const s = D.skus.find(x=>x.codigo===codigo);
+  if(!s) return;
+  if(s.restringido){ alert("Ese producto tiene distribución restringida y no puede venderse."); return; }
+  if(s.existencia <= 0){
+    alert("«"+s.nombre+"» está agotado.\n\nEl médico puede verlo en el catálogo pero no se puede "+
+          "comprometer una entrega. Registra el ingreso en Inventario cuando llegue la compra."); return; }
+  const cant = Math.max(1, parseInt($("#cant").value)||1);
+  const precio = (s.oferta && s.precio_oferta) ? s.precio_oferta : s.precio;
+  const ex = P.lineas.find(l=>l.codigo===codigo);
+  if(ex) ex.cantidad += cant;
+  else P.lineas.push({codigo:s.codigo, nombre:s.nombre, cantidad:cant,
+                      precio:precio, costo:s.costo, peso:s.peso});
+  const total = ex ? ex.cantidad : cant;
+  const disp = disponible(s);
+  if(disp < total){
+    alert("De «"+s.nombre+"» hay "+disp+" disponibles y estás pidiendo "+total+".\n\n"+
+          "Ajusta la cantidad o registra el ingreso de la compra.");
+  }
+  $("#cant").value=1;
+  recalc();
+}
+
+
+/* ============================================================================
+   CATÁLOGO VISUAL
+   El médico compra mirando, no leyendo. Segunda entrevista: "todo lo que es
+   visual es más rápido" y "que siempre tenga disponible el catálogo completo".
+   ============================================================================ */
+const ICONOS = {
+  "Guantes":       '<path d="M6 12V5a1.5 1.5 0 013 0v5m0-5.5a1.5 1.5 0 013 0V10m0-4.5a1.5 1.5 0 013 0V11m0-2a1.5 1.5 0 013 0v6a5 5 0 01-5 5h-3a5 5 0 01-5-5v-1"/>',
+  "Inyección":     '<path d="M18 2l4 4M17 7l-2-2M15 9L6 18l-3 1 1-3 9-9zM13 5l6 6"/>',
+  "Curación":      '<path d="M4 8a4 4 0 014-4h8a4 4 0 014 4v8a4 4 0 01-4 4H8a4 4 0 01-4-4zM9 12h6M12 9v6"/>',
+  "Antisépticos":  '<path d="M9 2h6M10 2v4L6 14a4 4 0 004 6h4a4 4 0 004-6l-4-8V2M6.5 13h11"/>',
+  "Soluciones IV": '<path d="M9 2h6v5a3 3 0 01-.8 2L13 11v9a2 2 0 01-2 2h-1a2 2 0 01-2-2v-9L9.8 9A3 3 0 019 7z"/>',
+  "Glucometría":   '<path d="M5 3h14v18H5zM9 7h6M9 11h6M9 15h3"/>',
+  "Protección":    '<path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z"/>',
+  "Consultorio":   '<path d="M12 3v4M8 5h8M6 9h12v10a2 2 0 01-2 2H8a2 2 0 01-2-2zM10 14h4M12 12v4"/>',
+  "Odontología":   '<path d="M12 3c-2 0-3-1-5-1S4 4 4 7c0 5 1.5 14 3.5 14S9 16 12 16s2.5 5 4.5 5S20 12 20 7c0-3-1-5-3-5s-3 1-5 1z"/>',
+  "Restringido":   '<path d="M5 5l14 14M12 3a9 9 0 100 18 9 9 0 000-18z"/>'
+};
+const icono = cat => `<span class="ico"><svg viewBox="0 0 24 24">${ICONOS[cat]||ICONOS["Consultorio"]}</svg></span>`;
+
+function subtab(t){
+  document.querySelectorAll(".subtabs button").forEach(b=>b.classList.toggle("on", b.dataset.t===t));
+  document.querySelectorAll(".sub-panel").forEach(s=>s.classList.toggle("on", s.id==="t-"+t));
+  if(t==="catalogo") pintarCatalogoCompra();
+  if(t==="habituales") pintarHabituales();
+}
+
+function tarjeta(s){
+  const agotado = disponible(s) <= 0;
+  const oferta = !!s.oferta, nuevo = !!s.nuevo;
+  const precio = oferta && s.precio_oferta ? s.precio_oferta : s.precio;
+  const tag = agotado ? '<span class="tag t-ag">AGOTADO</span>'
+            : oferta  ? '<span class="tag t-of">OFERTA</span>'
+            : nuevo   ? '<span class="tag t-nu">NUEVO</span>' : "";
+  return `<div class="tar ${agotado?"off":""}" ${agotado?"":`onclick="agregarLinea('${s.codigo}')"`}
+      title="${agotado?'Sin existencia por el momento':'Agregar al pedido'}">
+    ${tag}${icono(s.categoria)}
+    <div style="min-width:0">
+      <div class="n">${esc(s.nombre)}</div>
+      <div class="p">${L0(precio)}
+        ${oferta && s.precio_oferta ? `<span class="tachado">${L0(s.precio)}</span>`:""}</div>
+      <div class="m">${esc(s.presentacion||"")}<br>
+        ${agotado ? "Sin disponibilidad" : "Disponible: "+disponible(s)}</div>
+    </div></div>`;
+}
+
+function pintarCatalogoCompra(){
+  const sel = $("#catCategoria");
+  if(sel && !sel.options.length){
+    const cats = [...new Set(D.skus.filter(s=>!s.restringido).map(s=>s.categoria))].sort();
+    sel.innerHTML = `<option value="">Todas las categorías</option>` +
+      cats.map(c=>`<option>${esc(c)}</option>`).join("");
+  }
+  const cat = sel ? sel.value : "";
+  const f = $("#catFiltro") ? $("#catFiltro").value : "";
+  let r = D.skus.filter(s=>!s.restringido);
+  if(cat) r = r.filter(s=>s.categoria===cat);
+  if(f==="oferta") r = r.filter(s=>s.oferta);
+  if(f==="nuevo")  r = r.filter(s=>s.nuevo);
+  if(f==="disp")   r = r.filter(s=>s.existencia>0);
+
+  const ofertas = r.filter(s=>s.oferta), nuevos = r.filter(s=>s.nuevo && !s.oferta);
+  const resto = r.filter(s=>!s.oferta && !s.nuevo);
+  const bloque = (t,l) => l.length
+    ? `<p class="mini" style="margin:14px 0 6px;font-weight:700;color:var(--azul)">${t}</p>
+       <div class="tarjetas">${l.map(tarjeta).join("")}</div>` : "";
+
+  $("#catalogoCompra").innerHTML = r.length
+    ? (!cat && !f ? bloque("EN OFERTA", ofertas) + bloque("NUEVOS", nuevos) +
+        bloque("TODO EL CATÁLOGO ("+resto.length+")", resto)
+      : `<div class="tarjetas">${r.map(tarjeta).join("")}</div>`)
+    : `<div class="vacio">No hay productos con ese filtro.</div>`;
+}
+
+function pintarHabituales(){
+  if(!P.cliente){
+    $("#habituales").innerHTML = `<div class="vacio">Elige primero el cliente y aquí aparecerá
+      lo que suele pedir, para armar el pedido en dos clics.</div>`;
+    return;
+  }
+  const ps = D.pedidos.filter(p=>p.cliente_id===P.cliente.id && p.estado!=="cancelado");
+  const cuenta = {};
+  ps.forEach(p=>p.lineas.forEach(l=>{
+    const x = cuenta[l.codigo] = cuenta[l.codigo] || {veces:0, cant:0};
+    x.veces++; x.cant += l.cantidad;
+  }));
+  const cods = Object.keys(cuenta).sort((a,b)=>cuenta[b].veces-cuenta[a].veces);
+  if(!cods.length){
+    $("#habituales").innerHTML = `<div class="vacio">
+      Este cliente todavía no tiene historial.<br>
+      Usa «Catálogo completo» para armar su primer pedido; a partir del segundo,
+      aquí aparecerá lo que suele llevar.</div>`;
+    return;
+  }
+  const ult = ps[0];
+  $("#habituales").innerHTML =
+    (ult ? `<div class="aviso a-info">Su último pedido fue el ${fecha(ult.fecha)} por ${L0(ult.total)}.
+      <button class="s" onclick="repetirUltimo('${ult.id}')">Repetir ese pedido completo</button></div>` : "") +
+    `<p class="mini" style="margin:10px 0 6px;font-weight:700;color:var(--azul)">
+      LO QUE MÁS PIDE (ordenado por frecuencia)</p>
+     <div class="tarjetas">${cods.map(c=>{
+       const s = D.skus.find(x=>x.codigo===c); if(!s) return "";
+       const t = tarjeta(s);
+       return t.replace('<div class="m">', `<div class="m"><strong>Lo ha pedido ${cuenta[c].veces} ${cuenta[c].veces===1?"vez":"veces"}</strong><br>`);
+     }).join("")}</div>`;
+}
+
+function repetirUltimo(id){
+  const p = D.pedidos.find(x=>x.id===id); if(!p) return;
+  P.lineas = p.lineas.filter(l=>{
+    const s = D.skus.find(x=>x.codigo===l.codigo);
+    return s && !s.restringido;
+  }).map(l=>({...l}));
+  const faltan = p.lineas.length - P.lineas.length;
+  recalc();
+  if(faltan) alert("Se copiaron "+P.lineas.length+" productos. "+faltan+
+    " ya no está(n) disponible(s) para la venta.");
+  subtab("buscar"); subtab("habituales");
+}
+
+/* ------------------------------------------------------ confirmar pedido */
+function confirmarPedido(){
+  if(!P.cliente){ alert("Primero elige el cliente."); return; }
+  if(!P.lineas.length){ alert("El pedido no tiene productos."); return; }
+  const c = calcularPedido();
+  let motivo = null;
+  if(c.contrib < 0){
+    motivo = ($("#motivoOverride")||{}).value || "";
+    if(motivo.trim().length < 8){ alert("Escribe el motivo de la autorización."); return; }
+  }
+  const sla = c.nivel==="express" ? par("sla_express_min") : par("sla_ventana_min");
+  const ped = {
+    id: uid(), numero: 1000 + D.pedidos.length,
+    fecha: new Date().toISOString(), cliente_id: P.cliente.id, cliente: P.cliente.nombre,
+    telefono: P.cliente.telefono, direccion: P.cliente.direccion,
+    lineas: JSON.parse(JSON.stringify(P.lineas)),
+    nivel: c.nivel, canal: c.canal, estado: "confirmado",
+    subtotal: c.sub, costo_prod: c.cost, cargo: c.cargo, total: c.total,
+    peso: c.peso, margen: c.margen,
+    costo_entrega_est: c.costoEnt, contribucion_est: c.contrib,
+    costo_entrega_real: null, contribucion_real: null,
+    hecho_por: ($("#hechoPor")||{value:"El médico"}).value,
+    pago_estado: P.cliente.credito ? "credito" : "pendiente",
+    pago: null,
+    prometido: new Date(Date.now() + sla*60000).toISOString(),
+    entregado: null, override: motivo
+  };
+  // El producto queda COMPROMETIDO, no descontado: sigue físicamente en bodega
+  // hasta que se entrega. Así el inventario refleja lo que realmente hay.
+  D.movimientos.push({id:uid(), fecha:new Date().toISOString(), tipo:"reserva",
+    codigo:"—", cantidad:0, ref:"Pedido "+ped.numero+" comprometido"});
+  D.pedidos.unshift(ped);
+  guardar();
+  limpiarPedido();
+  alert("Pedido " + ped.numero + " confirmado.\n\n" +
+        "Canal: " + ped.canal + "\nProme­tido para: " + fecha(ped.prometido));
+  ir("pedidos");
+}
+</script>
+
+<script>
+"use strict";
+/* ============================================================================
+   PANTALLAS
+   ============================================================================ */
+
+/* ---------------------------------------------------------------- INICIO */
+function pintarInicio(){
+  const hoyISO = hoy();
+  const ent = D.pedidos.filter(p=>p.estado==="entregado");
+  const act = D.pedidos.filter(p=>p.estado!=="cancelado");
+  const desde = new Date(Date.now()-30*86400000).toISOString();
+  const mes = act.filter(p=>p.fecha>=desde);
+
+  const contrib = mes.reduce((a,p)=>a+(p.contribucion_real??p.contribucion_est),0);
+  const contribProm = mes.length ? contrib/mes.length : 0;
+  const ticket = mes.length ? mes.reduce((a,p)=>a+p.total,0)/mes.length : 0;
+  const conSla = ent.filter(p=>p.prometido);
+  const enTiempo = conSla.filter(p=>p.entregado && p.entregado <= p.prometido).length;
+  const sla = conSla.length ? enTiempo/conSla.length*100 : null;
+  const pedDia = mes.length ? mes.length/30 : 0;
+
+  $("#kpis").innerHTML =
+    kpi2(L0(contribProm), "Contribución por pedido", contribProm>=0?"ok":"mal",
+         "Es el número que define si el negocio existe. Últimos 30 días.") +
+    kpi2(L0(ticket), "Ticket promedio", "", "Segunda palanca de rentabilidad. Sube con el pedido mínimo.") +
+    kpi2(pedDia.toFixed(1), "Pedidos por día", "", "Meta de equilibrio: alrededor de 24 a 28.") +
+    kpi2(sla===null?"—":sla.toFixed(0)+"%", "Entregas a tiempo",
+         sla===null?"":(sla>=90?"ok":"mal"), "Medido por nosotros, no por el proveedor.");
+
+  // aviso de respaldo
+  const dr = D.ultimoRespaldo ? dias(D.ultimoRespaldo, new Date().toISOString()) : 999;
+  $("#avisoRespaldo").innerHTML = (D.pedidos.length && dr >= 1)
+    ? `<div class="aviso a-med noprint">Hace ${dr>90?"mucho":dr+" día(s)"} que no descargas un respaldo.
+       Los datos viven solo en este navegador.
+       <button class="s" onclick="descargarRespaldo()">Descargar ahora</button></div>` : "";
+
+  const deHoy = act.filter(p=>p.fecha.slice(0,10)===hoyISO);
+  $("#hoyLista").innerHTML = deHoy.length
+    ? `<table><tbody>${deHoy.map(p=>`<tr>
+        <td><strong>#${p.numero}</strong> ${esc(p.cliente)}<br>
+          <span class="mini">${esc(p.canal)} · ${fecha(p.fecha)}</span></td>
+        <td class="num">${L0(p.total)}<br>${pill(p.estado)}</td></tr>`).join("")}</tbody></table>`
+    : `<div class="vacio">Todavía no hay pedidos hoy.</div>`;
+
+  const tarde = act.filter(p=>["confirmado","en_ruta"].includes(p.estado) &&
+    p.prometido && p.prometido < new Date().toISOString());
+  const sinStock = D.skus.filter(s=>!s.restringido && s.existencia<=s.minimo);
+  const repo = calcularReposicion();
+  const espPago = D.pedidos.filter(p=>p.estado==="listo" && !pagoLibera(p));
+  $("#pendientes").innerHTML = `
+    ${espPago.length ? `<div class="aviso a-med">${espPago.length} pedido(s) empacados esperando depósito.
+      <button class="s" onclick="ir('despacho')">Ver</button></div>`:""}
+    ${tarde.length ? `<div class="aviso a-mal">${tarde.length} pedido(s) pasaron su hora prometida.
+      <button class="s" onclick="ir('pedidos')">Ver</button></div>`:""}
+    ${sinStock.length ? `<div class="aviso a-med">${sinStock.length} producto(s) en o bajo el mínimo.
+      <button class="s" onclick="ir('inventario')">Ver</button></div>`:""}
+    ${repo.length ? `<div class="aviso a-info">${repo.length} cliente(s) por quedarse sin producto.
+      <button class="s" onclick="ir('reposicion')">Ver avisos</button></div>`:""}
+    ${(!tarde.length && !sinStock.length && !repo.length)
+      ? `<div class="vacio">Todo en orden. Nada pendiente.</div>`:""}`;
+
+  // serie de 14 días
+  const dd = [];
+  for(let i=13;i>=0;i--){
+    const f = new Date(Date.now()-i*86400000).toISOString().slice(0,10);
+    const ps = act.filter(p=>p.fecha.slice(0,10)===f);
+    dd.push({f, n:ps.length, c:ps.reduce((a,p)=>a+(p.contribucion_real??p.contribucion_est),0)});
+  }
+  const max = Math.max(1, ...dd.map(x=>x.n));
+  $("#serie").innerHTML = D.pedidos.length ? `<table>
+    <thead><tr><th>Día</th><th class="num">Pedidos</th><th style="width:45%"></th><th class="num">Contribución</th></tr></thead>
+    <tbody>${dd.map(x=>`<tr>
+      <td>${x.f.slice(5)}</td><td class="num">${x.n}</td>
+      <td><div class="bar"><i style="width:${x.n/max*100}%"></i></div></td>
+      <td class="num" style="color:${x.c<0?'var(--rojo)':'var(--texto)'}">${x.n?L0(x.c):"—"}</td>
+    </tr>`).join("")}</tbody></table>`
+    : `<div class="vacio">Registra tu primer pedido y aquí verás la evolución.</div>`;
+}
+function kpi2(v,l,est,h){
+  const col = est==="mal"?"color:var(--rojo)":est==="ok"?"color:var(--verde)":"";
+  return `<div class="kpi"><div class="v" style="${col}">${v}</div>
+    <div class="l">${l}</div><div class="h">${h}</div></div>`;
+}
+function pill(e){
+  const m = {confirmado:["p-med","Confirmado"], preparando:["p-med","Preparando"],
+    listo:["p-med","Listo"], en_ruta:["p-med","En ruta"],
+    entregado:["p-ok","Entregado"], cancelado:["p-gris","Cancelado"], fallido:["p-mal","Fallido"]};
+  const [c,t] = m[e]||["p-gris",e];
+  return `<span class="pill ${c}">${t}</span>`;
+}
+
+/* --------------------------------------------------------------- PEDIDOS */
+function pintarPedidos(){
+  const q = ($("#filtroPed").value||"").toLowerCase();
+  const e = $("#filtroEst").value;
+  const r = D.pedidos.filter(p =>
+    (!q || p.cliente.toLowerCase().includes(q) || String(p.numero).includes(q)) &&
+    (!e || p.estado===e));
+  $("#tablaPedidos").innerHTML = r.length ? `<div class="tabla-wrap"><table>
+    <thead><tr><th>#</th><th>Fecha</th><th>Cliente</th><th>Canal</th>
+      <th class="num">Total</th><th class="num">Peso</th>
+      <th class="num">Contrib. est.</th><th class="num">Contrib. real</th>
+      <th>Estado</th><th>Pago</th><th class="noprint"></th></tr></thead><tbody>
+    ${r.map(p=>`<tr>
+      <td><strong>${p.numero}</strong>${p.ejemplo?' <span class="pill p-gris">ejemplo</span>':''}${p.override?' <span class="pill p-mal" title="'+esc(p.override)+'">forzado</span>':''}</td>
+      <td>${fecha(p.fecha)}</td>
+      <td>${esc(p.cliente)}<br><span class="mini">${esc(p.telefono)}</span></td>
+      <td>${esc(p.canal)}<br><span class="mini">${p.nivel}${p.hecho_por?" · "+esc(p.hecho_por):""}</span></td>
+      <td class="num">${L0(p.total)}</td>
+      <td class="num">${p.peso.toFixed(2)}</td>
+      <td class="num" style="color:${p.contribucion_est<0?'var(--rojo)':''}">${L0(p.contribucion_est)}</td>
+      <td class="num" style="color:${(p.contribucion_real??0)<0?'var(--rojo)':''}">
+        ${p.contribucion_real==null?"—":L0(p.contribucion_real)}</td>
+      <td>${pill(p.estado)}</td>
+      <td>${badgePago(p)}</td>
+      <td class="noprint">${["confirmado","preparando","listo","en_ruta"].includes(p.estado)
+        ? `<button class="s" onclick="ir('despacho')">Despacho</button>
+           <button class="s d" onclick="cancelarPedido('${p.id}')">Cancelar</button>`
+        : p.estado==="entregado" ? `<button class="s" onclick="verPedido('${p.id}')">Ver</button>` : ""}</td>
+    </tr>`).join("")}</tbody></table></div>`
+    : `<div class="vacio">No hay pedidos que coincidan.</div>`;
+}
+$("#filtroPed").oninput = pintarPedidos;
+$("#filtroEst").onchange = pintarPedidos;
+
+function marcarEntregado(id){
+  const p = D.pedidos.find(x=>x.id===id); if(!p) return;
+  modal(`<h3 style="margin-top:0">Registrar entrega — pedido ${p.numero}</h3>
+    <p class="mini">Anota lo que realmente costó la entrega. La diferencia contra lo estimado
+    es el indicador que más conviene vigilar.</p>
+    <div class="grid g2" style="margin:14px 0">
+      <div><label>Costo real de entrega (L.)</label>
+        <input id="mCosto" type="number" step="0.01" value="${p.costo_entrega_est.toFixed(2)}"></div>
+      <div><label>Hora de entrega</label>
+        <input id="mHora" type="datetime-local" value="${new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16)}"></div>
+    </div>
+    <div class="mini">Estimado: ${L(p.costo_entrega_est)} · Prometido: ${fecha(p.prometido)}</div>
+    <hr>
+    <button class="b" onclick="confirmarEntrega('${id}')">Guardar</button>
+    <button class="s" onclick="cerrarModal()">Cancelar</button>`);
+}
+function confirmarEntrega(id){
+  const p = D.pedidos.find(x=>x.id===id);
+  const cr = parseFloat($("#mCosto").value)||0;
+  p.costo_entrega_real = cr;
+  p.contribucion_real = p.margen - cr;
+  p.entregado = new Date($("#mHora").value).toISOString();
+  p.estado = "entregado";
+  // La existencia física baja aquí, cuando el producto realmente sale de bodega
+  p.lineas.forEach(l => {
+    const s = D.skus.find(x=>x.codigo===l.codigo);
+    if(s){ s.existencia -= l.cantidad;
+      D.movimientos.push({id:uid(), fecha:new Date().toISOString(), tipo:"despacho",
+        codigo:l.codigo, cantidad:-l.cantidad, ref:"Pedido "+p.numero}); }
+  });
+  guardar(); cerrarModal(); pintarPedidos(); pintarInventario(); pintarDespacho();
+}
+function cancelarPedido(id){
+  if(!confirm("¿Cancelar este pedido?\n\nEl producto comprometido vuelve a quedar disponible.")) return;
+  const p = D.pedidos.find(x=>x.id===id);
+  p.estado="cancelado"; guardar(); pintarPedidos(); pintarInventario(); pintarDespacho();
+}
+function verPedido(id){
+  const p = D.pedidos.find(x=>x.id===id);
+  const desvio = (p.contribucion_real??0) - p.contribucion_est;
+  modal(`<h3 style="margin-top:0">Pedido ${p.numero}</h3>
+    <p class="mini">${esc(p.cliente)} · ${esc(p.telefono)}<br>${esc(p.direccion||"")}</p>
+    <table style="margin:12px 0"><thead><tr><th>Producto</th><th class="num">Cant</th>
+      <th class="num">Importe</th></tr></thead><tbody>
+      ${p.lineas.map(l=>`<tr><td>${esc(l.nombre)}</td><td class="num">${l.cantidad}</td>
+        <td class="num">${L(l.cantidad*l.precio)}</td></tr>`).join("")}</tbody></table>
+    <div class="grid g2">
+      ${kpi(L0(p.total),"Total")}${kpi(KG(p.peso),"Peso")}
+      ${kpi(L0(p.costo_entrega_est),"Entrega estimada")}
+      ${kpi(L0(p.costo_entrega_real??0),"Entrega real")}
+      ${kpi(L0(p.contribucion_real??p.contribucion_est),"Contribución",
+        (p.contribucion_real??p.contribucion_est)<0?"mal":"ok")}
+      ${kpi((desvio>=0?"+":"")+L0(desvio),"Desvío", desvio<0?"mal":"ok")}
+    </div>
+    ${p.override?`<div class="aviso a-mal">Pedido forzado. Motivo: ${esc(p.override)}</div>`:""}
+    <hr><button class="s" onclick="cerrarModal()">Cerrar</button>`);
+}
+
+
+/* ============================================================================
+   DESPACHO — el "monitor de cocina"
+   El pedido fluye: confirmado → preparando → listo → en ruta → entregado.
+   Cada estado genera el mensaje que hay que mandar al cliente o al courier.
+   ============================================================================ */
+const FLUJO = [
+  {e:"confirmado", t:"Pedido recibido",     sig:"preparando", btn:"Preparar"},
+  {e:"preparando", t:"Preparando en bodega",sig:"listo",      btn:"Listo"},
+  {e:"listo",      t:"Empacado · espera pago", sig:"en_ruta", btn:"Solicitar transporte"},
+  {e:"en_ruta",    t:"En ruta al consultorio", sig:"entregado", btn:"Marcar entregado"}
+];
+
+function minutosDesde(iso){ return Math.floor((Date.now() - new Date(iso)) / 60000); }
+
+function pintarDespacho(){
+  const activos = D.pedidos.filter(p=>FLUJO.some(f=>f.e===p.estado));
+  const tarde = activos.filter(p=>p.prometido && p.prometido < new Date().toISOString());
+  const esperando = D.pedidos.filter(p=>p.estado==="listo" && !pagoLibera(p));
+  const avisoPago = esperando.length
+    ? `<div class="aviso a-med noprint"><strong>${esperando.length} pedido(s) empacados esperando depósito.</strong>
+       Ya están listos: solo falta verificar el pago para solicitar el transporte.</div>` : "";
+  $("#despachoAvisos").innerHTML = avisoPago + (tarde.length
+    ? `<div class="aviso a-mal noprint"><strong>${tarde.length} pedido(s) pasaron su hora prometida.</strong>
+       Aparecen con la barra roja.</div>`
+    : (activos.length ? "" : `<div class="aviso a-info noprint">No hay pedidos en proceso.
+       Los pedidos confirmados aparecen aquí automáticamente.</div>`));
+
+  $("#tablero").innerHTML = FLUJO.map(f=>{
+    const ps = D.pedidos.filter(p=>p.estado===f.e)
+                        .sort((a,b)=>a.fecha.localeCompare(b.fecha));
+    return `<div class="col"><h4>${f.t}<span>${ps.length}</span></h4>
+      ${ps.map(p=>tarjetaPedido(p,f)).join("") ||
+        `<p class="mini" style="text-align:center;padding:10px 0">—</p>`}</div>`;
+  }).join("");
+}
+
+function tarjetaPedido(p, f){
+  const min = minutosDesde(p.fecha);
+  const restan = p.prometido ? Math.floor((new Date(p.prometido)-Date.now())/60000) : null;
+  const cls = restan===null ? "" : restan < 0 ? "urg" : restan < 10 ? "att" : "";
+  const cro = restan===null ? `${min} min`
+            : restan < 0 ? `${Math.abs(restan)} min TARDE`
+            : `faltan ${restan} min`;
+  const colCro = restan===null ? "var(--gris)" : restan<0 ? "var(--rojo)" : restan<10 ? "#D68910" : "var(--verde)";
+  return `<div class="ped ${cls}">
+    <div class="t"><span class="num2">#${p.numero}</span>
+      <span class="cro" style="color:${colCro}">${cro}</span></div>
+    <div class="cli">${esc(p.cliente)}</div>
+    <div class="dir">${esc(p.direccion||"")}<br>${esc(p.telefono)}</div>
+    <ul>${p.lineas.map(l=>`<li><strong>${l.cantidad}×</strong> ${esc(l.nombre)}</li>`).join("")}</ul>
+    <div class="dir">${L0(p.total)} · ${p.peso.toFixed(2)} kg · <strong>${esc(p.canal)}</strong></div>
+    <div style="margin-top:6px">${badgePago(p)}</div>
+    <div class="acc noprint">
+      <button class="b" ${f.e==="listo" && !pagoLibera(p) ? "disabled title='Falta verificar el depósito'":""}
+        onclick="avanzar('${p.id}')">${f.btn}</button>
+      ${!pagoLibera(p) ? `<button class="s" onclick="registrarDeposito('${p.id}')">Registrar depósito</button>
+        <button class="s" onclick="pedirDeposito('${p.id}')">Pedir depósito</button>`:""}
+      ${f.e==="listo" ? `<button class="s" onclick="copiarCourier('${p.id}')">Datos al courier</button>`:""}
+      ${f.e==="preparando" ? `<button class="s" onclick="imprimirPicking('${p.id}')">Imprimir</button>`:""}
+      <button class="s" onclick="avisarCliente('${p.id}')">Avisar al cliente</button>
+    </div></div>`;
+}
+
+function avanzar(id){
+  const p = D.pedidos.find(x=>x.id===id); if(!p) return;
+  const f = FLUJO.find(x=>x.e===p.estado); if(!f) return;
+  // COMPUERTA: sin depósito verificado no se solicita el transporte
+  if(f.sig === "en_ruta" && !pagoLibera(p)){
+    alert("No se puede solicitar el transporte del pedido "+p.numero+".\n\n"+
+          "Falta verificar el depósito. El pedido ya está empacado y listo; "+
+          "en cuanto registres el comprobante, sale.\n\n"+
+          "Usa «Registrar depósito» o «Pedir depósito» en la tarjeta.");
+    return;
+  }
+  if(f.sig === "entregado"){ marcarEntregado(id); return; }
+  p.estado = f.sig;
+  p.hitos = p.hitos || {};
+  p.hitos[f.sig] = new Date().toISOString();
+  guardar(); pintarDespacho();
+  const msg = MENSAJES[f.sig];
+  if(msg) mostrarMensaje(p, msg(p));
+}
+
+const MENSAJES = {
+  preparando: p => `Buen día, Dr(a). ${p.cliente}. Recibimos su pedido #${p.numero} por ${L0(p.total)}. `+
+    `Ya lo estamos preparando y le avisamos apenas salga.`,
+  listo: p => `Dr(a). ${p.cliente}, su pedido #${p.numero} está listo y sale en camino en breve. `+
+    `Llega a ${p.direccion}.`,
+  en_ruta: p => `Dr(a). ${p.cliente}, su pedido #${p.numero} va en camino. `+
+    `Llega aproximadamente a las ${new Date(p.prometido).toLocaleTimeString("es-HN",{hour:"2-digit",minute:"2-digit"})}.`
+};
+
+function avisarCliente(id){
+  const p = D.pedidos.find(x=>x.id===id);
+  const m = (MENSAJES[p.estado] || MENSAJES.en_ruta)(p);
+  mostrarMensaje(p, m);
+}
+function mostrarMensaje(p, texto){
+  modal(`<h3 style="margin-top:0">Aviso para el cliente</h3>
+    <p class="mini">Cópialo y pégalo en WhatsApp al ${esc(p.telefono)}.</p>
+    <textarea id="msgTxt" rows="4" style="margin:10px 0">${esc(texto)}</textarea>
+    <button class="b" onclick="copiarTexto(document.getElementById('msgTxt').value)">Copiar mensaje</button>
+    <button class="s" onclick="cerrarModal()">Cerrar</button>`);
+}
+function copiarCourier(id){
+  const p = D.pedidos.find(x=>x.id===id);
+  const t = `RECOLECCIÓN — Pedido #${p.numero}\n`+
+    `Recoger en: bodega\n`+
+    `Entregar a: ${p.cliente}\n`+
+    `Teléfono: ${p.telefono}\n`+
+    `Dirección: ${p.direccion}\n`+
+    `Bultos: ${p.lineas.length} · Peso: ${p.peso.toFixed(2)} kg\n`+
+    `Valor declarado: ${L0(p.total)}\n`+
+    `Entregar antes de: ${fecha(p.prometido)}`;
+  modal(`<h3 style="margin-top:0">Datos para el courier — pedido ${p.numero}</h3>
+    <p class="mini">Cópialos en la aplicación del transportista o mándalos por WhatsApp.</p>
+    <textarea id="msgTxt" rows="9" style="margin:10px 0;font-family:Consolas,monospace;font-size:12px">${esc(t)}</textarea>
+    <button class="b" onclick="copiarTexto(document.getElementById('msgTxt').value)">Copiar</button>
+    <button class="s" onclick="cerrarModal()">Cerrar</button>`);
+}
+function copiarTexto(t){
+  navigator.clipboard.writeText(t).then(()=>{
+    const b = event.target; const o = b.textContent;
+    b.textContent = "Copiado"; setTimeout(()=>b.textContent=o, 1500);
+  }, ()=>prompt("Copia este texto:", t));
+}
+function imprimirPicking(id){
+  const p = D.pedidos.find(x=>x.id===id);
+  const w = window.open("", "_blank", "width=700,height=800");
+  w.document.write(`<html><head><meta charset="utf-8"><title>Pedido ${p.numero}</title>
+    <style>body{font-family:Arial,sans-serif;padding:26px;font-size:14px}
+    h1{font-size:20px;margin:0 0 4px}table{width:100%;border-collapse:collapse;margin:16px 0}
+    th{background:#1F3864;color:#fff;text-align:left;padding:7px 9px;font-size:12px}
+    td{padding:7px 9px;border-bottom:1px solid #ddd}
+    .box{border:1px solid #999;width:22px;height:22px;display:inline-block}
+    .pie{margin-top:26px;border-top:1px solid #999;padding-top:9px;font-size:12px;color:#555}</style>
+    </head><body>
+    <h1>Pedido #${p.numero}</h1>
+    <p><strong>${esc(p.cliente)}</strong> · ${esc(p.telefono)}<br>${esc(p.direccion||"")}</p>
+    <p>Entregar antes de: <strong>${fecha(p.prometido)}</strong> · Canal: ${esc(p.canal)}</p>
+    <table><thead><tr><th>✓</th><th>Cant.</th><th>Código</th><th>Producto</th></tr></thead><tbody>
+    ${p.lineas.map(l=>`<tr><td><span class="box"></span></td><td><strong>${l.cantidad}</strong></td>
+      <td>${esc(l.codigo)}</td><td>${esc(l.nombre)}</td></tr>`).join("")}
+    </tbody></table>
+    <p>Peso total: <strong>${p.peso.toFixed(2)} kg</strong> · Total: <strong>${L0(p.total)}</strong></p>
+    <div class="pie">Preparado por: ______________________
+      &nbsp;&nbsp;&nbsp; Recibido por el courier: ______________________</div>
+    </body></html>`);
+  w.document.close(); w.print();
+}
+
+
+/* ============================================================================
+   COBRO POR DEPÓSITO BANCARIO
+   Regla del negocio: la preparación en bodega NO espera al comprobante,
+   porque empacar no cuesta dinero. Lo que el pago libera es la SALIDA:
+   sin depósito verificado no se solicita el transporte.
+   ============================================================================ */
+function pagoLibera(p){
+  return p.pago_estado === "verificado" || p.pago_estado === "credito";
+}
+function badgePago(p){
+  if(p.pago_estado === "credito")
+    return `<span class="pill p-ok">CRÉDITO AUTORIZADO</span>`;
+  if(p.pago_estado === "verificado")
+    return `<span class="pill p-ok">DEPÓSITO VERIFICADO</span>` +
+      (p.pago && p.pago.diferencia ? ` <span class="pill p-med">difiere ${L0(p.pago.diferencia)}</span>` : "");
+  const min = minutosDesde(p.fecha);
+  return `<span class="pill p-mal">PAGO PENDIENTE</span>` +
+    (min > 60 ? ` <span class="mini">esperando ${Math.floor(min/60)} h</span>` : "");
+}
+
+function registrarDeposito(id){
+  const p = D.pedidos.find(x=>x.id===id); if(!p) return;
+  modal(`<h3 style="margin-top:0">Verificar depósito — pedido ${p.numero}</h3>
+    <p class="mini">Confirma el depósito en tu banca en línea antes de registrarlo aquí.
+    Al guardarlo, el pedido queda liberado para solicitar el transporte.</p>
+    <div class="aviso a-info">Total del pedido: <strong>${L0(p.total)}</strong></div>
+    <div class="grid g2" style="margin:12px 0">
+      <div><label>Monto depositado (L.)</label>
+        <input id="dpMonto" type="number" step="0.01" value="${p.total.toFixed(2)}"></div>
+      <div><label>Banco de origen</label><input id="dpBanco" placeholder="Ej: Banco Atlántida"></div>
+      <div><label>N.º de referencia o boleta</label><input id="dpRef"></div>
+      <div><label>Fecha del depósito</label>
+        <input id="dpFecha" type="date" value="${hoy()}"></div>
+    </div>
+    <div><label>Nota (opcional)</label><input id="dpNota" placeholder="Ej: depositó la asistente"></div>
+    <div id="dpMsg"></div><hr>
+    <button class="b" onclick="confirmarDeposito('${id}')">Verificar y liberar despacho</button>
+    <button class="s" onclick="cerrarModal()">Cancelar</button>`);
+}
+function confirmarDeposito(id){
+  const p = D.pedidos.find(x=>x.id===id);
+  const monto = parseFloat($("#dpMonto").value)||0;
+  const ref = $("#dpRef").value.trim();
+  if(monto <= 0){ $("#dpMsg").innerHTML =
+    `<div class="aviso a-mal">Escribe el monto depositado.</div>`; return; }
+  if(!ref){ $("#dpMsg").innerHTML =
+    `<div class="aviso a-mal">La referencia o número de boleta es obligatoria: es el respaldo del cobro.</div>`; return; }
+  const dif = +(monto - p.total).toFixed(2);
+  if(Math.abs(dif) > 0.5 && !confirm(
+      `El depósito es de ${L0(monto)} y el pedido es de ${L0(p.total)}.\n\n`+
+      `Diferencia: ${dif>0?"sobra":"falta"} ${L0(Math.abs(dif))}.\n\n¿Registrarlo de todos modos?`)) return;
+  p.pago = {monto, banco:$("#dpBanco").value.trim(), referencia:ref,
+            fecha:$("#dpFecha").value, nota:$("#dpNota").value.trim(),
+            diferencia: Math.abs(dif) > 0.5 ? dif : 0,
+            verificado_en: new Date().toISOString()};
+  p.pago_estado = "verificado";
+  guardar(); cerrarModal(); pintarDespacho(); pintarInicio();
+}
+
+function pedirDeposito(id){
+  const p = D.pedidos.find(x=>x.id===id);
+  const b = D.banco || {};
+  const faltan = !b.banco || !b.cuenta;
+  const datos = faltan
+    ? "\n[Falta configurar la cuenta bancaria en Ajustes]"
+    : `\n\n${b.banco}\nCuenta ${b.tipo||""} n.º ${b.cuenta}\nA nombre de: ${b.titular||""}`;
+  const t = `Dr(a). ${p.cliente}, su pedido #${p.numero} ya está en preparación.\n\n`+
+    `Total: ${L0(p.total)}${datos}\n\n`+
+    `En cuanto nos comparta el comprobante, sale de inmediato hacia su consultorio.`;
+  modal(`<h3 style="margin-top:0">Solicitud de depósito — pedido ${p.numero}</h3>
+    ${faltan?`<div class="aviso a-med">Todavía no has configurado la cuenta bancaria.
+      Ve a <strong>Ajustes</strong> y complétala para que el mensaje salga bien.</div>`:""}
+    <p class="mini">Cópialo y pégalo en WhatsApp al ${esc(p.telefono)}.
+    El pedido sigue preparándose mientras tanto.</p>
+    <textarea id="msgTxt" rows="8" style="margin:10px 0">${esc(t)}</textarea>
+    <button class="b" onclick="copiarTexto(document.getElementById('msgTxt').value)">Copiar mensaje</button>
+    <button class="s" onclick="cerrarModal()">Cerrar</button>`);
+}
+
+function guardarBanco(){
+  D.banco = {banco:$("#bkBanco").value.trim(), cuenta:$("#bkCuenta").value.trim(),
+             titular:$("#bkTitular").value.trim(), tipo:$("#bkTipo").value.trim()};
+  guardar();
+  $("#bancoMsg").innerHTML = `<div class="aviso a-ok">Datos bancarios guardados.
+    Ya salen completos en la solicitud de depósito.</div>`;
+  setTimeout(()=>$("#bancoMsg").innerHTML="", 4000);
+}
+
+/* -------------------------------------------------------------- CLIENTES */
+function pintarClientes(){
+  const q = ($("#filtroCli").value||"").toLowerCase();
+  const r = D.clientes.filter(c=>!q||c.nombre.toLowerCase().includes(q)||c.telefono.includes(q));
+  $("#tablaClientes").innerHTML = r.length ? `<div class="tabla-wrap"><table>
+    <thead><tr><th>Nombre</th><th>Tipo</th><th>Teléfono</th><th>Dirección</th>
+      <th class="num">Pedidos</th><th class="num">Ticket prom.</th><th>Cobro</th><th class="noprint"></th></tr></thead><tbody>
+    ${r.map(c=>{
+      const ps = D.pedidos.filter(p=>p.cliente_id===c.id&&p.estado!=="cancelado");
+      const tp = ps.length? ps.reduce((a,p)=>a+p.total,0)/ps.length : 0;
+      return `<tr><td><strong>${esc(c.nombre)}</strong></td><td>${esc(c.tipo)}</td>
+        <td>${esc(c.telefono)}</td><td>${esc(c.direccion||"—")}<br>
+        <span class="mini">${esc(c.referencia||"")}</span></td>
+        <td class="num">${ps.length}</td><td class="num">${ps.length?L0(tp):"—"}</td>
+        <td>${c.credito?'<span class="pill p-ok">crédito</span>':'<span class="pill p-gris">depósito</span>'}</td>
+        <td class="noprint"><button class="s" onclick="abrirNuevoCliente('${c.id}')">Editar</button></td></tr>`;
+    }).join("")}</tbody></table></div>`
+    : `<div class="vacio">Todavía no hay clientes registrados.</div>`;
+}
+$("#filtroCli").oninput = pintarClientes;
+
+function abrirNuevoCliente(id){
+  const c = id ? D.clientes.find(x=>x.id===id) : null;
+  modal(`<h3 style="margin-top:0">${c?"Editar cliente":"Cliente nuevo"}</h3>
+    <p class="mini">Solo los datos mínimos para poder entregar.</p>
+    <div class="grid g2" style="margin:14px 0">
+      <div><label>Nombre del consultorio o médico *</label><input id="cN" value="${esc(c?.nombre||"")}"></div>
+      <div><label>Teléfono *</label><input id="cT" value="${esc(c?.telefono||"")}" placeholder="+504 ..."></div>
+      <div><label>Tipo</label><select id="cTipo">
+        ${["Médico general","Médico especialista","Odontólogo","Clínica","Otro"]
+          .map(t=>`<option ${c?.tipo===t?"selected":""}>${t}</option>`).join("")}</select></div>
+      <div><label>Zona o cluster</label><input id="cZ" value="${esc(c?.zona||"")}" placeholder="Ej: Torre médica 1"></div>
+    </div>
+    <div><label>Dirección de entrega *</label><input id="cD" value="${esc(c?.direccion||"")}"></div>
+    <div style="margin-top:10px"><label>Referencia para llegar</label>
+      <input id="cR" value="${esc(c?.referencia||"")}" placeholder="Ej: frente al ascensor, local 302"></div>
+    <hr>
+    <label><input type="checkbox" id="cCred" ${c?.credito?"checked":""} style="width:auto">
+      Crédito autorizado — sus pedidos salen sin esperar depósito</label>
+    <p class="mini" style="margin-top:5px">Úsalo solo con clientes de confianza probada.
+      Sin esta marca, cada pedido necesita depósito verificado antes de salir.</p>
+    <div id="cErr"></div><hr>
+    <button class="b" onclick="guardarCliente('${id||""}')">Guardar</button>
+    <button class="s" onclick="cerrarModal()">Cancelar</button>`);
+}
+function guardarCliente(id){
+  const n = $("#cN").value.trim(), t = $("#cT").value.trim(), d = $("#cD").value.trim();
+  if(!n || !t || !d){ $("#cErr").innerHTML =
+    `<div class="aviso a-mal">Nombre, teléfono y dirección son obligatorios.</div>`; return; }
+  const dup = D.clientes.find(c=>c.telefono===t && c.id!==id);
+  if(dup){ $("#cErr").innerHTML =
+    `<div class="aviso a-mal">Ese teléfono ya está registrado a nombre de ${esc(dup.nombre)}.</div>`; return; }
+  const datos = {nombre:n, telefono:t, tipo:$("#cTipo").value, zona:$("#cZ").value.trim(),
+                 direccion:d, referencia:$("#cR").value.trim(),
+                 credito:$("#cCred").checked};
+  if(id){ Object.assign(D.clientes.find(c=>c.id===id), datos); }
+  else { const nc = {id:uid(), ...datos, alta:new Date().toISOString()};
+         D.clientes.push(nc); guardar(); cerrarModal(); elegirCliente(nc.id); pintarClientes(); return; }
+  guardar(); cerrarModal(); pintarClientes();
+}
+
+/* -------------------------------------------------------------- CATÁLOGO */
+function pintarCatalogo(){
+  const q = ($("#filtroSku").value||"").toLowerCase();
+  const cn = $("#filtroCanal").value;
+  const r = D.skus.filter(s =>
+    (!q || s.nombre.toLowerCase().includes(q) || s.codigo.toLowerCase().includes(q) ||
+     (s.marca||"").toLowerCase().includes(q)) && (!cn || canalDe(s)===cn));
+  $("#tablaCatalogo").innerHTML = `<p class="mini">${r.length} de ${D.skus.length} productos</p>
+   <div class="tabla-wrap"><table>
+    <thead><tr><th>Código</th><th>Producto</th><th>Unidad</th><th>Contenido</th><th>Marca</th><th class="num">Peso</th>
+      <th class="num">Costo</th><th class="num">Precio</th><th class="num">Margen</th>
+      <th class="num">L./kg</th><th>Canal</th><th class="num">Exist.</th><th>Marcas</th></tr></thead><tbody>
+    ${r.map(s=>{
+      const m = s.precio? (s.precio-s.costo)/s.precio*100 : 0;
+      const dv = s.peso? s.precio/s.peso : 0;
+      const cn = canalDe(s);
+      const pc = cn==="express"?"p-ok":cn==="volumen"?"p-med":"p-mal";
+      return `<tr style="cursor:pointer" onclick="abrirNuevoSku('${s.codigo}')">
+        <td>${esc(s.codigo)}</td><td>${esc(s.nombre)}</td>
+        <td>${esc(s.unidad||"—")}</td><td>${esc(s.contenido||"—")}</td><td>${esc(s.marca||"—")}</td>
+        <td class="num">${s.peso.toFixed(3)}</td><td class="num">${L(s.costo)}</td>
+        <td class="num">${L(s.precio)}</td><td class="num">${m.toFixed(0)}%</td>
+        <td class="num">${Math.round(dv)}</td>
+        <td><span class="pill ${pc}">${cn}</span></td>
+        <td class="num">${disponible(s)>0?disponible(s):'<span class="pill p-gris">sin disp.</span>'}</td>
+        <td>${s.oferta?'<span class="pill p-mal">oferta</span> ':''}${s.nuevo?'<span class="pill p-ok">nuevo</span>':''}</td></tr>`;
+    }).join("")}</tbody></table></div>`;
+}
+function canalDe(s){
+  if(s.restringido) return "bloqueado";
+  const dv = s.peso ? s.precio/s.peso : 0;
+  return dv >= par("umbral_densidad_canal") ? "express" : "volumen";
+}
+$("#filtroSku").oninput = pintarCatalogo;
+$("#filtroCanal").onchange = pintarCatalogo;
+
+function abrirNuevoSku(cod){
+  const s = cod ? D.skus.find(x=>x.codigo===cod) : null;
+  modal(`<h3 style="margin-top:0">${s?"Editar producto":"Producto nuevo"}</h3>
+    <div class="grid g2" style="margin:14px 0">
+      <div><label>Código *</label><input id="sC" value="${esc(s?.codigo||"")}" ${s?"readonly":""}></div>
+      <div><label>Nombre *</label><input id="sN" value="${esc(s?.nombre||"")}"></div>
+      <div><label>Marca</label><input id="sM" value="${esc(s?.marca||"")}"></div>
+      <div><label>Categoría</label><input id="sK" value="${esc(s?.categoria||"")}"></div>
+      <div><label>Tipo de unidad</label>
+        <input id="sU" value="${esc(s?.unidad||"")}" placeholder="Caja, Bolsa, Frasco, Rollo, Unidad…"></div>
+      <div><label>Contenido de la unidad</label>
+        <input id="sCn" value="${esc(s?.contenido||"")}" placeholder="100 unidades, 500 g, 1 L…"></div>
+      <div><label>Peso en kg *</label><input id="sW" type="number" step="0.001" value="${s?.peso||""}"></div>
+      <div><label>Costo (L.)</label><input id="sCo" type="number" step="0.01" value="${s?.costo||0}"></div>
+      <div><label>Precio de venta (L.)</label><input id="sPr" type="number" step="0.01" value="${s?.precio||0}"></div>
+      <div><label>Existencia</label><input id="sE" type="number" value="${s?.existencia||0}"></div>
+      <div><label>Mínimo</label><input id="sMin" type="number" value="${s?.minimo||0}"></div>
+    </div>
+    <hr>
+    <p class="mini" style="margin:0 0 8px"><strong>Cómo lo ve el médico en el catálogo</strong></p>
+    <div class="grid g2">
+      <div><label><input type="checkbox" id="sOf" ${s?.oferta?"checked":""} style="width:auto"> Marcar como OFERTA</label>
+        <input id="sPo" type="number" step="0.01" placeholder="Precio de oferta (opcional)"
+          value="${s?.precio_oferta||""}" style="margin-top:5px"></div>
+      <div><label><input type="checkbox" id="sNu" ${s?.nuevo?"checked":""} style="width:auto"> Marcar como PRODUCTO NUEVO</label>
+        <p class="mini" style="margin-top:8px">Aparece destacado arriba del catálogo.</p></div>
+    </div>
+    <hr>
+    <label><input type="checkbox" id="sR" ${s?.restringido?"checked":""} style="width:auto"> No se puede vender (restringido)</label>
+    <div style="margin-top:8px"><label>Motivo de la restricción</label>
+      <input id="sMot" value="${esc(s?.motivo_restriccion||"")}"></div>
+    <div id="sErr"></div><hr>
+    <button class="b" onclick="guardarSku('${cod||""}')">Guardar</button>
+    <button class="s" onclick="cerrarModal()">Cancelar</button>`);
+}
+function guardarSku(cod){
+  const c=$("#sC").value.trim(), n=$("#sN").value.trim(), w=parseFloat($("#sW").value);
+  if(!c||!n||!(w>0)){ $("#sErr").innerHTML =
+    `<div class="aviso a-mal">Código, nombre y un peso mayor que cero son obligatorios.
+     Sin peso el sistema no puede decidir el canal de entrega.</div>`; return; }
+  const r = $("#sR").checked, mot = $("#sMot").value.trim();
+  if(r && !mot){ $("#sErr").innerHTML =
+    `<div class="aviso a-mal">Si el producto está restringido, escribe por qué.</div>`; return; }
+  const datos = {codigo:c, nombre:n, marca:$("#sM").value.trim(), categoria:$("#sK").value.trim(),
+    unidad:$("#sU").value.trim()||"Unidad", contenido:$("#sCn").value.trim()||"—",
+    presentacion:($("#sU").value.trim()+" "+$("#sCn").value.trim()).trim(), peso:w, costo:parseFloat($("#sCo").value)||0,
+    precio:parseFloat($("#sPr").value)||0, existencia:parseInt($("#sE").value)||0,
+    minimo:parseInt($("#sMin").value)||0, restringido:r, motivo_restriccion:mot,
+    oferta:$("#sOf").checked, nuevo:$("#sNu").checked,
+    precio_oferta:parseFloat($("#sPo").value)||null,
+    categoria:$("#sK").value.trim(),
+    rotacion: (cod && D.skus.find(x=>x.codigo===cod)?.rotacion) || "B"};
+  if(cod){ Object.assign(D.skus.find(x=>x.codigo===cod), datos); }
+  else { if(D.skus.some(x=>x.codigo===c)){ $("#sErr").innerHTML=
+    `<div class="aviso a-mal">Ese código ya existe.</div>`; return; } D.skus.push(datos); }
+  guardar(); cerrarModal(); pintarCatalogo();
+}
+
+/* ------------------------------------------------------------ INVENTARIO */
+function pintarInventario(){
+  const q = ($("#filtroInv").value||"").toLowerCase();
+  const f = $("#filtroInvEst").value;
+  let r = D.skus.filter(s=>!s.restringido && (!q||s.nombre.toLowerCase().includes(q)||
+          s.codigo.toLowerCase().includes(q)));
+  if(f==="bajo")  r = r.filter(s=>disponible(s)<=s.minimo && disponible(s)>0);
+  if(f==="cero")  r = r.filter(s=>disponible(s)<=0);
+  if(f==="prov")  r = r.filter(s=>comprometido(s.codigo).total>0);
+  if(f==="pago")  r = r.filter(s=>comprometido(s.codigo).esperandoPago>0);
+
+  // Totales de la operación
+  let vFisico=0, vComp=0, vPago=0, nBajo=0, nCero=0;
+  D.skus.filter(s=>!s.restringido).forEach(s=>{
+    const c = comprometido(s.codigo);
+    vFisico += s.existencia*s.costo;
+    vComp   += c.total*s.costo;
+    vPago   += c.esperandoPago*s.costo;
+    const d = disponible(s);
+    if(d<=0) nCero++; else if(d<=s.minimo) nBajo++;
+  });
+
+  const avisos =
+    (vPago>0 ? `<div class="aviso a-med"><strong>${L0(vPago)} en producto apartado esperando depósito.</strong>
+       Está físicamente en bodega pero ya tiene dueño: no se puede vender a otro cliente.
+       Si este número crece, conviene revisar la política de cobro.</div>`:"") +
+    (nCero ? `<div class="aviso a-mal">${nCero} producto(s) sin disponibilidad.</div>`:"") +
+    (nBajo ? `<div class="aviso a-med">${nBajo} producto(s) por debajo del mínimo.</div>`:"");
+
+  const resumen = `<div class="grid g4" style="margin-bottom:12px">
+    ${kpi(L0(vFisico),"Valor físico en bodega")}
+    ${kpi(L0(vComp),"Comprometido en pedidos")}
+    ${kpi(L0(vPago),"Apartado esperando pago", vPago>0?"mal":"")}
+    ${kpi(L0(vFisico-vComp),"Valor libre para vender","ok")}
+  </div>`;
+
+  $("#tablaInventario").innerHTML = resumen + avisos + `<div class="tabla-wrap"><table>
+    <thead><tr>
+      <th>Código</th><th>Producto</th><th>Presentación</th>
+      <th class="num">Existencia</th><th class="num">Comprometido</th>
+      <th class="num">Esperando pago</th><th class="num">Disponible</th>
+      <th class="num">Mínimo</th><th>Estado</th><th class="num">Valor a costo</th>
+    </tr></thead><tbody>
+    ${r.map(s=>{
+      const c = comprometido(s.codigo);
+      const d = disponible(s);
+      const e = estadoInv(s);
+      return `<tr>
+        <td>${esc(s.codigo)}</td>
+        <td>${esc(s.nombre)}</td>
+        <td><span class="mini">${esc(presentacionDe(s))}</span></td>
+        <td class="num">${s.existencia}</td>
+        <td class="num" style="${c.total?'color:var(--ambar);font-weight:600':''}">${c.total||"—"}</td>
+        <td class="num" style="${c.esperandoPago?'color:var(--rojo);font-weight:700':''}">${c.esperandoPago||"—"}</td>
+        <td class="num"><strong>${d}</strong></td>
+        <td class="num">${s.minimo}</td>
+        <td><span class="pill ${e.cls}">${e.txt}</span></td>
+        <td class="num">${L0(s.existencia*s.costo)}</td></tr>`;
+    }).join("")}</tbody></table></div>
+    <p class="mini" style="margin-top:8px">
+      <strong>Existencia</strong> es lo que hay físicamente en bodega.
+      <strong>Comprometido</strong> es lo que ya está en pedidos confirmados que aún no salen.
+      <strong>Disponible</strong> es lo que se puede vender hoy: existencia menos comprometido.</p>`;
+}
+$("#filtroInv").oninput = pintarInventario;
+$("#filtroInvEst").onchange = pintarInventario;
+
+$("#invSku").oninput = function(){
+  const q = this.value.trim().toLowerCase();
+  if(q.length<2){ $("#invRes").innerHTML=""; return; }
+  const r = D.skus.filter(s=>s.nombre.toLowerCase().includes(q)||s.codigo.toLowerCase().includes(q)).slice(0,6);
+  $("#invRes").innerHTML = `<div style="margin-top:8px">${r.map(s=>`<button class="s" style="margin:3px"
+    onclick="elegirInvSku('${s.codigo}')">${esc(s.nombre)}</button>`).join("")}</div>`;
+};
+let invSel = null;
+function elegirInvSku(cod){
+  invSel = D.skus.find(s=>s.codigo===cod);
+  $("#invSku").value = invSel.nombre; $("#invRes").innerHTML="";
+  if(!$("#invCosto").value) $("#invCosto").value = invSel.costo;
+}
+function registrarIngreso(){
+  if(!invSel){ $("#invMsg").innerHTML=`<div class="aviso a-mal">Elige primero el producto.</div>`; return; }
+  const c = parseInt($("#invCant").value)||0;
+  if(c<=0){ $("#invMsg").innerHTML=`<div class="aviso a-mal">La cantidad debe ser mayor que cero.</div>`; return; }
+  const co = parseFloat($("#invCosto").value);
+  invSel.existencia += c;
+  if(co>0) invSel.costo = co;
+  D.movimientos.push({id:uid(),fecha:new Date().toISOString(),tipo:"ingreso",
+    codigo:invSel.codigo,cantidad:c,ref:"Compra"});
+  guardar();
+  $("#invMsg").innerHTML = `<div class="aviso a-ok">Ingresaron ${c} de ${esc(invSel.nombre)}.
+    Existencia ahora: ${invSel.existencia}.</div>`;
+  $("#invSku").value=""; $("#invCant").value=1; $("#invCosto").value=""; invSel=null;
+  pintarInventario();
+}
+
+/* ------------------------------------------------------------ REPOSICIÓN */
+function calcularReposicion(){
+  const min = par("compras_minimas_perfil");
+  const anti = par("dias_alerta_reposicion");
+  const sup = par("dias_supresion_alerta");
+  const out = [];
+  D.clientes.forEach(c => {
+    const ps = D.pedidos.filter(p=>p.cliente_id===c.id && p.estado==="entregado")
+                        .sort((a,b)=>a.fecha.localeCompare(b.fecha));
+    const porSku = {};
+    ps.forEach(p => p.lineas.forEach(l => {
+      (porSku[l.codigo] = porSku[l.codigo] || []).push({f:p.fecha, q:l.cantidad, n:l.nombre});
+    }));
+    Object.entries(porSku).forEach(([cod, cs]) => {
+      if(cs.length < min) return;
+      const lapso = dias(cs[0].f, cs[cs.length-1].f);
+      if(lapso <= 0) return;
+      const total = cs.slice(0,-1).reduce((a,x)=>a+x.q,0);
+      const porDia = total / lapso;
+      if(porDia <= 0) return;
+      const ult = cs[cs.length-1];
+      const duraDias = ult.q / porDia;
+      const agota = new Date(new Date(ult.f).getTime() + duraDias*86400000);
+      const faltan = dias(new Date().toISOString(), agota.toISOString());
+      if(faltan > anti) return;
+      const prev = D.avisos.find(a=>a.cliente_id===c.id && a.codigo===cod);
+      if(prev && dias(prev.fecha, new Date().toISOString()) < sup) return;
+      out.push({cliente:c, codigo:cod, nombre:ult.n, cantidad:ult.q,
+                faltan, agota:agota.toISOString().slice(0,10), compras:cs.length});
+    });
+  });
+  return out.sort((a,b)=>a.faltan-b.faltan);
+}
+function pintarReposicion(){
+  const r = calcularReposicion();
+  $("#tablaRepo").innerHTML = r.length ? `<div class="tabla-wrap"><table>
+    <thead><tr><th>Cliente</th><th>Producto</th><th class="num">Compras</th>
+      <th class="num">Se le acaba</th><th>Estado</th><th class="noprint">Mensaje</th></tr></thead><tbody>
+    ${r.map((x,i)=>`<tr>
+      <td>${esc(x.cliente.nombre)}<br><span class="mini">${esc(x.cliente.telefono)}</span></td>
+      <td>${esc(x.nombre)}<br><span class="mini">última compra: ${x.cantidad}</span></td>
+      <td class="num">${x.compras}</td>
+      <td class="num">${x.faltan<=0?"ya":"en "+x.faltan+" días"}<br>
+        <span class="mini">${x.agota}</span></td>
+      <td>${x.faltan<=0?'<span class="pill p-mal">Urgente</span>':'<span class="pill p-med">Próximo</span>'}</td>
+      <td class="noprint">
+        <button class="b" onclick="armarPedidoSugerido(${i})">Armar pedido</button>
+        <button class="s" onclick="copiarMensaje(${i})">Copiar aviso</button>
+        <button class="s" onclick="marcarAvisado(${i})">Ya avisé</button></td>
+    </tr>`).join("")}</tbody></table></div>`
+    : `<div class="vacio">Todavía no hay suficiente historial.<br>
+       Se necesitan al menos ${par("compras_minimas_perfil")} compras entregadas del mismo producto
+       por el mismo cliente para estimar su consumo.</div>`;
+  window._repo = r;
+}
+function copiarMensaje(i){
+  const x = window._repo[i];
+  const m = `Buen día, Dr(a). ${x.cliente.nombre}. Según su consumo habitual, ` +
+    `${x.faltan<=0?"ya se le debe haber terminado":"se le estaría acabando en unos "+x.faltan+" días"} ` +
+    `el producto ${x.nombre}. ¿Le enviamos ${x.cantidad} como la última vez? Le llega hoy mismo.`;
+  navigator.clipboard.writeText(m).then(
+    ()=>alert("Mensaje copiado. Pégalo en WhatsApp:\n\n"+m),
+    ()=>prompt("Copia este mensaje:", m));
+}
+function armarPedidoSugerido(i){
+  const x = window._repo[i];
+  const s = D.skus.find(y=>y.codigo===x.codigo);
+  if(!s){ alert("Ese producto ya no está en el catálogo."); return; }
+  if(s.existencia <= 0){ alert("«"+s.nombre+"» está agotado. Registra el ingreso antes de ofrecerlo."); return; }
+  P.cliente = x.cliente;
+  P.lineas = [{codigo:s.codigo, nombre:s.nombre, cantidad:x.cantidad,
+               precio:(s.oferta&&s.precio_oferta)?s.precio_oferta:s.precio,
+               costo:s.costo, peso:s.peso}];
+  ir("nuevo");
+  elegirCliente(x.cliente.id);
+  document.getElementById("canalSug").scrollIntoView({behavior:"smooth", block:"center"});
+  setTimeout(()=>alert("Pedido pre-armado para "+x.cliente.nombre+":\n\n"+
+    x.cantidad+" × "+s.nombre+"\n\nEs la misma cantidad que llevó la última vez. "+
+    "Ajústala o agrega productos antes de confirmar."), 250);
+}
+
+function marcarAvisado(i){
+  const x = window._repo[i];
+  D.avisos = D.avisos.filter(a=>!(a.cliente_id===x.cliente.id && a.codigo===x.codigo));
+  D.avisos.push({cliente_id:x.cliente.id, codigo:x.codigo, fecha:new Date().toISOString()});
+  guardar(); pintarReposicion();
+}
+
+/* ---------------------------------------------------------------- AJUSTES */
+function pintarAjustes(){
+  const b = D.banco || {};
+  if($("#bkBanco")){ $("#bkBanco").value=b.banco||""; $("#bkCuenta").value=b.cuenta||"";
+    $("#bkTitular").value=b.titular||""; $("#bkTipo").value=b.tipo||""; }
+  $("#params").innerHTML = Object.entries(PARAMS_DEF).map(([k,o])=>`
+    <div><label>${o.d}</label>
+      <div class="fila"><input id="pp_${k}" type="number" step="0.01" value="${D.params[k]}">
+      <span class="auto mini" style="padding-bottom:9px">${o.u}</span></div></div>`).join("");
+  $("#tablaProv").innerHTML = `<div class="tabla-wrap"><table>
+    <thead><tr><th>Proveedor</th><th>Canal</th><th class="num">Tarifa base</th>
+      <th class="num">Por km</th><th class="num">Parada extra</th><th class="num">Turno/día</th>
+      <th class="num">Entregas/turno</th><th class="num">Límite peso</th><th>Horario</th></tr></thead><tbody>
+    ${PROVEEDORES.map(p=>`<tr><td><strong>${esc(p.nombre)}</strong></td><td>${esc(p.canal)}</td>
+      <td class="num">${p.tarifa_base?L(p.tarifa_base):"—"}</td>
+      <td class="num">${p.tarifa_km?L(p.tarifa_km):"—"}</td>
+      <td class="num">${p.cargo_parada?L(p.cargo_parada):"—"}</td>
+      <td class="num">${p.costo_turno?L(p.costo_turno):"—"}</td>
+      <td class="num">${p.entregas_turno||"—"}</td>
+      <td class="num">${p.limite_peso?p.limite_peso+" kg":"sin límite"}</td>
+      <td>${p.hora_inicio} a ${p.hora_fin}</td></tr>`).join("")}</tbody></table></div>
+    <p class="mini" style="margin-top:8px">Estas tarifas son estimaciones del análisis, no cotizaciones.
+    Actualízalas cuando cierres la negociación con el proveedor.</p>`;
+  $("#ultimoRespaldo").textContent = D.ultimoRespaldo
+    ? "Último respaldo: " + fecha(D.ultimoRespaldo)
+    : "Todavía no has descargado ningún respaldo.";
+}
+function guardarParams(){
+  Object.keys(PARAMS_DEF).forEach(k=>{
+    const v = parseFloat($("#pp_"+k).value);
+    if(!isNaN(v)) D.params[k] = v;
+  });
+  guardar(); recalc();
+  $("#paramMsg").innerHTML = `<div class="aviso a-ok">Reglas guardadas. Aplican de inmediato a los pedidos nuevos.</div>`;
+  setTimeout(()=>$("#paramMsg").innerHTML="", 4000);
+}
+function restaurarParams(){
+  Object.entries(PARAMS_DEF).forEach(([k,o])=>D.params[k]=o.v);
+  guardar(); pintarAjustes();
+  $("#paramMsg").innerHTML = `<div class="aviso a-info">Se restauraron los valores originales.</div>`;
+}
+
+
+/* ============================================================================
+   DATOS DE EJEMPLO
+   Para conocer el sistema sin tener que inventar información a mano.
+   Todo lo marcado como ejemplo se puede borrar de golpe.
+   ============================================================================ */
+function cargarEjemplo(){
+  if(D.pedidos.some(p=>p.ejemplo)){ 
+    alert("Ya hay datos de ejemplo cargados. Bórralos primero si quieres volver a empezar."); return; }
+  const cs = [
+    {id:"ej1", nombre:"Dr. Ramírez — Odontología", telefono:"+504-9988-7766",
+     tipo:"Odontólogo", zona:"Torre Médica 1", direccion:"Torre Médica 1, local 302",
+     referencia:"Frente al ascensor", credito:false, ejemplo:true, alta:new Date().toISOString()},
+    {id:"ej2", nombre:"Clínica Santa Rosa", telefono:"+504-2233-4455",
+     tipo:"Clínica", zona:"Bulevar Morazán", direccion:"Bulevar Morazán, edificio Plaza, 2.º nivel",
+     referencia:"Contiguo a la farmacia", credito:true, ejemplo:true, alta:new Date().toISOString()},
+    {id:"ej3", nombre:"Dra. Fonseca — Pediatría", telefono:"+504-3344-5566",
+     tipo:"Médico especialista", zona:"Col. Palmira", direccion:"Col. Palmira, casa 45",
+     referencia:"Portón verde", credito:false, ejemplo:true, alta:new Date().toISOString()}
+  ];
+  cs.forEach(c=>{ if(!D.clientes.some(x=>x.telefono===c.telefono)) D.clientes.push(c); });
+
+  const sk = c => D.skus.find(s=>s.codigo===c);
+  const linea = (cod,cant) => { const s=sk(cod); return s ?
+    {codigo:s.codigo,nombre:s.nombre,cantidad:cant,precio:s.precio,costo:s.costo,peso:s.peso} : null; };
+  // asegurar existencia para los ejemplos
+  ["GUA-001","CUR-004","ODO-001","ODO-002","INY-002","GLU-002"].forEach(c=>{
+    const s=sk(c); if(s && s.existencia<40) s.existencia=40; });
+
+  const mkPed = (n, cli, ls, estado, pago, minAtras, minPromesa) => {
+    const lineas = ls.map(([c,q])=>linea(c,q)).filter(Boolean);
+    const sub = lineas.reduce((a,l)=>a+l.cantidad*l.precio,0);
+    const cost = lineas.reduce((a,l)=>a+l.cantidad*l.costo,0);
+    const peso = lineas.reduce((a,l)=>a+l.cantidad*l.peso,0);
+    const m = motorCanal(peso, "ventana");
+    return {id:"ejp"+n, ejemplo:true, numero:900+n,
+      fecha:new Date(Date.now()-minAtras*60000).toISOString(),
+      cliente_id:cli.id, cliente:cli.nombre, telefono:cli.telefono, direccion:cli.direccion,
+      canal_solicitud:"whatsapp", nivel:"ventana", hecho_por:"El médico", estado,
+      lineas, subtotal:sub, costo_prod:cost, cargo:0, total:sub, peso,
+      margen:sub-cost, canal:m.canal, costo_entrega_est:m.costo,
+      contribucion_est:+(sub-cost-m.costo).toFixed(2),
+      costo_entrega_real:estado==="entregado"?m.costo:null,
+      contribucion_real:estado==="entregado"?+(sub-cost-m.costo).toFixed(2):null,
+      prometido:new Date(Date.now()+minPromesa*60000).toISOString(),
+      entregado:estado==="entregado"?new Date(Date.now()-minAtras*60000+40*60000).toISOString():null,
+      pago_estado:pago, pago: pago==="verificado"
+        ? {monto:sub,banco:"Banco Atlántida",referencia:"REF-"+(4400+n),fecha:hoy(),
+           diferencia:0,verificado_en:new Date().toISOString()} : null,
+      override:null, hitos:{}};
+  };
+
+  const nuevos = [
+    mkPed(1, cs[0], [["GUA-001",3],["CUR-004",1]], "confirmado", "pendiente", 6,  54),
+    mkPed(2, cs[2], [["INY-002",2],["GUA-001",1]], "preparando", "pendiente", 22, 38),
+    mkPed(3, cs[0], [["ODO-001",4],["ODO-002",1]], "listo",      "pendiente", 45, 15),
+    mkPed(4, cs[1], [["GUA-001",5],["GLU-002",2]], "listo",      "credito",   30, 30),
+    mkPed(5, cs[2], [["CUR-004",2]],               "en_ruta",    "verificado",70, -6),
+  ];
+  // Tres entregados con intervalo regular de 15 días, para que Reposición
+  // detecte el patrón y calcule que el producto está por acabarse.
+  const h = d => new Date(Date.now()-d*86400000).toISOString();
+  const hist = [42, 27, 12].map((d,i) => {
+    const e = mkPed(6+i, cs[0], [["ODO-001",4]], "entregado", "verificado", 0, 0);
+    e.fecha = h(d); e.entregado = h(d);
+    return e;
+  });
+
+  D.pedidos = [...nuevos.reverse(), ...hist.reverse(), ...D.pedidos];
+  guardar();
+  $("#ejemploMsg").innerHTML = `<div class="aviso a-ok">
+    Se cargaron <strong>3 clientes y 8 pedidos de ejemplo</strong>.<br><br>
+    Ve a <strong>Despacho</strong>: verás pedidos en las cuatro columnas.
+    En los que dicen PAGO PENDIENTE aparecen los botones
+    «Registrar depósito» y «Pedir depósito».<br><br>
+    También revisa <strong>Reposición</strong>: el Dr. Ramírez ya tiene historial
+    y el sistema calculó cuándo se le acaban los eyectores.</div>`;
+  pintarDespacho(); pintarInicio(); pintarClientes(); pintarPedidos();
+}
+
+function borrarEjemplo(){
+  const n = D.pedidos.filter(p=>p.ejemplo).length;
+  if(!n && !D.clientes.some(c=>c.ejemplo)){
+    $("#ejemploMsg").innerHTML = `<div class="aviso a-info">No hay datos de ejemplo cargados.</div>`;
+    return; }
+  if(!confirm("Se borrarán "+n+" pedidos y los clientes de ejemplo.\n\n"+
+              "Tus datos reales no se tocan. ¿Continuar?")) return;
+  D.pedidos  = D.pedidos.filter(p=>!p.ejemplo);
+  D.clientes = D.clientes.filter(c=>!c.ejemplo);
+  D.avisos   = [];
+  guardar();
+  $("#ejemploMsg").innerHTML = `<div class="aviso a-ok">Datos de ejemplo eliminados.</div>`;
+  pintarDespacho(); pintarInicio(); pintarClientes(); pintarPedidos();
+}
+
+/* ------------------------------------------------------- RESPALDO Y CSV */
+function bajar(nombre, contenido, tipo){
+  const b = new Blob(["﻿"+contenido], {type:tipo||"text/csv;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(b); a.download = nombre;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();}, 500);
+}
+function descargarRespaldo(){
+  D.ultimoRespaldo = new Date().toISOString(); guardar();
+  bajar("respaldo-sistema-"+hoy()+".json", JSON.stringify(D,null,1), "application/json");
+  pintarAjustes(); pintarInicio();
+}
+function restaurarRespaldo(ev){
+  const f = ev.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = e => {
+    try{
+      const nd = JSON.parse(e.target.result);
+      if(!nd.skus || !nd.params) throw new Error("formato");
+      if(!confirm("Esto reemplaza TODOS los datos actuales por los del respaldo.\n\n¿Continuar?")) return;
+      D = nd; migrar(); guardar();
+      alert("Respaldo restaurado: "+D.pedidos.length+" pedidos, "+
+            D.clientes.length+" clientes, "+D.skus.length+" productos.");
+      ir("inicio");
+    }catch(err){ alert("Ese archivo no parece un respaldo válido del sistema."); }
+  };
+  r.readAsText(f); ev.target.value="";
+}
+function csv(filas){
+  return filas.map(f=>f.map(v=>{
+    const s = String(v==null?"":v);
+    return /[",;\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  }).join(",")).join("\n");
+}
+function exportarPedidosCSV(){
+  const f = [["numero","fecha","cliente","telefono","canal","nivel","hecho_por","estado","total","peso_kg",
+    "margen","costo_entrega_est","contribucion_est","costo_entrega_real","contribucion_real","entregado","forzado",
+    "pago_estado","pago_monto","pago_referencia","pago_banco","pago_fecha"]];
+  D.pedidos.forEach(p=>f.push([p.numero,p.fecha,p.cliente,p.telefono,p.canal,p.nivel,p.hecho_por??"",p.estado,
+    p.total,p.peso,p.margen,p.costo_entrega_est,p.contribucion_est,
+    p.costo_entrega_real??"",p.contribucion_real??"",p.entregado??"",p.override??"",
+    p.pago_estado??"",p.pago?.monto??"",p.pago?.referencia??"",p.pago?.banco??"",p.pago?.fecha??""]));
+  bajar("pedidos-"+hoy()+".csv", csv(f));
+}
+function exportarClientesCSV(){
+  const f = [["nombre","tipo","telefono","zona","direccion","referencia","alta"]];
+  D.clientes.forEach(c=>f.push([c.nombre,c.tipo,c.telefono,c.zona,c.direccion,c.referencia,c.alta]));
+  bajar("clientes-"+hoy()+".csv", csv(f));
+}
+function exportarCatalogoCSV(){
+  const f = [["codigo","nombre","marca","categoria","unidad","contenido","peso_kg","costo","precio",
+    "densidad_l_kg","canal","existencia","comprometido","esperando_pago","disponible","minimo","restringido"]];
+  D.skus.forEach(s=>{ const c=comprometido(s.codigo);
+    f.push([s.codigo,s.nombre,s.marca,s.categoria,s.unidad,s.contenido,s.peso,
+    s.costo,s.precio,(s.peso?(s.precio/s.peso).toFixed(1):0),canalDe(s),
+    s.existencia,c.total,c.esperandoPago,disponible(s),s.minimo,s.restringido?"SI":"NO"]);});
+  bajar("catalogo-"+hoy()+".csv", csv(f));
+}
+function exportarTodoCSV(){ exportarPedidosCSV(); exportarClientesCSV(); exportarCatalogoCSV(); }
+function borrarTodo(){
+  if(!confirm("Esto borra TODOS los datos: clientes, pedidos e inventario.\n\n¿Descargaste un respaldo?")) return;
+  if(!confirm("Última confirmación. ¿Borrar todo y empezar de cero?")) return;
+  localStorage.removeItem(CLAVE); location.reload();
+}
+
+/* ------------------------------------------------------------------ MODAL */
+function modal(html){ $("#modalBox").innerHTML = html; $("#modal").classList.add("on"); }
+function cerrarModal(){ $("#modal").classList.remove("on"); }
+$("#modal").onclick = e => { if(e.target.id==="modal") cerrarModal(); };
+document.addEventListener("keydown", e => { if(e.key==="Escape") cerrarModal(); });
+
+/* ------------------------------------------------------------------ INICIO */
+cargar();
+pintarDespacho();
+pintarCatalogoCompra();
+pintarHabituales();
+recalc();
+pintarInicio();
+</script>
+</body>
+</html>
