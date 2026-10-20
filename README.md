@@ -3,7 +3,7 @@
 Sistema de operación para una unidad de distribución de insumos médicos y odontológicos
 en Tegucigalpa, Honduras. Entrega rápida a consultorios, con control de margen por pedido.
 
-**Aplicación en vivo:** https://USUARIO.github.io/sw-medico/
+**Aplicación en vivo:** https://dnlcalix-byte.github.io/sw-medico/
 
 ## Qué hace
 
