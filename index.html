@@ -2909,13 +2909,22 @@ async function nubeToken(){
   if(!s) throw new Error("sin sesión");
   if(s.expira && Date.now() < s.expira - 60000) return s.access_token;
   // El token vence cada hora; se renueva solo con el refresh_token.
+  // Solo 400, 401 o 403 invalidan la sesión. Ante 5xx o proyecto pausado se
+  // conserva, para no obligar a todos a escribir otra vez la contraseña.
+  // Si falla la red, el error original sube tal cual y el semáforo dice "Sin internet".
+  const aviso = "La base no está respondiendo. Puede estar pausada por falta de uso: entra a supabase.com y presiona Resume project";
   const r = await fetch(NUBE.url + "/auth/v1/token?grant_type=refresh_token", {
     method:"POST",
     headers:{"apikey":NUBE.key, "Content-Type":"application/json"},
     body: JSON.stringify({refresh_token: s.refresh_token})
   });
-  if(!r.ok){ nubeGuardarSesion(null); throw new Error("La sesión venció. Vuelve a entrar."); }
-  const j = await r.json();
+  if(r.status === 400 || r.status === 401 || r.status === 403){
+    nubeGuardarSesion(null); throw new Error("La sesión venció. Vuelve a entrar.");
+  }
+  if(!r.ok) throw new Error(aviso);
+  let j;
+  try{ j = await r.json(); }catch(e){ throw new Error(aviso); }
+  if(!j || !j.access_token) throw new Error(aviso);
   nubeGuardarSesion({access_token:j.access_token, refresh_token:j.refresh_token,
                      expira: Date.now() + (j.expires_in||3600)*1000, email: s.email});
   return j.access_token;
