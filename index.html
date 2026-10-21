@@ -379,6 +379,20 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
   <p class="sub2">Aquí viven las reglas económicas. Cambiarlas aquí cambia el comportamiento de todo el sistema.</p>
 
   <div class="card">
+    <h3>Este dispositivo</h3>
+    <p class="mini">Una letra de la A a la Z que identifica a este dispositivo. Va al inicio del número
+      de cada pedido (ejemplo: A-1043). Cada dispositivo del equipo debe tener una letra distinta.
+      Se guarda solo en este navegador: no se sube a la base ni va en los respaldos.</p>
+    <div class="grid g2" style="margin-top:10px">
+      <div><label>Letra del dispositivo</label><input id="letraDisp" maxlength="1" placeholder="Ej: A"></div>
+    </div>
+    <div class="fila" style="margin-top:12px">
+      <div class="auto"><button class="b" onclick="guardarLetra()">Guardar letra</button></div>
+    </div>
+    <div id="letraMsg"></div>
+  </div>
+
+  <div class="card">
     <h3>Respaldo de datos — importante</h3>
     <div class="aviso a-med" id="avisoRespaldoAjustes">
       Los datos viven en este navegador, en esta computadora. Si se borra el historial del navegador,
@@ -1279,6 +1293,9 @@ const CATALOGO_INICIAL = [
    ============================================================================ */
 
 const CLAVE = "sdim_v1";
+// Letra de este dispositivo (A a Z). Clave propia: no está dentro de D, así que
+// no se sube a la base, no va en los respaldos y «Borrar todo» no la toca.
+const LETRA_CLAVE = "sdim_letra";
 
 const PARAMS_DEF = {
   pedido_minimo_express:   {v:400,  u:"L.",    d:"Monto mínimo para entrega express sin cargo"},
@@ -1410,6 +1427,13 @@ function guardar(){
   // Si el navegador está conectado a la base del equipo, empuja el cambio.
   if(typeof nubeTocado === "function") nubeTocado();
 }
+// Letra de este dispositivo, o "" si no tiene una válida.
+function letraDispositivo(){
+  try{
+    const l = localStorage.getItem(LETRA_CLAVE) || "";
+    return /^[A-Z]$/.test(l) ? l : "";
+  }catch(e){ return ""; }
+}
 
 /* ============================================================================
    INVENTARIO: FÍSICO, COMPROMETIDO Y DISPONIBLE
@@ -1433,6 +1457,23 @@ function comprometido(codigo){
 }
 function disponible(sku){
   return (sku.existencia||0) - comprometido(sku.codigo).total;
+}
+// Compara lo que pide un pedido, sumado por producto, contra el disponible que
+// tiene este navegador en este momento. Devuelve lo que no alcanza y los
+// productos que ya no están en el catálogo.
+function revisarExistencia(lineas){
+  const pide = {};
+  lineas.forEach(l => { pide[l.codigo] = (pide[l.codigo]||0) + l.cantidad; });
+  const faltan = [], sinCatalogo = [];
+  Object.keys(pide).forEach(cod => {
+    const s = D.skus.find(x=>x.codigo===cod);
+    if(!s){ sinCatalogo.push((lineas.find(l=>l.codigo===cod)||{}).nombre || cod); return; }
+    const disp = disponible(s);
+    if(pide[cod] <= disp) return;
+    // Con disponible 0 o negativo falta todo lo pedido, no más que eso.
+    faltan.push({nombre:s.nombre, pide:pide[cod], disp, falta: disp<=0 ? pide[cod] : pide[cod]-disp});
+  });
+  return {faltan, sinCatalogo};
 }
 function estadoInv(sku){
   const d = disponible(sku);
@@ -1523,6 +1564,7 @@ function calcularPedido(){
 
 function recalc(){
   const c = calcularPedido();
+  const ex = revisarExistencia(P.lineas);
   $("#canalSug").value = P.lineas.length ? c.canal : "—";
   $("#costoEnt").value = P.lineas.length ? L(c.costoEnt) : "—";
   pintarLineas();
@@ -1551,23 +1593,40 @@ function recalc(){
     ${pierde ? `<div class="aviso a-mal"><strong>Este pedido pierde ${L0(Math.abs(c.contrib))}.</strong>
       El margen de ${L0(c.margen)} no cubre el costo de entrega de ${L0(c.costoEnt)}.
       Sube el pedido, cámbialo a ventana programada, o autorízalo dejando constancia.</div>` : ""}
+    ${ex.faltan.length ? `<div class="aviso a-mal"><strong>No alcanza la existencia.</strong><br>
+      ${ex.faltan.map(f=>`${esc(f.nombre)}: pides ${f.pide}, disponible ${f.disp}, faltan ${f.falta}.`).join("<br>")}
+      <br>Ajusta las cantidades, registra el ingreso o confírmalo escribiendo el motivo y quién lo autoriza.</div>` : ""}
+    ${ex.sinCatalogo.length ? `<div class="aviso a-mal">${ex.sinCatalogo.map(n=>
+      `«${esc(n)}»: ese producto ya no está en el catálogo, quítalo del pedido.`).join("<br>")}</div>` : ""}
   `;
 
   $("#motorTexto").innerHTML =
     `<div class="aviso a-info"><strong>Canal: ${esc(c.canal)}.</strong> ${esc(c.motivo)}</div>`;
 
-  if(pierde){
-    $("#overrideZona").innerHTML = `<div style="flex:2">
+  // Al volver a dibujar se conserva lo que ya estaba escrito en los motivos.
+  const prev1 = ($("#motivoOverride")||{}).value || "";
+  const prev2 = ($("#motivoExistencia")||{}).value || "";
+  $("#overrideZona").innerHTML =
+    (pierde ? `<div style="flex:2">
       <label>Para confirmarlo igual, escribe el motivo y quién lo autoriza</label>
       <input id="motivoOverride" placeholder="Ej: cliente estratégico, autoriza Daniel"
-        oninput="document.getElementById('btnConfirmar').disabled = this.value.trim().length < 8">
-    </div>`;
-    $("#btnConfirmar").disabled = true;
-  } else {
-    $("#overrideZona").innerHTML = "";
-    $("#btnConfirmar").disabled = !P.cliente;
-  }
-  if(!P.cliente) $("#btnConfirmar").disabled = true;
+        value="${esc(prev1)}" oninput="habilitarConfirmar()">
+    </div>` : "") +
+    (ex.faltan.length ? `<div style="flex:2">
+      <label>Para confirmarlo sin existencia suficiente, escribe el motivo y quién lo autoriza</label>
+      <input id="motivoExistencia" placeholder="Ej: la compra llega hoy, autoriza Daniel"
+        value="${esc(prev2)}" oninput="habilitarConfirmar()">
+    </div>` : "");
+  habilitarConfirmar();
+}
+
+// El botón se habilita con cliente, productos que sigan en el catálogo y,
+// cuando se piden, los motivos escritos con al menos 8 caracteres cada uno.
+function habilitarConfirmar(){
+  const m1 = $("#motivoOverride"), m2 = $("#motivoExistencia");
+  $("#btnConfirmar").disabled = !P.cliente || !P.lineas.length ||
+    revisarExistencia(P.lineas).sinCatalogo.length > 0 ||
+    (!!m1 && m1.value.trim().length < 8) || (!!m2 && m2.value.trim().length < 8);
 }
 
 function kpi(v,l,est){
@@ -1780,20 +1839,45 @@ function repetirUltimo(id){
 }
 
 /* ------------------------------------------------------ confirmar pedido */
+// Parte numérica de un número de pedido: 1043 da 1043 y "A-1043" también.
+function parteNumerica(n){
+  const m = String(n==null?"":n).match(/(\d+)$/);
+  return m ? Number(m[1]) : 0;
+}
 function confirmarPedido(){
   if(!P.cliente){ alert("Primero elige el cliente."); return; }
   if(!P.lineas.length){ alert("El pedido no tiene productos."); return; }
+  const letra = letraDispositivo();
+  if(!letra){ alert("Este dispositivo no tiene letra.\n\n"+
+    "Ponla en Ajustes, en «Este dispositivo», antes de confirmar pedidos."); return; }
+  // Se vuelve a comprobar al pulsar, con los datos que tenga el navegador ahora.
+  const ex = revisarExistencia(P.lineas);
+  if(ex.sinCatalogo.length){
+    alert(ex.sinCatalogo.map(n=>"«"+n+"»: ese producto ya no está en el catálogo, quítalo del pedido.").join("\n"));
+    recalc(); return; }
   const c = calcularPedido();
+  const ahora = new Date().toISOString();
   let motivo = null;
   if(c.contrib < 0){
     motivo = ($("#motivoOverride")||{}).value || "";
     if(motivo.trim().length < 8){ alert("Escribe el motivo de la autorización."); return; }
   }
+  let motivoEx = null;
+  if(ex.faltan.length){
+    motivoEx = ($("#motivoExistencia")||{}).value || "";
+    if(motivoEx.trim().length < 8){
+      alert("No alcanza la existencia:\n\n" +
+        ex.faltan.map(f=>f.nombre+": pides "+f.pide+", disponible "+f.disp+", faltan "+f.falta).join("\n") +
+        "\n\nAjusta las cantidades o escribe el motivo para confirmarlo igual.");
+      recalc(); return;
+    }
+  }
   const sla = c.nivel==="express" ? par("sla_express_min") : par("sla_ventana_min");
   const ped = {
-    // El número se toma del mayor que exista, no de la cantidad de pedidos:
-    // con varios dispositivos trabajando a la vez, contar produce repetidos.
-    id: uid(), numero: D.pedidos.reduce((m,p)=>Math.max(m, Number(p.numero)||0), 1000) + 1,
+    // Letra del dispositivo, guion y parte numérica. La parte numérica es la
+    // mayor de todos los pedidos, con o sin letra, más 1 (mínimo 1001), para
+    // que dos dispositivos sin conexión no produzcan el mismo número.
+    id: uid(), numero: letra + "-" + (D.pedidos.reduce((m,p)=>Math.max(m, parteNumerica(p.numero)), 1000) + 1),
     fecha: new Date().toISOString(), cliente_id: P.cliente.id, cliente: P.cliente.nombre,
     telefono: P.cliente.telefono, direccion: P.cliente.direccion,
     lineas: JSON.parse(JSON.stringify(P.lineas)),
@@ -1806,7 +1890,10 @@ function confirmarPedido(){
     pago_estado: P.cliente.credito ? "credito" : "pendiente",
     pago: null,
     prometido: new Date(Date.now() + sla*60000).toISOString(),
-    entregado: null, override: motivo
+    entregado: null,
+    override: motivo, override_fecha: motivo ? ahora : null, override_letra: motivo ? letra : null,
+    override_existencia: motivoEx, override_existencia_fecha: motivoEx ? ahora : null,
+    override_existencia_letra: motivoEx ? letra : null
   };
   // El producto queda COMPROMETIDO, no descontado: sigue físicamente en bodega
   // hasta que se entrega. Así el inventario refleja lo que realmente hay.
@@ -1871,7 +1958,15 @@ function pintarInicio(){
   const sinStock = D.skus.filter(s=>!s.restringido && s.existencia<=s.minimo);
   const repo = calcularReposicion();
   const espPago = D.pedidos.filter(p=>p.estado==="listo" && !pagoLibera(p));
+  // Mismo número en dos o más pedidos activos (por ejemplo, dos dispositivos con la misma letra).
+  const porNum = {};
+  D.pedidos.filter(p=>p.estado!=="entregado" && p.estado!=="cancelado")
+    .forEach(p => (porNum[String(p.numero)] = porNum[String(p.numero)] || []).push(p));
+  const repetidos = Object.entries(porNum).filter(([n,ps]) => ps.length > 1);
   $("#pendientes").innerHTML = `
+    ${repetidos.length ? `<div class="aviso a-mal">Hay pedidos activos con el mismo número:<br>
+      ${repetidos.map(([n,ps])=>`#${esc(n)}: ${ps.map(p=>esc(p.cliente)).join(", ")}`).join("<br>")}
+      <br>Revisa que cada dispositivo tenga una letra distinta en Ajustes.</div>`:""}
     ${espPago.length ? `<div class="aviso a-med">${espPago.length} pedido(s) empacados esperando depósito.
       <button class="s" onclick="ir('despacho')">Ver</button></div>`:""}
     ${tarde.length ? `<div class="aviso a-mal">${tarde.length} pedido(s) pasaron su hora prometida.
@@ -1880,7 +1975,7 @@ function pintarInicio(){
       <button class="s" onclick="ir('inventario')">Ver</button></div>`:""}
     ${repo.length ? `<div class="aviso a-info">${repo.length} cliente(s) por quedarse sin producto.
       <button class="s" onclick="ir('reposicion')">Ver avisos</button></div>`:""}
-    ${(!tarde.length && !sinStock.length && !repo.length)
+    ${(!tarde.length && !sinStock.length && !repo.length && !repetidos.length)
       ? `<div class="vacio">Todo en orden. Nada pendiente.</div>`:""}`;
 
   // serie de 14 días
@@ -1913,12 +2008,29 @@ function pill(e){
   return `<span class="pill ${c}">${t}</span>`;
 }
 
+// Letra y fecha con que se autorizó un motivo. Los pedidos anteriores a este
+// cambio no las tienen y salen sin el paréntesis.
+function marcaForzado(letra, f){
+  return (letra || f) ? " (" + [letra, f ? fecha(f) : ""].filter(Boolean).join(", ") + ")" : "";
+}
+function textoForzado(p){
+  const t = [];
+  if(p.override) t.push("No-pérdida: " + p.override + marcaForzado(p.override_letra, p.override_fecha));
+  if(p.override_existencia) t.push("Existencia: " + p.override_existencia +
+    marcaForzado(p.override_existencia_letra, p.override_existencia_fecha));
+  return t.join(" | ");
+}
+function avisoForzado(titulo, texto, letra, f){
+  return `<div class="aviso a-mal">${titulo} Motivo: ${esc(texto)}` +
+    ((letra || f) ? `<br>Dispositivo ${esc(letra||"—")}, ${f ? fecha(f) : "—"}.` : "") + `</div>`;
+}
+
 /* --------------------------------------------------------------- PEDIDOS */
 function pintarPedidos(){
   const q = ($("#filtroPed").value||"").toLowerCase();
   const e = $("#filtroEst").value;
   const r = D.pedidos.filter(p =>
-    (!q || p.cliente.toLowerCase().includes(q) || String(p.numero).includes(q)) &&
+    (!q || p.cliente.toLowerCase().includes(q) || String(p.numero).toLowerCase().includes(q)) &&
     (!e || p.estado===e));
   $("#tablaPedidos").innerHTML = r.length ? `<div class="tabla-wrap"><table>
     <thead><tr><th>#</th><th>Fecha</th><th>Cliente</th><th>Canal</th>
@@ -1926,7 +2038,7 @@ function pintarPedidos(){
       <th class="num">Contrib. est.</th><th class="num">Contrib. real</th>
       <th>Estado</th><th>Pago</th><th class="noprint"></th></tr></thead><tbody>
     ${r.map(p=>`<tr>
-      <td><strong>${p.numero}</strong>${p.ejemplo?' <span class="pill p-gris">ejemplo</span>':''}${p.override?' <span class="pill p-mal" title="'+esc(p.override)+'">forzado</span>':''}</td>
+      <td><strong>${p.numero}</strong>${p.ejemplo?' <span class="pill p-gris">ejemplo</span>':''}${(p.override||p.override_existencia)?' <span class="pill p-mal" title="'+esc(textoForzado(p))+'">forzado</span>':''}</td>
       <td>${fecha(p.fecha)}</td>
       <td>${esc(p.cliente)}<br><span class="mini">${esc(p.telefono)}</span></td>
       <td>${esc(p.canal)}<br><span class="mini">${p.nivel}${p.hecho_por?" · "+esc(p.hecho_por):""}</span></td>
@@ -2001,7 +2113,9 @@ function verPedido(id){
         (p.contribucion_real??p.contribucion_est)<0?"mal":"ok")}
       ${kpi((desvio>=0?"+":"")+L0(desvio),"Desvío", desvio<0?"mal":"ok")}
     </div>
-    ${p.override?`<div class="aviso a-mal">Pedido forzado. Motivo: ${esc(p.override)}</div>`:""}
+    ${p.override ? avisoForzado("Forzado por pérdida.", p.override, p.override_letra, p.override_fecha) : ""}
+    ${p.override_existencia ? avisoForzado("Forzado por existencia.", p.override_existencia,
+        p.override_existencia_letra, p.override_existencia_fecha) : ""}
     <hr><button class="s" onclick="cerrarModal()">Cerrar</button>`);
 }
 
@@ -2590,6 +2704,7 @@ function pintarAjustes(){
   const b = D.banco || {};
   if($("#bkBanco")){ $("#bkBanco").value=b.banco||""; $("#bkCuenta").value=b.cuenta||"";
     $("#bkTitular").value=b.titular||""; $("#bkTipo").value=b.tipo||""; }
+  if($("#letraDisp")) $("#letraDisp").value = letraDispositivo();
   $("#params").innerHTML = Object.entries(PARAMS_DEF).map(([k,o])=>`
     <div><label>${o.d}</label>
       <div class="fila"><input id="pp_${k}" type="number" step="0.01" value="${D.params[k]}">
@@ -2625,6 +2740,15 @@ function restaurarParams(){
   Object.entries(PARAMS_DEF).forEach(([k,o])=>D.params[k]=o.v);
   guardar(); pintarAjustes();
   $("#paramMsg").innerHTML = `<div class="aviso a-info">Se restauraron los valores originales.</div>`;
+}
+function guardarLetra(){
+  const l = ($("#letraDisp").value||"").toUpperCase();
+  if(!/^[A-Z]$/.test(l)){
+    $("#letraMsg").innerHTML = `<div class="aviso a-mal">Escribe una sola letra de la A a la Z.</div>`; return; }
+  try{ localStorage.setItem(LETRA_CLAVE, l); }
+  catch(e){ $("#letraMsg").innerHTML = `<div class="aviso a-mal">No se pudo guardar la letra en este navegador.</div>`; return; }
+  $("#letraDisp").value = l;
+  $("#letraMsg").innerHTML = `<div class="aviso a-ok">Letra guardada. Los pedidos nuevos de este dispositivo saldrán como ${l}-…</div>`;
 }
 
 
@@ -2760,11 +2884,14 @@ function csv(filas){
 function exportarPedidosCSV(){
   const f = [["numero","fecha","cliente","telefono","canal","nivel","hecho_por","estado","total","peso_kg",
     "margen","costo_entrega_est","contribucion_est","costo_entrega_real","contribucion_real","entregado","forzado",
-    "pago_estado","pago_monto","pago_referencia","pago_banco","pago_fecha"]];
+    "pago_estado","pago_monto","pago_referencia","pago_banco","pago_fecha",
+    "forzado_fecha","forzado_letra","forzado_existencia","forzado_existencia_fecha","forzado_existencia_letra"]];
   D.pedidos.forEach(p=>f.push([p.numero,p.fecha,p.cliente,p.telefono,p.canal,p.nivel,p.hecho_por??"",p.estado,
     p.total,p.peso,p.margen,p.costo_entrega_est,p.contribucion_est,
     p.costo_entrega_real??"",p.contribucion_real??"",p.entregado??"",p.override??"",
-    p.pago_estado??"",p.pago?.monto??"",p.pago?.referencia??"",p.pago?.banco??"",p.pago?.fecha??""]));
+    p.pago_estado??"",p.pago?.monto??"",p.pago?.referencia??"",p.pago?.banco??"",p.pago?.fecha??"",
+    p.override_fecha??"",p.override_letra??"",p.override_existencia??"",
+    p.override_existencia_fecha??"",p.override_existencia_letra??""]));
   bajar("pedidos-"+hoy()+".csv", csv(f));
 }
 function exportarClientesCSV(){
