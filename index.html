@@ -393,6 +393,14 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
   </div>
 
   <div class="card">
+    <h3>Corte de inventario</h3>
+    <p class="mini">Desde el corte, la existencia de cada producto se calcula con sus movimientos
+      (saldo inicial, compras, entregas y ajustes), para que dos dispositivos no se pisen.
+      Se hace una sola vez. Con base compartida, solo desde el dispositivo con letra A.</p>
+    <div id="corteInfo" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card">
     <h3>Respaldo de datos — importante</h3>
     <div class="aviso a-med" id="avisoRespaldoAjustes">
       Los datos viven en este navegador, en esta computadora. Si se borra el historial del navegador,
@@ -1418,6 +1426,7 @@ function migrar(){
 // Guardado en este navegador. Es el primer destino de todo cambio: aunque no
 // haya internet ni base compartida, la información queda a salvo aquí.
 function guardarLocal(){
+  olvidarExistencia();   // el cálculo de existencias se rehace con los datos nuevos
   try{ localStorage.setItem(CLAVE, JSON.stringify(D)); }
   catch(e){ alert("No se pudieron guardar los datos en este navegador.\n\n"+
     "Descarga un respaldo ahora mismo desde Ajustes para no perder información."); }
@@ -1456,7 +1465,45 @@ function comprometido(codigo){
   return {total, esperandoPago};
 }
 function disponible(sku){
-  return (sku.existencia||0) - comprometido(sku.codigo).total;
+  return existencia(sku) - comprometido(sku.codigo).total;
+}
+
+/* ----------------------------------------------------------------------------
+   EXISTENCIA A PARTIR DE LOS MOVIMIENTOS (decisión E1, 2026-10-21)
+   Antes del corte, la existencia es el número de la ficha, como siempre.
+   Desde el corte, es la suma de los movimientos que llevan su marca:
+   saldo inicial + compras − entregas ± ajustes. Cada movimiento tiene su
+   propio identificador, así que dos dispositivos no se pisan, y la suma da
+   lo mismo en cualquier orden. La ficha queda congelada.
+   ---------------------------------------------------------------------------- */
+const CORTE_ID = "corte";
+let _inv = null;                       // memoria temporal del cálculo
+function olvidarExistencia(){ _inv = null; }
+function calcInv(){
+  if(_inv) return _inv;
+  const corte = D.movimientos.find(m => m.id === CORTE_ID) || null;
+  const por = {};
+  if(corte) D.movimientos.forEach(m => {
+    if(m.corte !== CORTE_ID || !m.codigo) return;
+    por[m.codigo] = (por[m.codigo] || 0) + (Number(m.cantidad) || 0);
+  });
+  return (_inv = {corte, por});
+}
+function corteInv(){ return calcInv().corte; }
+function existencia(sku){
+  const c = calcInv();
+  return c.corte ? (c.por[sku.codigo] || 0) : (sku.existencia || 0);
+}
+// Anota un movimiento. Después del corte lleva su marca y entra en la suma.
+// Si ya hay uno con el mismo identificador fijo, no se cambia (D3, D7).
+function movimiento(m){
+  const mv = Object.assign({id:uid(), fecha:new Date().toISOString(), letra:letraDispositivo()}, m);
+  if(corteInv()) mv.corte = CORTE_ID;
+  const previo = D.movimientos.find(x => x.id === mv.id);
+  if(previo) return previo;
+  D.movimientos.push(mv);
+  olvidarExistencia();
+  return mv;
 }
 // Compara lo que pide un pedido, sumado por producto, contra el disponible que
 // tiene este navegador en este momento. Devuelve lo que no alcanza y los
@@ -1699,7 +1746,7 @@ function agregarLinea(codigo){
   const s = D.skus.find(x=>x.codigo===codigo);
   if(!s) return;
   if(s.restringido){ alert("Ese producto tiene distribución restringida y no puede venderse."); return; }
-  if(s.existencia <= 0){
+  if(existencia(s) <= 0){
     alert("«"+s.nombre+"» está agotado.\n\nEl médico puede verlo en el catálogo pero no se puede "+
           "comprometer una entrega. Registra el ingreso en Inventario cuando llegue la compra."); return; }
   const cant = Math.max(1, parseInt($("#cant").value)||1);
@@ -1777,7 +1824,7 @@ function pintarCatalogoCompra(){
   if(cat) r = r.filter(s=>s.categoria===cat);
   if(f==="oferta") r = r.filter(s=>s.oferta);
   if(f==="nuevo")  r = r.filter(s=>s.nuevo);
-  if(f==="disp")   r = r.filter(s=>s.existencia>0);
+  if(f==="disp")   r = r.filter(s=>existencia(s)>0);
 
   const ofertas = r.filter(s=>s.oferta), nuevos = r.filter(s=>s.nuevo && !s.oferta);
   const resto = r.filter(s=>!s.oferta && !s.nuevo);
@@ -1955,7 +2002,8 @@ function pintarInicio(){
 
   const tarde = act.filter(p=>["confirmado","en_ruta"].includes(p.estado) &&
     p.prometido && p.prometido < new Date().toISOString());
-  const sinStock = D.skus.filter(s=>!s.restringido && s.existencia<=s.minimo);
+  const sinStock = D.skus.filter(s=>!s.restringido && existencia(s)<=s.minimo);
+  const negativos = D.skus.filter(s=>existencia(s)<0);
   const repo = calcularReposicion();
   const espPago = D.pedidos.filter(p=>p.estado==="listo" && !pagoLibera(p));
   // Mismo número en dos o más pedidos activos (por ejemplo, dos dispositivos con la misma letra).
@@ -1967,6 +2015,8 @@ function pintarInicio(){
     ${repetidos.length ? `<div class="aviso a-mal">Hay pedidos activos con el mismo número:<br>
       ${repetidos.map(([n,ps])=>`#${esc(n)}: ${ps.map(p=>esc(p.cliente)).join(", ")}`).join("<br>")}
       <br>Revisa que cada dispositivo tenga una letra distinta en Ajustes.</div>`:""}
+    ${negativos.length ? `<div class="aviso a-mal">${negativos.length} producto(s) con existencia negativa: se entregó más de lo registrado.
+      Revisa los ingresos o registra un ajuste. <button class="s" onclick="ir('inventario')">Ver</button></div>`:""}
     ${espPago.length ? `<div class="aviso a-med">${espPago.length} pedido(s) empacados esperando depósito.
       <button class="s" onclick="ir('despacho')">Ver</button></div>`:""}
     ${tarde.length ? `<div class="aviso a-mal">${tarde.length} pedido(s) pasaron su hora prometida.
@@ -1975,7 +2025,7 @@ function pintarInicio(){
       <button class="s" onclick="ir('inventario')">Ver</button></div>`:""}
     ${repo.length ? `<div class="aviso a-info">${repo.length} cliente(s) por quedarse sin producto.
       <button class="s" onclick="ir('reposicion')">Ver avisos</button></div>`:""}
-    ${(!tarde.length && !sinStock.length && !repo.length && !repetidos.length)
+    ${(!tarde.length && !sinStock.length && !repetidos.length && !repo.length && !negativos.length)
       ? `<div class="vacio">Todo en orden. Nada pendiente.</div>`:""}`;
 
   // serie de 14 días
@@ -2082,12 +2132,17 @@ function confirmarEntrega(id){
   p.contribucion_real = p.margen - cr;
   p.entregado = new Date($("#mHora").value).toISOString();
   p.estado = "entregado";
-  // La existencia física baja aquí, cuando el producto realmente sale de bodega
-  p.lineas.forEach(l => {
-    const s = D.skus.find(x=>x.codigo===l.codigo);
-    if(s){ s.existencia -= l.cantidad;
-      D.movimientos.push({id:uid(), fecha:new Date().toISOString(), tipo:"despacho",
-        codigo:l.codigo, cantidad:-l.cantidad, ref:"Pedido "+p.numero}); }
+  // La existencia física baja aquí, cuando el producto realmente sale de bodega.
+  // Un despacho por producto (se suman sus líneas) con identificador fijo: si
+  // dos dispositivos entregan el mismo pedido, queda uno solo (D7, N1).
+  const sale = {};
+  p.lineas.forEach(l => { sale[l.codigo] = (sale[l.codigo]||0) + l.cantidad; });
+  Object.keys(sale).forEach(cod => {
+    const s = D.skus.find(x=>x.codigo===cod);
+    if(!s) return;
+    if(!corteInv()) s.existencia -= sale[cod];      // antes del corte, como siempre
+    movimiento({id:"des|"+p.id+"|"+cod, tipo:"despacho", codigo:cod,
+      cantidad:-sale[cod], ref:"Pedido "+p.numero, pedido_id:p.id});
   });
   guardar(); cerrarModal(); pintarPedidos(); pintarInventario(); pintarDespacho();
 }
@@ -2472,7 +2527,8 @@ function abrirNuevoSku(cod){
       <div><label>Peso en kg *</label><input id="sW" type="number" step="0.001" value="${s?.peso||""}"></div>
       <div><label>Costo (L.)</label><input id="sCo" type="number" step="0.01" value="${s?.costo||0}"></div>
       <div><label>Precio de venta (L.)</label><input id="sPr" type="number" step="0.01" value="${s?.precio||0}"></div>
-      <div><label>Existencia</label><input id="sE" type="number" value="${s?.existencia||0}"></div>
+      <div><label>Existencia</label><input id="sE" type="number" value="${s?existencia(s):0}"
+        ${s&&corteInv()?'readonly title="Se corrige con «Ajuste» en Inventario"':''}></div>
       <div><label>Mínimo</label><input id="sMin" type="number" value="${s?.minimo||0}"></div>
     </div>
     <hr>
@@ -2509,9 +2565,14 @@ function guardarSku(cod){
     precio_oferta:parseFloat($("#sPo").value)||null,
     categoria:$("#sK").value.trim(),
     rotacion: (cod && D.skus.find(x=>x.codigo===cod)?.rotacion) || "B"};
+  // Después del corte, la ficha no cambia la existencia de un producto que ya
+  // existe: se corrige con un ajuste (D6). En uno nuevo, lo tecleado es su saldo inicial.
+  if(cod && corteInv()) delete datos.existencia;
   if(cod){ Object.assign(D.skus.find(x=>x.codigo===cod), datos); }
   else { if(D.skus.some(x=>x.codigo===c)){ $("#sErr").innerHTML=
-    `<div class="aviso a-mal">Ese código ya existe.</div>`; return; } D.skus.push(datos); }
+    `<div class="aviso a-mal">Ese código ya existe.</div>`; return; } D.skus.push(datos);
+    if(corteInv()) movimiento({id:"ini|"+c, tipo:"saldo_inicial", codigo:c,
+      cantidad:datos.existencia, ref:"Producto nuevo"}); }
   guardar(); cerrarModal(); pintarCatalogo();
 }
 
@@ -2530,7 +2591,7 @@ function pintarInventario(){
   let vFisico=0, vComp=0, vPago=0, nBajo=0, nCero=0;
   D.skus.filter(s=>!s.restringido).forEach(s=>{
     const c = comprometido(s.codigo);
-    vFisico += s.existencia*s.costo;
+    vFisico += existencia(s)*s.costo;
     vComp   += c.total*s.costo;
     vPago   += c.esperandoPago*s.costo;
     const d = disponible(s);
@@ -2543,6 +2604,11 @@ function pintarInventario(){
        Si este número crece, conviene revisar la política de cobro.</div>`:"") +
     (nCero ? `<div class="aviso a-mal">${nCero} producto(s) sin disponibilidad.</div>`:"") +
     (nBajo ? `<div class="aviso a-med">${nBajo} producto(s) por debajo del mínimo.</div>`:"");
+  const rev = porRevisar();
+  const avisoRev = rev.length ? `<div class="aviso a-mal"><strong>Por revisar (${rev.length})</strong>
+    ${rev.map(x=>`<br>${fecha(x.m.fecha)} · ${esc(x.m.tipo)} · ${esc(x.m.codigo)} · ${x.m.cantidad} · ${esc(x.m.ref||"")}
+      <br><span class="mini">${x.txt}</span>
+      <button class="s noprint" onclick="marcarRevisado('${x.m.id}')">Ya revisado</button>`).join("")}</div>` : "";
 
   const resumen = `<div class="grid g4" style="margin-bottom:12px">
     ${kpi(L0(vFisico),"Valor físico en bodega")}
@@ -2551,12 +2617,12 @@ function pintarInventario(){
     ${kpi(L0(vFisico-vComp),"Valor libre para vender","ok")}
   </div>`;
 
-  $("#tablaInventario").innerHTML = resumen + avisos + `<div class="tabla-wrap"><table>
+  $("#tablaInventario").innerHTML = resumen + avisos + avisoRev + `<div class="tabla-wrap"><table>
     <thead><tr>
       <th>Código</th><th>Producto</th><th>Presentación</th>
       <th class="num">Existencia</th><th class="num">Comprometido</th>
       <th class="num">Esperando pago</th><th class="num">Disponible</th>
-      <th class="num">Mínimo</th><th>Estado</th><th class="num">Valor a costo</th>
+      <th class="num">Mínimo</th><th>Estado</th><th class="num">Valor a costo</th>${corteInv()?'<th class="noprint"></th>':''}
     </tr></thead><tbody>
     ${r.map(s=>{
       const c = comprometido(s.codigo);
@@ -2566,18 +2632,21 @@ function pintarInventario(){
         <td>${esc(s.codigo)}</td>
         <td>${esc(s.nombre)}</td>
         <td><span class="mini">${esc(presentacionDe(s))}</span></td>
-        <td class="num">${s.existencia}</td>
+        <td class="num" style="${existencia(s)<0?'color:var(--rojo);font-weight:700':''}">${existencia(s)}</td>
         <td class="num" style="${c.total?'color:var(--ambar);font-weight:600':''}">${c.total||"—"}</td>
         <td class="num" style="${c.esperandoPago?'color:var(--rojo);font-weight:700':''}">${c.esperandoPago||"—"}</td>
         <td class="num"><strong>${d}</strong></td>
         <td class="num">${s.minimo}</td>
         <td><span class="pill ${e.cls}">${e.txt}</span></td>
-        <td class="num">${L0(s.existencia*s.costo)}</td></tr>`;
+        <td class="num">${L0(existencia(s)*s.costo)}</td>
+        ${corteInv()?`<td class="noprint"><button class="s" onclick="abrirAjuste('${s.codigo}')">Ajuste</button></td>`:''}</tr>`;
     }).join("")}</tbody></table></div>
     <p class="mini" style="margin-top:8px">
       <strong>Existencia</strong> es lo que hay físicamente en bodega.
       <strong>Comprometido</strong> es lo que ya está en pedidos confirmados que aún no salen.
-      <strong>Disponible</strong> es lo que se puede vender hoy: existencia menos comprometido.</p>`;
+      <strong>Disponible</strong> es lo que se puede vender hoy: existencia menos comprometido.
+      ${corteInv()?`<br>Desde el corte del ${fecha(corteInv().fecha)}, la existencia es la suma de los movimientos:
+      saldo inicial, compras, entregas y ajustes.`:''}</p>`;
 }
 $("#filtroInv").oninput = pintarInventario;
 $("#filtroInvEst").onchange = pintarInventario;
@@ -2600,15 +2669,64 @@ function registrarIngreso(){
   const c = parseInt($("#invCant").value)||0;
   if(c<=0){ $("#invMsg").innerHTML=`<div class="aviso a-mal">La cantidad debe ser mayor que cero.</div>`; return; }
   const co = parseFloat($("#invCosto").value);
-  invSel.existencia += c;
+  if(!corteInv()) invSel.existencia += c;        // antes del corte, como siempre
   if(co>0) invSel.costo = co;
-  D.movimientos.push({id:uid(),fecha:new Date().toISOString(),tipo:"ingreso",
-    codigo:invSel.codigo,cantidad:c,ref:"Compra"});
+  movimiento({tipo:"ingreso", codigo:invSel.codigo, cantidad:c, ref:"Compra"});
   guardar();
   $("#invMsg").innerHTML = `<div class="aviso a-ok">Ingresaron ${c} de ${esc(invSel.nombre)}.
-    Existencia ahora: ${invSel.existencia}.</div>`;
+    Existencia ahora: ${existencia(invSel)}.</div>`;
   $("#invSku").value=""; $("#invCant").value=1; $("#invCosto").value=""; invSel=null;
   pintarInventario();
+}
+
+// Ajuste de existencia después del corte (D6): sube o baja con motivo, letra y fecha.
+function abrirAjuste(cod){
+  const s = D.skus.find(x=>x.codigo===cod); if(!s || !corteInv()) return;
+  if(!letraDispositivo()){ alert("Este dispositivo no tiene letra.\n\n"+
+    "Ponla en Ajustes, en «Este dispositivo», antes de registrar ajustes."); return; }
+  modal(`<h3 style="margin-top:0">Ajuste de existencia — ${esc(s.nombre)}</h3>
+    <p class="mini">Existencia ahora: <strong>${existencia(s)}</strong>. Escribe cuánto sube o baja:
+      por ejemplo -3 por producto vencido, o 2 si en un conteo aparecieron dos más.</p>
+    <div class="grid g2" style="margin:14px 0">
+      <div><label>Cantidad (+ o −)</label><input id="ajCant" type="number" step="1"></div>
+      <div><label>Motivo (8 caracteres o más)</label><input id="ajMot"></div>
+    </div>
+    <div id="ajErr"></div><hr>
+    <button class="b" onclick="guardarAjuste('${s.codigo}')">Guardar</button>
+    <button class="s" onclick="cerrarModal()">Cancelar</button>`);
+}
+function guardarAjuste(cod){
+  const s = D.skus.find(x=>x.codigo===cod); if(!s || !corteInv()) return;
+  const q = parseInt($("#ajCant").value)||0, mot = $("#ajMot").value.trim();
+  if(!q){ $("#ajErr").innerHTML = `<div class="aviso a-mal">La cantidad no puede ser cero.</div>`; return; }
+  if(mot.length < 8){ $("#ajErr").innerHTML =
+    `<div class="aviso a-mal">Escribe el motivo, de 8 caracteres o más.</div>`; return; }
+  movimiento({tipo:"ajuste", codigo:cod, cantidad:q, ref:"Ajuste", motivo:mot});
+  guardar(); cerrarModal(); pintarInventario();
+}
+// Lo que hay que revisar a mano después del corte (D5):
+// - movimientos sin la marca, hechos después del corte por un dispositivo que
+//   aún no lo sabía o tenía la versión vieja: NO entran en la suma;
+// - entregas de pedidos que quedaron cancelados: SÍ entran.
+// La fecha solo sirve para armar esta lista; la suma no depende de ella.
+function porRevisar(){
+  const c = corteInv(); if(!c) return [];
+  const hecho = new Set(D.movimientos.filter(m=>m.tipo==="revisado").map(m=>m.ref_id));
+  const out = [];
+  D.movimientos.forEach(m => {
+    if(hecho.has(m.id) || !m.codigo || m.codigo==="—" || !m.cantidad) return;
+    if(m.corte !== CORTE_ID && m.fecha > c.fecha)
+      out.push({m, txt:"Hecho después del corte sin su marca: no se sumó. Si fue real, registra un ajuste."});
+    else if(m.corte === CORTE_ID && m.tipo==="despacho" &&
+            (D.pedidos.find(p=>p.id===m.pedido_id)||{}).estado === "cancelado")
+      out.push({m, txt:"Entrega de un pedido que quedó cancelado: sí se restó. Si el producto volvió, registra un ajuste."});
+  });
+  return out;
+}
+// «Ya revisado» es otro movimiento, sin cantidad: el original no se toca.
+function marcarRevisado(id){
+  movimiento({id:"rev|"+id, tipo:"revisado", codigo:null, cantidad:0, ref_id:id, ref:"Revisado"});
+  guardar(); pintarInventario();
 }
 
 /* ------------------------------------------------------------ REPOSICIÓN */
@@ -2679,7 +2797,7 @@ function armarPedidoSugerido(i){
   const x = window._repo[i];
   const s = D.skus.find(y=>y.codigo===x.codigo);
   if(!s){ alert("Ese producto ya no está en el catálogo."); return; }
-  if(s.existencia <= 0){ alert("«"+s.nombre+"» está agotado. Registra el ingreso antes de ofrecerlo."); return; }
+  if(existencia(s) <= 0){ alert("«"+s.nombre+"» está agotado. Registra el ingreso antes de ofrecerlo."); return; }
   P.cliente = x.cliente;
   P.lineas = [{codigo:s.codigo, nombre:s.nombre, cantidad:x.cantidad,
                precio:(s.oferta&&s.precio_oferta)?s.precio_oferta:s.precio,
@@ -2705,6 +2823,7 @@ function pintarAjustes(){
   if($("#bkBanco")){ $("#bkBanco").value=b.banco||""; $("#bkCuenta").value=b.cuenta||"";
     $("#bkTitular").value=b.titular||""; $("#bkTipo").value=b.tipo||""; }
   if($("#letraDisp")) $("#letraDisp").value = letraDispositivo();
+  pintarCorte();
   $("#params").innerHTML = Object.entries(PARAMS_DEF).map(([k,o])=>`
     <div><label>${o.d}</label>
       <div class="fila"><input id="pp_${k}" type="number" step="0.01" value="${D.params[k]}">
@@ -2751,6 +2870,43 @@ function guardarLetra(){
   $("#letraMsg").innerHTML = `<div class="aviso a-ok">Letra guardada. Los pedidos nuevos de este dispositivo saldrán como ${l}-…</div>`;
 }
 
+// Corte de inventario (D1, D3, N2). Con base compartida: solo la letra A, con
+// sesión y la sincronización al día. Sin base: cualquier letra.
+function enEquipo(){
+  return (typeof NUBE !== "undefined" && !!(NUBE.url && NUBE.key)) ||
+         (typeof nubeHaySesion === "function" && nubeHaySesion());
+}
+function pintarCorte(){
+  const c = corteInv();
+  $("#corteInfo").innerHTML = c
+    ? `<div class="aviso a-ok">Corte hecho el ${fecha(c.fecha)} desde el dispositivo ${esc(c.letra||"?")}.</div>`
+    : `<button class="b" onclick="hacerCorte()">Hacer corte de inventario</button>`;
+}
+async function hacerCorte(){
+  if(corteInv()){ pintarCorte(); return; }
+  const letra = letraDispositivo();
+  if(!letra){ alert("Este dispositivo no tiene letra. Ponla arriba, en «Este dispositivo»."); return; }
+  if(enEquipo()){
+    if(letra !== "A"){ alert("Con base compartida, el corte solo se hace desde el dispositivo con letra A."); return; }
+    if(!nubeActiva()){ alert("Entra con tu usuario antes de hacer el corte."); return; }
+    if(NUBE.ocupado){ alert("Se está sincronizando. Intenta de nuevo en unos segundos."); return; }
+    await nubeSincronizar(true);
+    if(NUBE.estado !== "en_linea" || NUBE.pendiente){
+      alert("No se pudo dejar la sincronización al día. Revisa la conexión e intenta de nuevo."); return; }
+    if(corteInv()){ alert("Otro dispositivo ya hizo el corte."); pintarCorte(); return; }
+  }
+  if(!confirm("Se va a hacer el corte de inventario.\n\n"+
+    "La existencia que tiene ahora cada producto queda como su saldo inicial y, desde ahora, "+
+    "se calcula con las compras, entregas y ajustes. Se hace una sola vez.\n\n¿Continuar?")) return;
+  D.movimientos.push({id:CORTE_ID, fecha:new Date().toISOString(), tipo:"corte",
+    codigo:null, cantidad:0, letra, corte:CORTE_ID, ref:"Corte de inventario"});
+  olvidarExistencia();
+  D.skus.forEach(s => movimiento({id:"ini|"+s.codigo, tipo:"saldo_inicial", codigo:s.codigo,
+    cantidad:s.existencia||0, ref:"Saldo inicial (corte)"}));
+  guardar(); pintarCorte();
+  alert("Corte hecho: "+D.skus.length+" productos con su saldo inicial.");
+}
+
 
 /* ============================================================================
    DATOS DE EJEMPLO
@@ -2758,7 +2914,9 @@ function guardarLetra(){
    Todo lo marcado como ejemplo se puede borrar de golpe.
    ============================================================================ */
 function cargarEjemplo(){
-  if(D.pedidos.some(p=>p.ejemplo)){ 
+  if(typeof nubeHaySesion === "function" && nubeHaySesion()){ alert("Los datos de ejemplo solo se cargan sin "+
+    "conexión a la base compartida.\n\nAsí no llegan a los demás dispositivos."); return; }
+  if(D.pedidos.some(p=>p.ejemplo)){
     alert("Ya hay datos de ejemplo cargados. Bórralos primero si quieres volver a empezar."); return; }
   const cs = [
     {id:"ej1", nombre:"Dr. Ramírez — Odontología", telefono:"+504-9988-7766",
@@ -2776,9 +2934,12 @@ function cargarEjemplo(){
   const sk = c => D.skus.find(s=>s.codigo===c);
   const linea = (cod,cant) => { const s=sk(cod); return s ?
     {codigo:s.codigo,nombre:s.nombre,cantidad:cant,precio:s.precio,costo:s.costo,peso:s.peso} : null; };
-  // asegurar existencia para los ejemplos
+  // asegurar existencia para los ejemplos. Después del corte, con ajustes
+  // marcados como ejemplo, que «Borrar solo los ejemplos» quita (D9).
   ["GUA-001","CUR-004","ODO-001","ODO-002","INY-002","GLU-002"].forEach(c=>{
-    const s=sk(c); if(s && s.existencia<40) s.existencia=40; });
+    const s=sk(c); if(!s || existencia(s)>=40) return;
+    if(!corteInv()) s.existencia = 40;
+    else movimiento({tipo:"ajuste", codigo:c, cantidad:40-existencia(s), ref:"Ejemplo", motivo:"Datos de ejemplo", ejemplo:true}); });
 
   const mkPed = (n, cli, ls, estado, pago, minAtras, minPromesa) => {
     const lineas = ls.map(([c,q])=>linea(c,q)).filter(Boolean);
@@ -2832,14 +2993,20 @@ function cargarEjemplo(){
 }
 
 function borrarEjemplo(){
+  if(typeof nubeHaySesion === "function" && nubeHaySesion()){
+    alert("«Borrar solo los ejemplos» solo funciona sin conexión a la base compartida."); return; }
   const n = D.pedidos.filter(p=>p.ejemplo).length;
-  if(!n && !D.clientes.some(c=>c.ejemplo)){
+  const nm = D.movimientos.filter(m=>m.ejemplo).length;
+  if(!n && !nm && !D.clientes.some(c=>c.ejemplo)){
     $("#ejemploMsg").innerHTML = `<div class="aviso a-info">No hay datos de ejemplo cargados.</div>`;
     return; }
-  if(!confirm("Se borrarán "+n+" pedidos y los clientes de ejemplo.\n\n"+
+  if(!confirm("Se borrarán "+n+" pedidos, los clientes y "+nm+" ajustes de ejemplo.\n\n"+
               "Tus datos reales no se tocan. ¿Continuar?")) return;
   D.pedidos  = D.pedidos.filter(p=>!p.ejemplo);
   D.clientes = D.clientes.filter(c=>!c.ejemplo);
+  // Única excepción a «nunca quitar movimientos» (D8, D9): solo los marcados
+  // como ejemplo, y solo sin conexión a la base.
+  D.movimientos = D.movimientos.filter(m=>!m.ejemplo);
   D.avisos   = [];
   guardar();
   $("#ejemploMsg").innerHTML = `<div class="aviso a-ok">Datos de ejemplo eliminados.</div>`;
@@ -2861,13 +3028,24 @@ function descargarRespaldo(){
 }
 function restaurarRespaldo(ev){
   const f = ev.target.files[0]; if(!f) return;
+  // N5: con sesión en la base no se restaura; primero hay que salir.
+  if(typeof nubeHaySesion === "function" && nubeHaySesion()){
+    alert("Este navegador está conectado a la base compartida.\n\n"+
+      "Para restaurar un respaldo, primero sal de la base."); ev.target.value=""; return; }
   const r = new FileReader();
   r.onload = e => {
     try{
       const nd = JSON.parse(e.target.result);
       if(!nd.skus || !nd.params) throw new Error("formato");
-      if(!confirm("Esto reemplaza TODOS los datos actuales por los del respaldo.\n\n¿Continuar?")) return;
-      D = nd; migrar(); guardar();
+      if(!confirm("Esto reemplaza TODOS los datos actuales por los del respaldo, menos los movimientos\n"+
+        "de inventario: esos se juntan y no se pierde ninguno.\n\n¿Continuar?")) return;
+      const antes = D.movimientos || [];
+      D = nd; migrar();
+      const ids = new Set(D.movimientos.map(m=>m.id));
+      antes.forEach(m => { if(!ids.has(m.id)) D.movimientos.push(m); });
+      // Al volver a entrar a la base no sube nada de esta copia: manda la base (N3).
+      if(typeof nubeOlvidarEspejo === "function") nubeOlvidarEspejo();
+      guardar();
       alert("Respaldo restaurado: "+D.pedidos.length+" pedidos, "+
             D.clientes.length+" clientes, "+D.skus.length+" productos.");
       ir("inicio");
@@ -2905,7 +3083,7 @@ function exportarCatalogoCSV(){
   D.skus.forEach(s=>{ const c=comprometido(s.codigo);
     f.push([s.codigo,s.nombre,s.marca,s.categoria,s.unidad,s.contenido,s.peso,
     s.costo,s.precio,(s.peso?(s.precio/s.peso).toFixed(1):0),canalDe(s),
-    s.existencia,c.total,c.esperandoPago,disponible(s),s.minimo,s.restringido?"SI":"NO"]);});
+    existencia(s),c.total,c.esperandoPago,disponible(s),s.minimo,s.restringido?"SI":"NO"]);});
   bajar("catalogo-"+hoy()+".csv", csv(f));
 }
 function exportarTodoCSV(){ exportarPedidosCSV(); exportarClientesCSV(); exportarCatalogoCSV(); }
@@ -3117,7 +3295,8 @@ function nubeCambiosLocales(){
       const f = nubeFirma(item);
       if(esp[k] !== f){ filas.push({[c.clave]: String(k), datos: item}); n++; }
     });
-    const borrar = Object.keys(esp).filter(k => !vivos[k]);
+    // Los movimientos nunca se borran de la base desde aquí (D8).
+    const borrar = c.t === "movimientos" ? [] : Object.keys(esp).filter(k => !vivos[k]);
     if(filas.length || borrar.length) lotes[c.t] = {c, filas, borrar};
     n += borrar.length;
   });
@@ -3170,6 +3349,7 @@ function nubeAplicar(campo, clave, tabla, filas){
     NUBE.espejo[tabla][k] = fi;
     n++;
   });
+  if(n) olvidarExistencia();   // llegaron datos de otro dispositivo: rehacer el cálculo
   return n;
 }
 
@@ -3194,6 +3374,7 @@ async function nubeReconciliar(){
   const r = await nubeRpc("llaves", {});
   let n = 0;
   COLECCIONES.forEach(c => {
+    if(c.t === "movimientos") return;     // los movimientos no se quitan (D8)
     const vivos = new Set((r[c.t] || []).map(String));
     const antes = D[c.campo].length;
     D[c.campo] = D[c.campo].filter(x => {
@@ -3280,6 +3461,14 @@ async function nubePrimeraVez(){
   // ¿Ya tiene información? Entonces manda la base y lo local se reemplaza,
   // para no pisar el inventario real con un catálogo recién instalado.
   const vacia = await nubeRpc("esta_vacia", {});
+  // N3: movimientos de este dispositivo que no alcanzaron a subir (por ejemplo,
+  // porque venció la sesión). Solo si ya estuvo sincronizado con la base; si
+  // nunca lo estuvo, sus datos son de otra isla y manda la base. El corte y
+  // los saldos iniciales nunca se suben desde aquí.
+  const espMov = (NUBE.espejo && NUBE.espejo.movimientos) || {};
+  const pendientes = Object.keys(espMov).length ? D.movimientos.filter(m =>
+    m.id && m.id !== CORTE_ID && !String(m.id).startsWith("ini|") && !m.ejemplo &&
+    espMov[m.id] !== nubeFirma(m)) : [];
   nubeOlvidarEspejo();
   if(vacia){
     await nubeSubir();
@@ -3287,6 +3476,13 @@ async function nubePrimeraVez(){
     NUBE.ultima = Date.now();
     nubeEstado("en_linea", "");
     return {accion:"subio"};
+  }
+  for(let i = 0; i < pendientes.length; i += 200){
+    await nubeFetch("/rest/v1/movimientos", {
+      method:"POST",
+      headers:{"Prefer":"resolution=merge-duplicates,return=minimal"},
+      body: pendientes.slice(i, i+200).map(m => ({id:String(m.id), datos:m}))
+    });
   }
   D.clientes = []; D.pedidos = []; D.movimientos = []; D.avisos = [];
   D.skus.forEach(s => { s.existencia = 0; });
@@ -3449,6 +3645,9 @@ function nubeLogin(){
     const mail = document.getElementById("nbMail").value.trim();
     const pass = document.getElementById("nbPass").value;
     if(!mail || !pass){ err("Escribe el correo y la contraseña."); return; }
+    // N6: no se conecta mientras haya datos de ejemplo, para que no lleguen a la base.
+    if(D.pedidos.some(p=>p.ejemplo) || D.clientes.some(c=>c.ejemplo) || D.movimientos.some(m=>m.ejemplo)){
+      err("Hay datos de ejemplo cargados. Bórralos en Ajustes («Borrar solo los ejemplos») antes de entrar."); return; }
     b.disabled = true; b.textContent = "Entrando…";
     try{
       await nubeEntrar(mail, pass);
