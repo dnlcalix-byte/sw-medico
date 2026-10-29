@@ -176,7 +176,7 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
 <!-- ============================================================ NUEVO -->
 <section class="panel" id="p-nuevo">
   <h2>Nuevo pedido</h2>
-  <p class="sub2">El sistema calcula el peso y la contribución mientras armas el pedido, y no te deja confirmar uno que pierde dinero.</p>
+  <p class="sub2" id="subNuevo">El sistema calcula el peso y la contribución mientras armas el pedido, y no te deja confirmar uno que pierde dinero.</p>
 
   <div class="card">
     <h3>1 · Cliente</h3>
@@ -295,7 +295,7 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
       <div><label>Estado</label><select id="filtroEst">
         <option value="">Todos</option><option>confirmado</option><option>en_ruta</option>
         <option>entregado</option><option>cancelado</option></select></div>
-      <div class="auto"><button class="s" onclick="exportarPedidosCSV()">Exportar CSV</button></div>
+      <div class="auto" data-costos><button class="s" onclick="exportarPedidosCSV()">Exportar CSV</button></div>
     </div>
     <div id="tablaPedidos" style="margin-top:12px"></div>
   </div>
@@ -325,8 +325,8 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
       <div><label>Canal</label><select id="filtroCanal">
         <option value="">Todos</option><option value="express">Express</option>
         <option value="volumen">Volumen</option><option value="bloqueado">Bloqueado</option></select></div>
-      <div class="auto"><button class="s" onclick="abrirNuevoSku()">+ Producto</button></div>
-      <div class="auto"><button class="s" onclick="exportarCatalogoCSV()">Exportar CSV</button></div>
+      <div class="auto" data-escribe="catalogo"><button class="s" onclick="abrirNuevoSku()">+ Producto</button></div>
+      <div class="auto" data-costos><button class="s" onclick="exportarCatalogoCSV()">Exportar CSV</button></div>
     </div>
     <div id="tablaCatalogo" style="margin-top:12px"></div>
   </div>
@@ -336,12 +336,12 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
 <section class="panel" id="p-inventario">
   <h2>Inventario</h2>
   <p class="sub2">Las existencias bajan solas al entregar un pedido. Registra aquí las compras que ingresan.</p>
-  <div class="card">
+  <div class="card" data-escribe="inventario">
     <h3>Registrar ingreso de compra</h3>
     <div class="fila">
       <div style="flex:2"><label>Producto</label><input id="invSku" placeholder="Buscar producto…" autocomplete="off"></div>
       <div><label>Cantidad</label><input id="invCant" type="number" min="1" value="1"></div>
-      <div><label>Costo unitario (L.)</label><input id="invCosto" type="number" min="0" step="0.01"></div>
+      <div data-costos><label>Costo unitario (L.)</label><input id="invCosto" type="number" min="0" step="0.01"></div>
       <div class="auto"><button class="b" onclick="registrarIngreso()">Registrar</button></div>
     </div>
     <div id="invRes"></div>
@@ -378,7 +378,7 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
   <h2>Ajustes y respaldo</h2>
   <p class="sub2">Aquí viven las reglas económicas. Cambiarlas aquí cambia el comportamiento de todo el sistema.</p>
 
-  <div class="card">
+  <div class="card" data-todos>
     <h3>Este dispositivo</h3>
     <p class="mini">Una letra de la A a la Z que identifica a este dispositivo. Va al inicio del número
       de cada pedido (ejemplo: A-1043). Cada dispositivo del equipo debe tener una letra distinta.
@@ -1339,6 +1339,12 @@ const $$ = s => Array.from(document.querySelectorAll(s));
 const L  = n => "L." + (Number(n)||0).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:2});
 const L0 = n => "L." + Math.round(Number(n)||0).toLocaleString("es-HN");
 const KG = n => (Number(n)||0).toFixed(3) + " kg";
+// Un monto guardado vale solo si es número: null, vacío o NaN no se cuentan como 0.
+const esNum = v => typeof v === "number" && isFinite(v);
+// Sin costo es la clave ausente, null o vacío. Un costo 0 sí es un costo.
+const hayCosto = v => v !== undefined && v !== null && v !== "" && isFinite(Number(v));
+// Monto o "—" si no hay número.
+const L0o = n => esNum(n) ? L0(n) : "—";
 const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c =>
   ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const hoy = () => new Date().toISOString().slice(0,10);
@@ -1535,6 +1541,8 @@ function presentacionDe(s){
 /* ------------------------------------------------------------ navegación */
 $$("nav button").forEach(b => b.onclick = () => ir(b.dataset.p));
 function ir(p){
+  // Con usuario, un panel que el rol no usa lleva a su pantalla de entrada.
+  if(typeof nubePanelModo === "function" && !nubePanelModo(p)) p = nubePanelEntrada();
   $$("nav button").forEach(b => b.classList.toggle("on", b.dataset.p===p));
   $$(".panel").forEach(s => s.classList.toggle("on", s.id==="p-"+p));
   window.scrollTo(0,0);
@@ -1594,7 +1602,9 @@ function motorCanal(pesoKg, nivel){
    ============================================================================ */
 function calcularPedido(){
   const sub  = P.lineas.reduce((a,l)=>a + l.cantidad*l.precio, 0);
-  const cost = P.lineas.reduce((a,l)=>a + l.cantidad*l.costo, 0);
+  // Si a una línea le falta el costo, no hay margen: se guarda null, no un número inventado.
+  const sinCosto = P.lineas.filter(l=>!hayCosto(l.costo));
+  const cost = sinCosto.length ? null : P.lineas.reduce((a,l)=>a + l.cantidad*l.costo, 0);
   const peso = P.lineas.reduce((a,l)=>a + l.cantidad*l.peso, 0);
   const nivel = $("#nivel") ? $("#nivel").value : "ventana";
 
@@ -1602,10 +1612,10 @@ function calcularPedido(){
   const cargo  = (nivel==="express" && sub < minimo) ? par("cargo_urgencia") : 0;
 
   const m = motorCanal(peso, nivel);
-  const margen = sub - cost + cargo;
-  const contrib = margen - m.costo;
+  const margen = cost===null ? null : sub - cost + cargo;
+  const contrib = margen===null ? null : margen - m.costo;
 
-  return {sub, cost, peso, nivel, cargo, minimo, margen, contrib,
+  return {sub, cost, peso, nivel, cargo, minimo, margen, contrib, sinCosto,
           canal:m.canal, costoEnt:m.costo, motivo:m.motivo, total:sub+cargo};
 }
 
@@ -1625,15 +1635,22 @@ function recalc(){
   }
 
   const bajoMinimo = c.nivel==="express" && c.sub < c.minimo;
-  const pierde = c.contrib < 0;
+  // Un rol que no ve costos no ve margen ni contribución, ni el aviso de
+  // pérdida, y por ahora no confirma pedidos (sin costos no hay compuerta).
+  const conCostos = veCostos();
+  const pierde = conCostos && esNum(c.contrib) && c.contrib < 0;
 
   $("#economia").innerHTML = `
     <div class="grid g4">
       ${kpi(L0(c.sub),"Subtotal")}
       ${kpi(KG(c.peso),"Peso del pedido")}
-      ${kpi(L0(c.margen),"Margen bruto")}
-      ${kpi(L0(c.contrib), "Contribución", pierde?"mal":"ok")}
+      ${conCostos ? kpi(L0o(c.margen),"Margen bruto") : ""}
+      ${conCostos ? kpi(L0o(c.contrib), "Contribución", pierde?"mal":esNum(c.contrib)?"ok":"") : ""}
     </div>
+    ${!conCostos ? `<div class="aviso a-mal">${AVISO_SIN_COSTOS}</div>` : ""}
+    ${conCostos && c.sinCosto.length ? `<div class="aviso a-med">${c.sinCosto.map(l=>
+      `«${esc(l.nombre)}» no tiene costo registrado.`).join("<br>")}
+      El margen y la contribución no se pueden calcular; el pedido se puede confirmar igual.</div>` : ""}
     ${c.cargo ? `<div class="aviso a-med">El pedido es de ${L0(c.sub)} y el mínimo para express sin cargo
       es ${L0(c.minimo)}. Se agrega un cargo de urgencia de ${L0(c.cargo)}.
       <br><strong>Alternativa sin cargo:</strong> ofrecer entrega en la ventana del día.</div>` : ""}
@@ -1671,7 +1688,7 @@ function recalc(){
 // cuando se piden, los motivos escritos con al menos 8 caracteres cada uno.
 function habilitarConfirmar(){
   const m1 = $("#motivoOverride"), m2 = $("#motivoExistencia");
-  $("#btnConfirmar").disabled = !P.cliente || !P.lineas.length ||
+  $("#btnConfirmar").disabled = !veCostos() || !P.cliente || !P.lineas.length ||
     revisarExistencia(P.lineas).sinCatalogo.length > 0 ||
     (!!m1 && m1.value.trim().length < 8) || (!!m2 && m2.value.trim().length < 8);
 }
@@ -1688,7 +1705,8 @@ function pintarLineas(){
     <th class="num">Peso</th><th class="num">Importe</th><th></th></tr></thead><tbody>
     ${P.lineas.map((l,i)=>`<tr>
       <td>${esc(l.nombre)}<br><span class="mini">${esc(l.codigo)}</span></td>
-      <td class="num">${l.cantidad}</td>
+      <td class="num"><input type="number" min="1" step="1" value="${l.cantidad}" style="width:70px"
+          onchange="cambiarCantidad(${i}, this.value)"></td>
       <td class="num">${L(l.precio)}</td>
       <td class="num">${(l.cantidad*l.peso).toFixed(3)}</td>
       <td class="num">${L(l.cantidad*l.precio)}</td>
@@ -1696,6 +1714,7 @@ function pintarLineas(){
     </tbody></table></div>`;
 }
 function quitarLinea(i){ P.lineas.splice(i,1); recalc(); }
+function cambiarCantidad(i, v){ P.lineas[i].cantidad = Math.max(1, parseInt(v)||1); recalc(); }
 function limpiarPedido(){
   P = {cliente:null, lineas:[], override:null};
   $("#buscaCli").value=""; $("#buscaSku").value="";
@@ -1892,6 +1911,7 @@ function parteNumerica(n){
   return m ? Number(m[1]) : 0;
 }
 function confirmarPedido(){
+  if(!veCostos()){ alert(AVISO_SIN_COSTOS); return; }
   if(!P.cliente){ alert("Primero elige el cliente."); return; }
   if(!P.lineas.length){ alert("El pedido no tiene productos."); return; }
   const letra = letraDispositivo();
@@ -1977,9 +1997,10 @@ function pintarInicio(){
   const sla = conSla.length ? enTiempo/conSla.length*100 : null;
   const pedDia = mes.length ? mes.length/30 : 0;
 
+  const conCostos = veCostos();
   $("#kpis").innerHTML =
-    kpi2(L0(contribProm), "Contribución por pedido", contribProm>=0?"ok":"mal",
-         "Es el número que define si el negocio existe. Últimos 30 días.") +
+    (conCostos ? kpi2(L0(contribProm), "Contribución por pedido", contribProm>=0?"ok":"mal",
+         "Es el número que define si el negocio existe. Últimos 30 días.") : "") +
     kpi2(L0(ticket), "Ticket promedio", "", "Segunda palanca de rentabilidad. Sube con el pedido mínimo.") +
     kpi2(pedDia.toFixed(1), "Pedidos por día", "", "Meta de equilibrio: alrededor de 24 a 28.") +
     kpi2(sla===null?"—":sla.toFixed(0)+"%", "Entregas a tiempo",
@@ -1987,7 +2008,8 @@ function pintarInicio(){
 
   // aviso de respaldo
   const dr = D.ultimoRespaldo ? dias(D.ultimoRespaldo, new Date().toISOString()) : 999;
-  $("#avisoRespaldo").innerHTML = (D.pedidos.length && dr >= 1)
+  // El respaldo lleva márgenes y costos: con usuario, solo lo ofrece a admin.
+  $("#avisoRespaldo").innerHTML = (D.pedidos.length && dr >= 1 && ["local","admin"].includes(rolPantalla()))
     ? `<div class="aviso a-med noprint">Hace ${dr>90?"mucho":dr+" día(s)"} que no descargas un respaldo.
        Los datos viven solo en este navegador.
        <button class="s" onclick="descargarRespaldo()">Descargar ahora</button></div>` : "";
@@ -2037,11 +2059,11 @@ function pintarInicio(){
   }
   const max = Math.max(1, ...dd.map(x=>x.n));
   $("#serie").innerHTML = D.pedidos.length ? `<table>
-    <thead><tr><th>Día</th><th class="num">Pedidos</th><th style="width:45%"></th><th class="num">Contribución</th></tr></thead>
+    <thead><tr><th>Día</th><th class="num">Pedidos</th><th style="width:45%"></th>${conCostos?'<th class="num">Contribución</th>':''}</tr></thead>
     <tbody>${dd.map(x=>`<tr>
       <td>${x.f.slice(5)}</td><td class="num">${x.n}</td>
       <td><div class="bar"><i style="width:${x.n/max*100}%"></i></div></td>
-      <td class="num" style="color:${x.c<0?'var(--rojo)':'var(--texto)'}">${x.n?L0(x.c):"—"}</td>
+      ${conCostos?`<td class="num" style="color:${x.c<0?'var(--rojo)':'var(--texto)'}">${x.n?L0(x.c):"—"}</td>`:''}
     </tr>`).join("")}</tbody></table>`
     : `<div class="vacio">Registra tu primer pedido y aquí verás la evolución.</div>`;
 }
@@ -2082,10 +2104,11 @@ function pintarPedidos(){
   const r = D.pedidos.filter(p =>
     (!q || p.cliente.toLowerCase().includes(q) || String(p.numero).toLowerCase().includes(q)) &&
     (!e || p.estado===e));
+  const conCostos = veCostos(), lectura = panelSoloLectura("pedidos");
   $("#tablaPedidos").innerHTML = r.length ? `<div class="tabla-wrap"><table>
     <thead><tr><th>#</th><th>Fecha</th><th>Cliente</th><th>Canal</th>
       <th class="num">Total</th><th class="num">Peso</th>
-      <th class="num">Contrib. est.</th><th class="num">Contrib. real</th>
+      ${conCostos?'<th class="num">Contrib. est.</th><th class="num">Contrib. real</th>':''}
       <th>Estado</th><th>Pago</th><th class="noprint"></th></tr></thead><tbody>
     ${r.map(p=>`<tr>
       <td><strong>${p.numero}</strong>${p.ejemplo?' <span class="pill p-gris">ejemplo</span>':''}${(p.override||p.override_existencia)?' <span class="pill p-mal" title="'+esc(textoForzado(p))+'">forzado</span>':''}</td>
@@ -2094,14 +2117,14 @@ function pintarPedidos(){
       <td>${esc(p.canal)}<br><span class="mini">${p.nivel}${p.hecho_por?" · "+esc(p.hecho_por):""}</span></td>
       <td class="num">${L0(p.total)}</td>
       <td class="num">${p.peso.toFixed(2)}</td>
-      <td class="num" style="color:${p.contribucion_est<0?'var(--rojo)':''}">${L0(p.contribucion_est)}</td>
+      ${conCostos?`<td class="num" style="color:${p.contribucion_est<0?'var(--rojo)':''}">${L0o(p.contribucion_est)}</td>
       <td class="num" style="color:${(p.contribucion_real??0)<0?'var(--rojo)':''}">
-        ${p.contribucion_real==null?"—":L0(p.contribucion_real)}</td>
+        ${p.contribucion_real==null?"—":L0(p.contribucion_real)}</td>`:''}
       <td>${pill(p.estado)}</td>
       <td>${badgePago(p)}</td>
       <td class="noprint">${["confirmado","preparando","listo","en_ruta"].includes(p.estado)
         ? `<button class="s" onclick="ir('despacho')">Despacho</button>
-           <button class="s d" onclick="cancelarPedido('${p.id}')">Cancelar</button>`
+           ${lectura?'':`<button class="s d" onclick="cancelarPedido('${p.id}')">Cancelar</button>`}`
         : p.estado==="entregado" ? `<button class="s" onclick="verPedido('${p.id}')">Ver</button>` : ""}</td>
     </tr>`).join("")}</tbody></table></div>`
     : `<div class="vacio">No hay pedidos que coincidan.</div>`;
@@ -2129,7 +2152,8 @@ function confirmarEntrega(id){
   const p = D.pedidos.find(x=>x.id===id);
   const cr = parseFloat($("#mCosto").value)||0;
   p.costo_entrega_real = cr;
-  p.contribucion_real = p.margen - cr;
+  // Sin margen guardado (faltaba un costo) no hay contribución real: null, no -cr.
+  p.contribucion_real = esNum(p.margen) ? p.margen - cr : null;
   p.entregado = new Date($("#mHora").value).toISOString();
   p.estado = "entregado";
   // La existencia física baja aquí, cuando el producto realmente sale de bodega.
@@ -2153,7 +2177,7 @@ function cancelarPedido(id){
 }
 function verPedido(id){
   const p = D.pedidos.find(x=>x.id===id);
-  const desvio = (p.contribucion_real??0) - p.contribucion_est;
+  const desvio = esNum(p.contribucion_est) ? (p.contribucion_real??0) - p.contribucion_est : null;
   modal(`<h3 style="margin-top:0">Pedido ${p.numero}</h3>
     <p class="mini">${esc(p.cliente)} · ${esc(p.telefono)}<br>${esc(p.direccion||"")}</p>
     <table style="margin:12px 0"><thead><tr><th>Producto</th><th class="num">Cant</th>
@@ -2164,9 +2188,9 @@ function verPedido(id){
       ${kpi(L0(p.total),"Total")}${kpi(KG(p.peso),"Peso")}
       ${kpi(L0(p.costo_entrega_est),"Entrega estimada")}
       ${kpi(L0(p.costo_entrega_real??0),"Entrega real")}
-      ${kpi(L0(p.contribucion_real??p.contribucion_est),"Contribución",
-        (p.contribucion_real??p.contribucion_est)<0?"mal":"ok")}
-      ${kpi((desvio>=0?"+":"")+L0(desvio),"Desvío", desvio<0?"mal":"ok")}
+      ${veCostos() ? kpi(L0o(p.contribucion_real??p.contribucion_est),"Contribución",
+        !esNum(p.contribucion_real??p.contribucion_est)?"":(p.contribucion_real??p.contribucion_est)<0?"mal":"ok") +
+        kpi(desvio===null?"—":(desvio>=0?"+":"")+L0(desvio),"Desvío", desvio===null?"":desvio<0?"mal":"ok") : ""}
     </div>
     ${p.override ? avisoForzado("Forzado por pérdida.", p.override, p.override_letra, p.override_fecha) : ""}
     ${p.override_existencia ? avisoForzado("Forzado por existencia.", p.override_existencia,
@@ -2219,6 +2243,8 @@ function tarjetaPedido(p, f){
             : restan < 0 ? `${Math.abs(restan)} min TARDE`
             : `faltan ${restan} min`;
   const colCro = restan===null ? "var(--gris)" : restan<0 ? "var(--rojo)" : restan<10 ? "#D68910" : "var(--verde)";
+  // En solo lectura no se avanza el pedido ni se registra el depósito.
+  const lectura = panelSoloLectura("despacho");
   return `<div class="ped ${cls}">
     <div class="t"><span class="num2">#${p.numero}</span>
       <span class="cro" style="color:${colCro}">${cro}</span></div>
@@ -2228,9 +2254,9 @@ function tarjetaPedido(p, f){
     <div class="dir">${L0(p.total)} · ${p.peso.toFixed(2)} kg · <strong>${esc(p.canal)}</strong></div>
     <div style="margin-top:6px">${badgePago(p)}</div>
     <div class="acc noprint">
-      <button class="b" ${f.e==="listo" && !pagoLibera(p) ? "disabled title='Falta verificar el depósito'":""}
-        onclick="avanzar('${p.id}')">${f.btn}</button>
-      ${!pagoLibera(p) ? `<button class="s" onclick="registrarDeposito('${p.id}')">Registrar depósito</button>
+      ${lectura ? "" : `<button class="b" ${f.e==="listo" && !pagoLibera(p) ? "disabled title='Falta verificar el depósito'":""}
+        onclick="avanzar('${p.id}')">${f.btn}</button>`}
+      ${!pagoLibera(p) ? `${lectura ? "" : `<button class="s" onclick="registrarDeposito('${p.id}')">Registrar depósito</button>`}
         <button class="s" onclick="pedirDeposito('${p.id}')">Pedir depósito</button>`:""}
       ${f.e==="listo" ? `<button class="s" onclick="copiarCourier('${p.id}')">Datos al courier</button>`:""}
       ${f.e==="preparando" ? `<button class="s" onclick="imprimirPicking('${p.id}')">Imprimir</button>`:""}
@@ -2483,21 +2509,22 @@ function pintarCatalogo(){
   const r = D.skus.filter(s =>
     (!q || s.nombre.toLowerCase().includes(q) || s.codigo.toLowerCase().includes(q) ||
      (s.marca||"").toLowerCase().includes(q)) && (!cn || canalDe(s)===cn));
+  const conCostos = veCostos(), lectura = panelSoloLectura("catalogo");
   $("#tablaCatalogo").innerHTML = `<p class="mini">${r.length} de ${D.skus.length} productos</p>
    <div class="tabla-wrap"><table>
     <thead><tr><th>Código</th><th>Producto</th><th>Unidad</th><th>Contenido</th><th>Marca</th><th class="num">Peso</th>
-      <th class="num">Costo</th><th class="num">Precio</th><th class="num">Margen</th>
+      ${conCostos?'<th class="num">Costo</th>':''}<th class="num">Precio</th>${conCostos?'<th class="num">Margen</th>':''}
       <th class="num">L./kg</th><th>Canal</th><th class="num">Exist.</th><th>Marcas</th></tr></thead><tbody>
     ${r.map(s=>{
-      const m = s.precio? (s.precio-s.costo)/s.precio*100 : 0;
+      const m = !hayCosto(s.costo) ? null : s.precio? (s.precio-s.costo)/s.precio*100 : 0;
       const dv = s.peso? s.precio/s.peso : 0;
       const cn = canalDe(s);
       const pc = cn==="express"?"p-ok":cn==="volumen"?"p-med":"p-mal";
-      return `<tr style="cursor:pointer" onclick="abrirNuevoSku('${s.codigo}')">
+      return `<tr${lectura?'':` style="cursor:pointer" onclick="abrirNuevoSku('${s.codigo}')"`}>
         <td>${esc(s.codigo)}</td><td>${esc(s.nombre)}</td>
         <td>${esc(s.unidad||"—")}</td><td>${esc(s.contenido||"—")}</td><td>${esc(s.marca||"—")}</td>
-        <td class="num">${s.peso.toFixed(3)}</td><td class="num">${L(s.costo)}</td>
-        <td class="num">${L(s.precio)}</td><td class="num">${m.toFixed(0)}%</td>
+        <td class="num">${s.peso.toFixed(3)}</td>${conCostos?`<td class="num">${m===null?'—':L(s.costo)}</td>`:''}
+        <td class="num">${L(s.precio)}</td>${conCostos?`<td class="num"${m===null?' title="sin costo registrado">—':`>${m.toFixed(0)}%`}</td>`:''}
         <td class="num">${Math.round(dv)}</td>
         <td><span class="pill ${pc}">${cn}</span></td>
         <td class="num">${disponible(s)>0?disponible(s):'<span class="pill p-gris">sin disp.</span>'}</td>
@@ -2525,7 +2552,7 @@ function abrirNuevoSku(cod){
       <div><label>Contenido de la unidad</label>
         <input id="sCn" value="${esc(s?.contenido||"")}" placeholder="100 unidades, 500 g, 1 L…"></div>
       <div><label>Peso en kg *</label><input id="sW" type="number" step="0.001" value="${s?.peso||""}"></div>
-      <div><label>Costo (L.)</label><input id="sCo" type="number" step="0.01" value="${s?.costo||0}"></div>
+      ${veCostos()?`<div><label>Costo (L.)</label><input id="sCo" type="number" step="0.01" value="${s?.costo||0}"></div>`:''}
       <div><label>Precio de venta (L.)</label><input id="sPr" type="number" step="0.01" value="${s?.precio||0}"></div>
       <div><label>Existencia</label><input id="sE" type="number" value="${s?existencia(s):0}"
         ${s&&corteInv()?'readonly title="Se corrige con «Ajuste» en Inventario"':''}></div>
@@ -2558,7 +2585,9 @@ function guardarSku(cod){
     `<div class="aviso a-mal">Si el producto está restringido, escribe por qué.</div>`; return; }
   const datos = {codigo:c, nombre:n, marca:$("#sM").value.trim(), categoria:$("#sK").value.trim(),
     unidad:$("#sU").value.trim()||"Unidad", contenido:$("#sCn").value.trim()||"—",
-    presentacion:($("#sU").value.trim()+" "+$("#sCn").value.trim()).trim(), peso:w, costo:parseFloat($("#sCo").value)||0,
+    presentacion:($("#sU").value.trim()+" "+$("#sCn").value.trim()).trim(), peso:w,
+    // Quien no ve costos no los toca: la ficha guarda sin la clave costo.
+    ...(veCostos() ? {costo:parseFloat($("#sCo").value)||0} : {}),
     precio:parseFloat($("#sPr").value)||0, existencia:parseInt($("#sE").value)||0,
     minimo:parseInt($("#sMin").value)||0, restringido:r, motivo_restriccion:mot,
     oferta:$("#sOf").checked, nuevo:$("#sNu").checked,
@@ -2588,29 +2617,34 @@ function pintarInventario(){
   if(f==="pago")  r = r.filter(s=>comprometido(s.codigo).esperandoPago>0);
 
   // Totales de la operación
-  let vFisico=0, vComp=0, vPago=0, nBajo=0, nCero=0;
+  let vFisico=0, vComp=0, vPago=0, uPago=0, nBajo=0, nCero=0;
   D.skus.filter(s=>!s.restringido).forEach(s=>{
     const c = comprometido(s.codigo);
     vFisico += existencia(s)*s.costo;
     vComp   += c.total*s.costo;
     vPago   += c.esperandoPago*s.costo;
+    uPago   += c.esperandoPago;
     const d = disponible(s);
     if(d<=0) nCero++; else if(d<=s.minimo) nBajo++;
   });
+  // Sin costos se avisa por unidades, sin valor a costo.
+  const conCostos = veCostos(), lectura = panelSoloLectura("inventario");
 
   const avisos =
-    (vPago>0 ? `<div class="aviso a-med"><strong>${L0(vPago)} en producto apartado esperando depósito.</strong>
+    (conCostos && vPago>0 ? `<div class="aviso a-med"><strong>${L0(vPago)} en producto apartado esperando depósito.</strong>
        Está físicamente en bodega pero ya tiene dueño: no se puede vender a otro cliente.
        Si este número crece, conviene revisar la política de cobro.</div>`:"") +
+    (!conCostos && uPago>0 ? `<div class="aviso a-med"><strong>${uPago} unidad(es) apartadas esperando depósito.</strong>
+       Están físicamente en bodega pero ya tienen dueño: no se pueden vender a otro cliente.</div>`:"") +
     (nCero ? `<div class="aviso a-mal">${nCero} producto(s) sin disponibilidad.</div>`:"") +
     (nBajo ? `<div class="aviso a-med">${nBajo} producto(s) por debajo del mínimo.</div>`:"");
   const rev = porRevisar();
   const avisoRev = rev.length ? `<div class="aviso a-mal"><strong>Por revisar (${rev.length})</strong>
     ${rev.map(x=>`<br>${fecha(x.m.fecha)} · ${esc(x.m.tipo)} · ${esc(x.m.codigo)} · ${x.m.cantidad} · ${esc(x.m.ref||"")}
       <br><span class="mini">${x.txt}</span>
-      <button class="s noprint" onclick="marcarRevisado('${x.m.id}')">Ya revisado</button>`).join("")}</div>` : "";
+      ${lectura?'':`<button class="s noprint" onclick="marcarRevisado('${x.m.id}')">Ya revisado</button>`}`).join("")}</div>` : "";
 
-  const resumen = `<div class="grid g4" style="margin-bottom:12px">
+  const resumen = !conCostos ? "" : `<div class="grid g4" style="margin-bottom:12px">
     ${kpi(L0(vFisico),"Valor físico en bodega")}
     ${kpi(L0(vComp),"Comprometido en pedidos")}
     ${kpi(L0(vPago),"Apartado esperando pago", vPago>0?"mal":"")}
@@ -2622,7 +2656,7 @@ function pintarInventario(){
       <th>Código</th><th>Producto</th><th>Presentación</th>
       <th class="num">Existencia</th><th class="num">Comprometido</th>
       <th class="num">Esperando pago</th><th class="num">Disponible</th>
-      <th class="num">Mínimo</th><th>Estado</th><th class="num">Valor a costo</th>${corteInv()?'<th class="noprint"></th>':''}
+      <th class="num">Mínimo</th><th>Estado</th>${conCostos?'<th class="num">Valor a costo</th>':''}${corteInv()&&!lectura?'<th class="noprint"></th>':''}
     </tr></thead><tbody>
     ${r.map(s=>{
       const c = comprometido(s.codigo);
@@ -2638,8 +2672,8 @@ function pintarInventario(){
         <td class="num"><strong>${d}</strong></td>
         <td class="num">${s.minimo}</td>
         <td><span class="pill ${e.cls}">${e.txt}</span></td>
-        <td class="num">${L0(existencia(s)*s.costo)}</td>
-        ${corteInv()?`<td class="noprint"><button class="s" onclick="abrirAjuste('${s.codigo}')">Ajuste</button></td>`:''}</tr>`;
+        ${conCostos?`<td class="num">${L0(existencia(s)*s.costo)}</td>`:''}
+        ${corteInv()&&!lectura?`<td class="noprint"><button class="s" onclick="abrirAjuste('${s.codigo}')">Ajuste</button></td>`:''}</tr>`;
     }).join("")}</tbody></table></div>
     <p class="mini" style="margin-top:8px">
       <strong>Existencia</strong> es lo que hay físicamente en bodega.
@@ -2662,7 +2696,7 @@ let invSel = null;
 function elegirInvSku(cod){
   invSel = D.skus.find(s=>s.codigo===cod);
   $("#invSku").value = invSel.nombre; $("#invRes").innerHTML="";
-  if(!$("#invCosto").value) $("#invCosto").value = invSel.costo;
+  if(veCostos() && !$("#invCosto").value) $("#invCosto").value = invSel.costo;
 }
 function registrarIngreso(){
   if(!invSel){ $("#invMsg").innerHTML=`<div class="aviso a-mal">Elige primero el producto.</div>`; return; }
@@ -2670,7 +2704,7 @@ function registrarIngreso(){
   if(c<=0){ $("#invMsg").innerHTML=`<div class="aviso a-mal">La cantidad debe ser mayor que cero.</div>`; return; }
   const co = parseFloat($("#invCosto").value);
   if(!corteInv()) invSel.existencia += c;        // antes del corte, como siempre
-  if(co>0) invSel.costo = co;
+  if(veCostos() && co>0) invSel.costo = co;
   movimiento({tipo:"ingreso", codigo:invSel.codigo, cantidad:c, ref:"Compra"});
   guardar();
   $("#invMsg").innerHTML = `<div class="aviso a-ok">Ingresaron ${c} de ${esc(invSel.nombre)}.
@@ -2870,6 +2904,13 @@ function guardarLetra(){
   $("#letraMsg").innerHTML = `<div class="aviso a-ok">Letra guardada. Los pedidos nuevos de este dispositivo saldrán como ${l}-…</div>`;
 }
 
+// Rol con que se dibuja la pantalla; lo lleva la parte de la base compartida
+// (nubeRolPantalla). Sin usuario es "local" y todo se ve como siempre.
+const AVISO_SIN_COSTOS = "Falta definir los costos para este rol; pide al administrador.";
+function rolPantalla(){ return typeof nubeRolPantalla === "function" ? nubeRolPantalla() : "local"; }
+function veCostos(){ return ["local","admin","coordinador"].includes(rolPantalla()); }
+function panelSoloLectura(p){ return typeof nubePanelModo === "function" && nubePanelModo(p) === "l"; }
+
 // Corte de inventario (D1, D3, N2). Con base compartida: solo la letra A, con
 // sesión y la sincronización al día. Sin base: cualquier letra.
 function enEquipo(){
@@ -3065,8 +3106,9 @@ function exportarPedidosCSV(){
     "pago_estado","pago_monto","pago_referencia","pago_banco","pago_fecha",
     "forzado_fecha","forzado_letra","forzado_existencia","forzado_existencia_fecha","forzado_existencia_letra"]];
   D.pedidos.forEach(p=>f.push([p.numero,p.fecha,p.cliente,p.telefono,p.canal,p.nivel,p.hecho_por??"",p.estado,
-    p.total,p.peso,p.margen,p.costo_entrega_est,p.contribucion_est,
-    p.costo_entrega_real??"",p.contribucion_real??"",p.entregado??"",p.override??"",
+    // Margen y contribuciones: celda vacía si no son número, nunca NaN.
+    p.total,p.peso,esNum(p.margen)?p.margen:"",p.costo_entrega_est,esNum(p.contribucion_est)?p.contribucion_est:"",
+    p.costo_entrega_real??"",esNum(p.contribucion_real)?p.contribucion_real:"",p.entregado??"",p.override??"",
     p.pago_estado??"",p.pago?.monto??"",p.pago?.referencia??"",p.pago?.banco??"",p.pago?.fecha??"",
     p.override_fecha??"",p.override_letra??"",p.override_existencia??"",
     p.override_existencia_fecha??"",p.override_existencia_letra??""]));
@@ -3097,7 +3139,8 @@ function borrarTodo(){
   // El espejo es la foto de lo que la base ya tiene. Si se borra lo local sin
   // borrar el espejo, al reconectar el sistema creería que el equipo borró todo
   // y arrastraría ese borrado a los demás dispositivos.
-  try{ localStorage.removeItem("sdim_espejo"); localStorage.removeItem("sdim_sesion"); }catch(e){}
+  try{ localStorage.removeItem("sdim_espejo"); localStorage.removeItem("sdim_sesion");
+       localStorage.removeItem("sdim_rol"); }catch(e){}
   localStorage.removeItem(CLAVE); location.reload();
 }
 
@@ -3137,6 +3180,37 @@ pintarInicio();
 const NUBE_CFG  = "sdim_nube";      // dirección y llave pública del proyecto
 const NUBE_SES  = "sdim_sesion";    // sesión del usuario en este navegador
 const NUBE_MARK = "sdim_espejo";    // última foto conocida de la base
+const NUBE_ROL  = "sdim_rol";       // último rol leído con mi_rol()
+
+/* ------------------------------------------------------------------ roles
+   El rol se guarda en este navegador SOLO para dibujar la pantalla (menú,
+   tarjetas de Ajustes, columnas de costo) y no perderla sin internet. No es
+   un control de acceso: quien decide qué se lee y qué se escribe es la base,
+   con sus reglas por rol. Cambiar este valor a mano no da ningún permiso. */
+const ROLES = ["admin","coordinador","administrativo","despacho","pedidos"];
+// Paneles de cada rol: "e" se usa completo, "l" solo lectura. Ajustes se abre
+// siempre desde el indicador de conexión; ahí cada rol ve solo sus tarjetas.
+const ROL_PANELES = {
+  admin:          {inicio:"e", nuevo:"e", despacho:"e", pedidos:"e", clientes:"e",
+                   catalogo:"e", inventario:"e", reposicion:"e", ajustes:"e"},
+  coordinador:    {inicio:"e", nuevo:"e", despacho:"e", pedidos:"e", clientes:"e",
+                   catalogo:"e", inventario:"e", reposicion:"e"},
+  administrativo: {catalogo:"e", inventario:"e"},
+  despacho:       {despacho:"e", pedidos:"e"},
+  pedidos:        {inicio:"e", nuevo:"e", clientes:"e", reposicion:"e",
+                   despacho:"l", pedidos:"l", catalogo:"l", inventario:"l"},
+  sin_rol:        {}
+};
+const ROL_ENTRADA = {admin:"inicio", coordinador:"inicio", administrativo:"catalogo",
+                     despacho:"despacho", pedidos:"inicio", sin_rol:"ajustes"};
+// Tablas que cada rol sube. Lo demás solo se baja.
+const ROL_ESCRIBE = {
+  admin:          ["skus","clientes","pedidos","movimientos","avisos","config"],
+  coordinador:    ["skus","clientes","pedidos","movimientos","avisos"],
+  administrativo: ["skus","movimientos","avisos"],
+  despacho:       ["pedidos","movimientos","avisos"],
+  pedidos:        ["clientes","pedidos","movimientos","avisos"]
+};
 
 const COLECCIONES = [
   {t:"skus",        campo:"skus",        clave:"codigo", nombre:"productos"},
@@ -3157,7 +3231,9 @@ const NUBE = {
   ocupado: false,
   ultima: null,              // hora de la última sincronización correcta
   vueltas: 0,
-  timer: null
+  timer: null,
+  rol: undefined,            // undefined: sin usuario (local); null: usuario sin rol
+  rolLeido: false            // ya se preguntó mi_rol() en esta carga de la página
 };
 
 /* ------------------------------------------------------------- utilidades */
@@ -3190,10 +3266,12 @@ function nubeGuardarSesion(s){
 function nubeLeerEspejo(){
   try{
     const e = JSON.parse(localStorage.getItem(NUBE_MARK) || "null");
-    if(e){ NUBE.espejo = e.espejo || {}; NUBE.desde = e.desde || NUBE.desde; return; }
+    if(e){ NUBE.espejo = e.espejo || {}; NUBE.desde = e.desde || NUBE.desde;
+           NUBE.espejo.costos = NUBE.espejo.costos || {}; return; }
   }catch(e){}
   COLECCIONES.forEach(c => NUBE.espejo[c.t] = {});
   NUBE.espejo.config = {};
+  NUBE.espejo.costos = {};
 }
 function nubeGuardarEspejo(){
   try{ localStorage.setItem(NUBE_MARK, JSON.stringify({espejo:NUBE.espejo, desde:NUBE.desde})); }catch(e){}
@@ -3201,8 +3279,83 @@ function nubeGuardarEspejo(){
 function nubeOlvidarEspejo(){
   NUBE.espejo = {}; COLECCIONES.forEach(c => NUBE.espejo[c.t] = {});
   NUBE.espejo.config = {};
+  NUBE.espejo.costos = {};
   NUBE.desde = "1970-01-01T00:00:00Z";
   nubeGuardarEspejo();
+}
+
+// La base guarda el costo aparte (tabla costos), así que la firma de un
+// producto se toma sin él. El espejo de costos guarda el valor, no la firma:
+// con él se vuelve a poner el costo cuando el producto baja otra vez.
+function nubeSinCosto(item){ const {costo, ...resto} = item; return resto; }
+function nubeFirmaFila(t, item){ return nubeFirma(t === "skus" ? nubeSinCosto(item) : item); }
+
+/* ---------------------------------------------------------------- roles --- */
+
+function nubeLeerRolGuardado(){
+  try{
+    const r = JSON.parse(localStorage.getItem(NUBE_ROL) || "null");
+    NUBE.rol = r ? (ROLES.includes(r.rol) ? r.rol : null) : undefined;
+  }catch(e){ NUBE.rol = undefined; }
+}
+function nubeGuardarRol(rol){
+  NUBE.rol = rol;
+  try{ rol === undefined ? localStorage.removeItem(NUBE_ROL)
+                         : localStorage.setItem(NUBE_ROL, JSON.stringify({rol: rol})); }catch(e){}
+}
+async function nubeLeerRol(){
+  const r = await nubeRpc("mi_rol", {});
+  const rol = ROLES.includes(r) ? r : null;
+  const antes = NUBE.rol;
+  nubeGuardarRol(rol);
+  NUBE.rolLeido = true;
+  if(antes !== rol) nubeAplicarRol();
+}
+// "local": nunca entró con usuario o se desconectó; todo como antes.
+function nubeRolPantalla(){ return NUBE.rol === undefined ? "local" : (NUBE.rol || "sin_rol"); }
+// "e", "l" o null (el rol no usa ese panel).
+function nubePanelModo(p){
+  const r = nubeRolPantalla();
+  if(r === "local" || p === "ajustes") return "e";
+  return (ROL_PANELES[r] || {})[p] || null;
+}
+function nubePanelEntrada(){ return ROL_ENTRADA[nubeRolPantalla()] || "inicio"; }
+function nubeEscribe(t){
+  const r = nubeRolPantalla();
+  return (ROL_ESCRIBE[r] || []).includes(t);
+}
+
+// Menú, textos y botones según el rol. Sin usuario deja todo como siempre.
+function nubeAplicarRol(){
+  const r = nubeRolPantalla();
+  $$("nav button").forEach(b => {
+    const p = b.dataset.p;
+    const ve = r === "local" || (p === "ajustes" ? r === "admin" : !!nubePanelModo(p));
+    b.style.display = ve ? "" : "none";
+  });
+  $$("[data-costos]").forEach(e => e.style.display = veCostos() ? "" : "none");
+  $$("[data-escribe]").forEach(e => e.style.display = panelSoloLectura(e.dataset.escribe) ? "none" : "");
+  const sub = document.getElementById("subNuevo");
+  if(sub) sub.textContent = veCostos()
+    ? "El sistema calcula el peso y la contribución mientras armas el pedido, y no te deja confirmar uno que pierde dinero."
+    : "El sistema calcula el peso mientras armas el pedido.";
+  nubePintarPill();
+  const abierto = document.querySelector(".panel.on");
+  const p = abierto ? abierto.id.replace("p-","") : "inicio";
+  // En "Nuevo pedido" ir() no repinta; recalc() rehace la parte de economía.
+  ir(nubePanelModo(p) ? p : nubePanelEntrada());
+  if(typeof recalc === "function") recalc();
+}
+
+// En Ajustes, "Este dispositivo" y "Base compartida" son para todos los roles;
+// el resto, solo admin. Un usuario sin rol solo ve la tarjeta de la base.
+function nubeAplicarAjustes(){
+  const r = nubeRolPantalla();
+  $$("#p-ajustes > .card").forEach(c => {
+    const ve = r === "local" || r === "admin" || c.id === "nubeCard" ||
+               (r !== "sin_rol" && c.hasAttribute("data-todos"));
+    c.style.display = ve ? "" : "none";
+  });
 }
 
 const nubeActiva = () => !!(NUBE.url && NUBE.key && NUBE.sesion && NUBE.sesion.access_token);
@@ -3273,10 +3426,12 @@ async function nubeEntrar(email, clave){
 
 function nubeSalir(){
   nubeGuardarSesion(null);
+  // Sin usuario, todo vuelve a verse como en modo local.
+  nubeGuardarRol(undefined); NUBE.rolLeido = false;
   NUBE.estado = "local"; NUBE.detalle = "";
   if(NUBE.timer){ clearInterval(NUBE.timer); NUBE.timer = null; }
   nubePintarPill();
-  if(typeof pintarAjustes === "function" && document.querySelector("#p-ajustes.on")) pintarAjustes();
+  nubeAplicarRol();
 }
 
 /* --------------------------------------------------------------- subir --- */
@@ -3284,7 +3439,13 @@ function nubeSalir(){
 function nubeCambiosLocales(){
   const lotes = {};
   let n = 0;
+  // Solo se suben las tablas que el rol puede escribir (la base igual lo
+  // rechazaría). El costo va dentro del producto solo si el rol ve costos;
+  // la base lo saca de ahí y lo guarda en la tabla costos.
+  const conCostos = veCostos();
+  const ec = NUBE.espejo.costos = NUBE.espejo.costos || {};
   COLECCIONES.forEach(c => {
+    if(!nubeEscribe(c.t)) return;
     const esp = NUBE.espejo[c.t] = NUBE.espejo[c.t] || {};
     const filas = [];
     const vivos = {};
@@ -3292,15 +3453,20 @@ function nubeCambiosLocales(){
       const k = item[c.clave];
       if(k === undefined || k === null) return;
       vivos[k] = true;
-      const f = nubeFirma(item);
-      if(esp[k] !== f){ filas.push({[c.clave]: String(k), datos: item}); n++; }
+      const f = nubeFirmaFila(c.t, item);
+      const cambiaCosto = c.t === "skus" && conCostos && item.costo !== undefined && ec[k] !== item.costo;
+      if(esp[k] !== f || cambiaCosto){
+        const datos = c.t === "skus" && !conCostos ? nubeSinCosto(item) : item;
+        filas.push({[c.clave]: String(k), datos: datos}); n++;
+      }
     });
     // Los movimientos nunca se borran de la base desde aquí (D8).
     const borrar = c.t === "movimientos" ? [] : Object.keys(esp).filter(k => !vivos[k]);
     if(filas.length || borrar.length) lotes[c.t] = {c, filas, borrar};
     n += borrar.length;
   });
-  // Parámetros y cuenta bancaria
+  // Parámetros y cuenta bancaria: solo admin escribe config.
+  if(!nubeEscribe("config")) return {lotes, n};
   const esp = NUBE.espejo.config = NUBE.espejo.config || {};
   const cfgFilas = [];
   [["params", D.params], ["banco", D.banco]].forEach(([k, v]) => {
@@ -3325,7 +3491,10 @@ async function nubeSubir(){
           body: filas.slice(i, i+200)
         });
       }
-      filas.forEach(f => NUBE.espejo[t][f[c.clave]] = nubeFirma(f.datos));
+      filas.forEach(f => {
+        NUBE.espejo[t][f[c.clave]] = nubeFirmaFila(t, f.datos);
+        if(t === "skus" && f.datos.costo !== undefined) NUBE.espejo.costos[f[c.clave]] = f.datos.costo;
+      });
     }
     for(const k of borrar){
       await nubeFetch("/rest/v1/" + t + "?" + c.clave + "=eq." + encodeURIComponent(k), {method:"DELETE"});
@@ -3341,8 +3510,11 @@ function nubeAplicar(campo, clave, tabla, filas){
   let n = 0;
   filas.forEach(f => {
     const item = f.d, k = String(f.k);
-    const fi = nubeFirma(item);
+    const fi = nubeFirmaFila(tabla, item);
     if(NUBE.espejo[tabla][k] === fi) return;      // ya lo teníamos igual
+    // El producto llega sin costo: se le pone el último que mandó la base.
+    const ec = NUBE.espejo.costos || {};
+    if(tabla === "skus" && item.costo === undefined && ec[k] !== undefined) item.costo = ec[k];
     const arr = D[campo];
     const i = arr.findIndex(x => String(x[clave]) === k);
     if(i >= 0) arr[i] = item; else arr.push(item);
@@ -3357,6 +3529,16 @@ async function nubeBajar(){
   const r = await nubeRpc("cambios", {desde: NUBE.desde});
   let n = 0;
   COLECCIONES.forEach(c => { n += nubeAplicar(c.campo, c.clave, c.t, r[c.t] || []); });
+  // Costos: la base solo los manda a quien puede leerlos (admin y coordinador).
+  // Se ponen en cada producto para que los márgenes sigan funcionando.
+  const ec = NUBE.espejo.costos = NUBE.espejo.costos || {};
+  (r.costos || []).forEach(f => {
+    const k = String(f.k), v = f.d ? f.d.costo : undefined;
+    if(v === undefined) return;
+    ec[k] = v;
+    const s = D.skus.find(x => String(x.codigo) === k);
+    if(s && s.costo !== v){ s.costo = v; n++; }
+  });
   (r.config || []).forEach(f => {
     const fi = nubeFirma(f.d);
     if(NUBE.espejo.config[f.k] === fi) return;
@@ -3373,6 +3555,7 @@ async function nubeBajar(){
 async function nubeReconciliar(){
   const r = await nubeRpc("llaves", {});
   let n = 0;
+  // r.costos no se usa: los costos no son una colección propia en el navegador.
   COLECCIONES.forEach(c => {
     if(c.t === "movimientos") return;     // los movimientos no se quitan (D8)
     const vivos = new Set((r[c.t] || []).map(String));
@@ -3396,6 +3579,8 @@ async function nubeSincronizar(forzar){
   if(!navigator.onLine){ nubeEstado("sin_red", "Sin internet — trabajando en este navegador"); return; }
   NUBE.ocupado = true;
   try{
+    // El rol se pregunta una vez por carga, antes de subir nada.
+    if(!NUBE.rolLeido) await nubeLeerRol();
     const subidos = await nubeSubir();
     let bajados = await nubeBajar();
     NUBE.vueltas++;
@@ -3465,12 +3650,14 @@ async function nubePrimeraVez(){
   // porque venció la sesión). Solo si ya estuvo sincronizado con la base; si
   // nunca lo estuvo, sus datos son de otra isla y manda la base. El corte y
   // los saldos iniciales nunca se suben desde aquí.
+  // Con roles: solo admin siembra una base vacía, y N3 solo si el rol escribe
+  // movimientos. Fuera de eso, siempre manda la base y lo local se reemplaza.
   const espMov = (NUBE.espejo && NUBE.espejo.movimientos) || {};
-  const pendientes = Object.keys(espMov).length ? D.movimientos.filter(m =>
+  const pendientes = Object.keys(espMov).length && nubeEscribe("movimientos") ? D.movimientos.filter(m =>
     m.id && m.id !== CORTE_ID && !String(m.id).startsWith("ini|") && !m.ejemplo &&
     espMov[m.id] !== nubeFirma(m)) : [];
   nubeOlvidarEspejo();
-  if(vacia){
+  if(vacia && nubeRolPantalla() === "admin"){
     await nubeSubir();
     nubeGuardarEspejo();
     NUBE.ultima = Date.now();
@@ -3485,15 +3672,21 @@ async function nubePrimeraVez(){
     });
   }
   D.clientes = []; D.pedidos = []; D.movimientos = []; D.avisos = [];
-  D.skus.forEach(s => { s.existencia = 0; });
+  // Los productos también los manda la base: si quedaran los locales que la
+  // base no tiene, la vuelta siguiente los subiría como recién creados aquí.
+  D.skus = [];
   const n = await nubeBajar();
+  // Parámetros y cuenta que la base no trae se quedan aquí, pero no se suben.
+  [["params", D.params], ["banco", D.banco]].forEach(([k, v]) => {
+    if(NUBE.espejo.config[k] === undefined) NUBE.espejo.config[k] = nubeFirma(v);
+  });
   await nubeReconciliar();
   guardarLocal();
   if(typeof recalc === "function") recalc();
   nubeGuardarEspejo();
   NUBE.ultima = Date.now();
   nubeEstado("en_linea", "");
-  return {accion:"bajo", n};
+  return {accion:"bajo", n, vacia: !!vacia};
 }
 
 /* ================================================================== UI === */
@@ -3552,10 +3745,13 @@ function nubeTarjeta(){
   const conectado = nubeActiva();
   const cfg = !!(NUBE.url && NUBE.key);
   const seg = NUBE.ultima ? Math.round((Date.now()-NUBE.ultima)/1000) : null;
+  const avisoRol = nubeRolPantalla() === "sin_rol"
+    ? '<div id="nubeSinRol" style="background:#FDECEA;color:#B3261E;font-size:12.5px;padding:9px 11px;' +
+      'border-radius:6px;margin-bottom:12px">Tu usuario no tiene rol; pide acceso al administrador.</div>' : '';
 
   if(conectado){
     return '<div class="card" id="nubeCard">' +
-      '<h3>Base compartida</h3>' +
+      '<h3>Base compartida</h3>' + avisoRol +
       '<p style="margin:0 0 14px;color:#6B7A8F;font-size:13px">' +
       'Este navegador está conectado a la base del equipo. Todo lo que registres aquí ' +
       'lo ven los demás dispositivos en pocos segundos, y viceversa.</p>' +
@@ -3575,7 +3771,7 @@ function nubeTarjeta(){
   }
 
   return '<div class="card" id="nubeCard">' +
-    '<h3>Base compartida</h3>' +
+    '<h3>Base compartida</h3>' + avisoRol +
     '<p style="margin:0 0 6px;color:#6B7A8F;font-size:13px">' +
     'Hoy los datos de este navegador <strong>no se comparten</strong>: lo que registres aquí no ' +
     'aparece en el teléfono ni en la computadora de bodega.</p>' +
@@ -3651,14 +3847,21 @@ function nubeLogin(){
     b.disabled = true; b.textContent = "Entrando…";
     try{
       await nubeEntrar(mail, pass);
+      // El rol se lee antes de ordenar los datos: decide qué se puede subir.
+      NUBE.rolLeido = false;
+      await nubeLeerRol();
       b.textContent = "Ordenando los datos…";
       const r = await nubePrimeraVez();
       cerrar();
       nubeArrancar();
-      if(typeof pintarAjustes === "function") pintarAjustes();
+      // El panel abierto (Ajustes o el de entrada del rol) se dibuja con lo bajado.
+      nubeRepintar();
       alert(r.accion === "subio"
         ? "Listo. La base estaba vacía, así que se subió la información de este navegador.\n\n" +
           "Ahora puedes abrir el sistema en otro dispositivo, entrar con el mismo usuario, y verás lo mismo."
+        : r.vacia
+        ? "Listo. La base todavía está vacía: la primera carga la hace un usuario admin.\n\n" +
+          "Cuando la haga, este dispositivo verá la información en pocos segundos."
         : "Listo. La base ya tenía información y se trajo a este navegador.\n\n" +
           "Desde ahora este dispositivo y los demás ven lo mismo.");
     }catch(e){
@@ -3670,6 +3873,57 @@ function nubeLogin(){
     if(e.key === "Enter") document.getElementById("nbEntrar").click();
   });
   setTimeout(() => { const m = document.getElementById("nbMail"); if(m) m.focus(); }, 30);
+}
+
+/* ------------------------------------------------ ventana de bienvenida --- */
+
+// Mismo criterio que nubeLeerSesion, pero sin tocar NUBE.sesion: solo
+// pregunta si este navegador ya tiene una sesión guardada.
+function nubeHaySesion(){
+  try{
+    const s = JSON.parse(localStorage.getItem(NUBE_SES) || "null");
+    return !!(s && s.refresh_token);
+  }catch(e){ return false; }
+}
+
+// Al abrir la app sin sesión se ofrece entrar o seguir en modo local. Usa la
+// misma capa que nubeLogin (#nubeCapa) para heredar su estilo; por eso se
+// quita antes de abrir nubeLogin, que no se abre si ya hay una capa.
+function nubeBienvenida(){
+  if(document.getElementById("nubeCapa")) return;
+  const capa = document.createElement("div");
+  capa.id = "nubeCapa";
+  capa.innerHTML =
+    '<div id="nubeCaja">' +
+      '<h3>Sistema de Distribución — Insumos Médicos</h3>' +
+      '<p class="s">Entra con tu usuario para trabajar con la base del equipo, ' +
+      'o sigue solo en este navegador como hasta ahora.</p>' +
+      '<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">' +
+        '<button class="b" id="nbBienEntrar">Entrar con mi usuario</button>' +
+        '<button class="s" id="nbBienLocal">Seguir solo en este navegador</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(capa);
+  const cerrar = () => capa.remove();
+  document.getElementById("nbBienLocal").onclick = cerrar;
+  document.getElementById("nbBienEntrar").onclick = function(){
+    cerrar();
+    if(NUBE.url && NUBE.key){ nubeLogin(); return; }
+    // Sin conexión guardada no hay a dónde entrar: se lleva a la tarjeta
+    // para pegar primero la dirección y la llave.
+    ir("ajustes");
+    const card = document.getElementById("nubeCard");
+    if(!card) return;
+    const h = card.querySelector("h3");
+    if(h) h.insertAdjacentHTML("afterend",
+      '<div style="background:#FFF4DB;color:#8A5A00;font-size:12.5px;padding:9px 11px;' +
+      'border-radius:6px;margin-bottom:12px">Para entrar con tu usuario, primero pega aquí ' +
+      'la dirección y la llave del proyecto y pulsa <strong>Guardar conexión</strong>.</div>');
+    const hd = document.querySelector("header"); if(hd) card.style.scrollMarginTop = (hd.offsetHeight + 8) + "px";
+    card.scrollIntoView({block:"start"});
+    const u = document.getElementById("nbUrl"); if(u) u.focus();
+  };
+  setTimeout(() => { const b = document.getElementById("nbBienEntrar"); if(b) b.focus(); }, 30);
 }
 
 /* ------------------------------------------------------------- arranque --- */
@@ -3686,6 +3940,7 @@ if(typeof pintarAjustes === "function"){
       const vieja = document.getElementById("nubeCard");
       if(vieja) vieja.remove();
       p.insertAdjacentHTML("afterbegin", nubeTarjeta());
+      nubeAplicarAjustes();
     }
     // Con base compartida, el aviso de respaldo ya no es el mismo: la
     // información deja de depender de una sola computadora.
@@ -3706,11 +3961,15 @@ document.addEventListener("visibilitychange", () => {
 (function nubeInit(){
   nubeMontarPill();
   nubeLeerEspejo();
+  // Con un rol ya guardado, la pantalla se arma con él mientras llega mi_rol().
+  nubeLeerRolGuardado();
+  if(NUBE.rol !== undefined) nubeAplicarRol();
   if(nubeLeerCfg() && nubeLeerSesion()){
     nubeEstado("conectando", "");
     nubeArrancar();
   }else{
     nubeEstado("local", "");
+    if(!nubeHaySesion()) nubeBienvenida();
   }
 })();
 
