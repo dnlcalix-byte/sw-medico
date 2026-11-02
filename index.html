@@ -347,6 +347,23 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
     <div id="invRes"></div>
     <div id="invMsg"></div>
   </div>
+  <div class="card" id="bodCard" data-importa="bodegas">
+    <h3>Bodegas DICOSA</h3>
+    <p class="mini">Archivo de bodegas (.xlsx) con COD. UNICO, NOMBRE BODEGA, ZONA GEOGRAFICA, MERCADO y TIPO.
+      Solo es vendible lo que está en bodegas de tipo VENTA.</p>
+    <div class="fila"><div><label>Archivo de bodegas</label><input id="bodArchivo" type="file" accept=".xlsx"></div></div>
+    <div id="bodPrevia"></div>
+    <div id="bodMsg"></div>
+  </div>
+  <div class="card" id="impCard" data-importa="inv_detalle">
+    <h3>Importar Inventario DICOSA</h3>
+    <p class="mini">Archivo Inv (.xlsx). Primero se ve una vista previa; nada cambia hasta confirmar.
+      La existencia de cada producto pasa a ser lo que DICOSA tiene en bodegas VENTA, con un ajuste por la diferencia.
+      Un producto que no viene en el archivo pasa a 0.</p>
+    <div class="fila"><div><label>Archivo Inv</label><input id="impArchivo" type="file" accept=".xlsx"></div></div>
+    <div id="impPrevia"></div>
+    <div id="impMsg"></div>
+  </div>
   <div class="card">
     <h3>Existencias</h3>
     <div class="fila noprint">
@@ -359,6 +376,10 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
         <option value="pago">Apartado esperando depósito</option></select></div>
     </div>
     <div id="tablaInventario" style="margin-top:12px"></div>
+  </div>
+  <div class="card" id="detCard">
+    <h3>Detalle DICOSA por bodega y lote</h3>
+    <div id="tablaDetalle"></div>
   </div>
 </section>
 
@@ -1381,7 +1402,7 @@ function cargar(){
 function migrar(){
   D.params  = D.params  || {};
   Object.entries(PARAMS_DEF).forEach(([k,o])=>{ if(D.params[k]===undefined) D.params[k]=o.v; });
-  ["skus","clientes","pedidos","movimientos","avisos"].forEach(k => { if(!D[k]) D[k]=[]; });
+  ["skus","clientes","pedidos","movimientos","avisos","bodegas","inv_detalle"].forEach(k => { if(!D[k]) D[k]=[]; });
   // Campos agregados tras la segunda revisión con el cliente
   D.skus.forEach(s => {
     if(s.oferta === undefined) s.oferta = false;
@@ -1458,10 +1479,21 @@ function letraDispositivo(){
    ============================================================================ */
 const ABIERTOS = ["confirmado","preparando","listo","en_ruta"];
 
+// Pendiente 167 (2026-11-02). La «Cantidad.» de DICOSA ya descuenta los pedidos
+// pagados. Un pedido abierto no cuenta como comprometido para un producto que
+// vino en la última importación si su depósito se registró (pago.verificado_en)
+// antes de esa importación. El crédito sigue contando; los productos que no
+// vienen en el archivo, como siempre.
+function yaDescontadoDicosa(p, codigo){
+  const u = ultimaImportacion();
+  const v = p.pago && p.pago.verificado_en;
+  return !!(u && v && u.codigos.has(codigo) && v < u.fecha);
+}
 function comprometido(codigo){
   let total = 0, esperandoPago = 0;
   D.pedidos.forEach(p => {
     if(!ABIERTOS.includes(p.estado)) return;
+    if(yaDescontadoDicosa(p, codigo)) return;
     p.lineas.forEach(l => {
       if(l.codigo !== codigo) return;
       total += l.cantidad;
@@ -1488,14 +1520,27 @@ function olvidarExistencia(){ _inv = null; }
 function calcInv(){
   if(_inv) return _inv;
   const corte = D.movimientos.find(m => m.id === CORTE_ID) || null;
+  // Importaciones Inv DICOSA (pendiente 167): cada una deja su marca en un
+  // movimiento (campo «importacion»), que leen todos los roles.
+  const imps = D.movimientos.filter(m => m.importacion && m.fecha)
+    .map(m => ({fecha:m.fecha, sello:m.importacion.sello, codigos:new Set(m.importacion.codigos || [])}))
+    .sort((x, y) => x.fecha < y.fecha ? -1 : x.fecha > y.fecha ? 1 : 0);
+  // La entrega de un pedido pagado antes de una importación que trajo ese
+  // producto y que ocurrió antes de la entrega no resta: DICOSA ya lo había
+  // descontado. Depende solo del movimiento, así que no cambia con las
+  // importaciones siguientes ni con el rol que mira.
+  const yaEnDicosa = m => m.tipo === "despacho" && m.pago_verificado_en &&
+    imps.some(i => i.codigos.has(m.codigo) && m.pago_verificado_en < i.fecha && i.fecha < m.fecha);
   const por = {};
   if(corte) D.movimientos.forEach(m => {
     if(m.corte !== CORTE_ID || !m.codigo) return;
+    if(yaEnDicosa(m)) return;
     por[m.codigo] = (por[m.codigo] || 0) + (Number(m.cantidad) || 0);
   });
-  return (_inv = {corte, por});
+  return (_inv = {corte, por, imps});
 }
 function corteInv(){ return calcInv().corte; }
+function ultimaImportacion(){ const l = calcInv().imps; return l.length ? l[l.length - 1] : null; }
 function existencia(sku){
   const c = calcInv();
   return c.corte ? (c.por[sku.codigo] || 0) : (sku.existencia || 0);
@@ -1765,6 +1810,8 @@ function agregarLinea(codigo){
   const s = D.skus.find(x=>x.codigo===codigo);
   if(!s) return;
   if(s.restringido){ alert("Ese producto tiene distribución restringida y no puede venderse."); return; }
+  if(s.por_completar){ alert("«"+s.nombre+"» está por completar: entró con el Inventario DICOSA "+
+    "y no se puede vender hasta ponerle peso y precio en Catálogo."); return; }
   if(existencia(s) <= 0){
     alert("«"+s.nombre+"» está agotado.\n\nEl médico puede verlo en el catálogo pero no se puede "+
           "comprometer una entrega. Registra el ingreso en Inventario cuando llegue la compra."); return; }
@@ -1812,7 +1859,8 @@ function subtab(t){
 }
 
 function tarjeta(s){
-  const agotado = disponible(s) <= 0;
+  // Un producto por completar se ve como agotado: no se puede agregar.
+  const agotado = disponible(s) <= 0 || !!s.por_completar;
   const oferta = !!s.oferta, nuevo = !!s.nuevo;
   const precio = oferta && s.precio_oferta ? s.precio_oferta : s.precio;
   const tag = agotado ? '<span class="tag t-ag">AGOTADO</span>'
@@ -1833,13 +1881,13 @@ function tarjeta(s){
 function pintarCatalogoCompra(){
   const sel = $("#catCategoria");
   if(sel && !sel.options.length){
-    const cats = [...new Set(D.skus.filter(s=>!s.restringido).map(s=>s.categoria))].sort();
+    const cats = [...new Set(D.skus.filter(s=>!s.restringido && !s.por_completar).map(s=>s.categoria))].sort();
     sel.innerHTML = `<option value="">Todas las categorías</option>` +
       cats.map(c=>`<option>${esc(c)}</option>`).join("");
   }
   const cat = sel ? sel.value : "";
   const f = $("#catFiltro") ? $("#catFiltro").value : "";
-  let r = D.skus.filter(s=>!s.restringido);
+  let r = D.skus.filter(s=>!s.restringido && !s.por_completar);
   if(cat) r = r.filter(s=>s.categoria===cat);
   if(f==="oferta") r = r.filter(s=>s.oferta);
   if(f==="nuevo")  r = r.filter(s=>s.nuevo);
@@ -1895,7 +1943,7 @@ function repetirUltimo(id){
   const p = D.pedidos.find(x=>x.id===id); if(!p) return;
   P.lineas = p.lineas.filter(l=>{
     const s = D.skus.find(x=>x.codigo===l.codigo);
-    return s && !s.restringido;
+    return s && !s.restringido && !s.por_completar;
   }).map(l=>({...l}));
   const faltan = p.lineas.length - P.lineas.length;
   recalc();
@@ -1922,6 +1970,10 @@ function confirmarPedido(){
   if(ex.sinCatalogo.length){
     alert(ex.sinCatalogo.map(n=>"«"+n+"»: ese producto ya no está en el catálogo, quítalo del pedido.").join("\n"));
     recalc(); return; }
+  const pc = P.lineas.filter(l => (D.skus.find(x=>x.codigo===l.codigo)||{}).por_completar);
+  if(pc.length){
+    alert(pc.map(l=>"«"+l.nombre+"»: está por completar y no se puede vender, quítalo del pedido.").join("\n"));
+    return; }
   const c = calcularPedido();
   const ahora = new Date().toISOString();
   let motivo = null;
@@ -2166,7 +2218,8 @@ function confirmarEntrega(id){
     if(!s) return;
     if(!corteInv()) s.existencia -= sale[cod];      // antes del corte, como siempre
     movimiento({id:"des|"+p.id+"|"+cod, tipo:"despacho", codigo:cod,
-      cantidad:-sale[cod], ref:"Pedido "+p.numero, pedido_id:p.id});
+      cantidad:-sale[cod], ref:"Pedido "+p.numero, pedido_id:p.id,
+      pago_verificado_en:(p.pago && p.pago.verificado_en) || null});
   });
   guardar(); cerrarModal(); pintarPedidos(); pintarInventario(); pintarDespacho();
 }
@@ -2528,7 +2581,7 @@ function pintarCatalogo(){
         <td class="num">${Math.round(dv)}</td>
         <td><span class="pill ${pc}">${cn}</span></td>
         <td class="num">${disponible(s)>0?disponible(s):'<span class="pill p-gris">sin disp.</span>'}</td>
-        <td>${s.oferta?'<span class="pill p-mal">oferta</span> ':''}${s.nuevo?'<span class="pill p-ok">nuevo</span>':''}</td></tr>`;
+        <td>${s.oferta?'<span class="pill p-mal">oferta</span> ':''}${s.nuevo?'<span class="pill p-ok">nuevo</span>':''}${s.por_completar?'<span class="pill p-med">por completar</span>':''}</td></tr>`;
     }).join("")}</tbody></table></div>`;
 }
 function canalDe(s){
@@ -2597,6 +2650,9 @@ function guardarSku(cod){
   // Después del corte, la ficha no cambia la existencia de un producto que ya
   // existe: se corrige con un ajuste (D6). En uno nuevo, lo tecleado es su saldo inicial.
   if(cod && corteInv()) delete datos.existencia;
+  // Producto que entró con el Inventario DICOSA: queda completo cuando tiene
+  // peso (obligatorio arriba) y precio.
+  if(cod && D.skus.find(x=>x.codigo===cod)?.por_completar) datos.por_completar = !(datos.precio > 0);
   if(cod){ Object.assign(D.skus.find(x=>x.codigo===cod), datos); }
   else { if(D.skus.some(x=>x.codigo===c)){ $("#sErr").innerHTML=
     `<div class="aviso a-mal">Ese código ya existe.</div>`; return; } D.skus.push(datos);
@@ -2671,7 +2727,7 @@ function pintarInventario(){
         <td class="num" style="${c.esperandoPago?'color:var(--rojo);font-weight:700':''}">${c.esperandoPago||"—"}</td>
         <td class="num"><strong>${d}</strong></td>
         <td class="num">${s.minimo}</td>
-        <td><span class="pill ${e.cls}">${e.txt}</span></td>
+        <td><span class="pill ${e.cls}">${e.txt}</span>${s.por_completar?' <span class="pill p-med">Por completar</span>':''}</td>
         ${conCostos?`<td class="num">${L0(existencia(s)*s.costo)}</td>`:''}
         ${corteInv()&&!lectura?`<td class="noprint"><button class="s" onclick="abrirAjuste('${s.codigo}')">Ajuste</button></td>`:''}</tr>`;
     }).join("")}</tbody></table></div>
@@ -2680,7 +2736,12 @@ function pintarInventario(){
       <strong>Comprometido</strong> es lo que ya está en pedidos confirmados que aún no salen.
       <strong>Disponible</strong> es lo que se puede vender hoy: existencia menos comprometido.
       ${corteInv()?`<br>Desde el corte del ${fecha(corteInv().fecha)}, la existencia es la suma de los movimientos:
-      saldo inicial, compras, entregas y ajustes.`:''}</p>`;
+      saldo inicial, compras, entregas y ajustes.`:''}
+      ${ultimaImportacion()?`<br>Última importación DICOSA: <strong id="invUltimaDicosa">${esc(String(ultimaImportacion().sello||"").slice(0,16).replace("T"," "))}</strong>.
+      DICOSA ya descuenta los pedidos pagados: un pedido con depósito registrado antes de esa importación
+      no cuenta como comprometido en los productos del archivo, y su entrega no vuelve a restar.
+      Los pedidos a crédito sí cuentan.`:''}</p>`;
+  pintarDetalle();
 }
 $("#filtroInv").oninput = pintarInventario;
 $("#filtroInvEst").onchange = pintarInventario;
@@ -2761,6 +2822,369 @@ function porRevisar(){
 function marcarRevisado(id){
   movimiento({id:"rev|"+id, tipo:"revisado", codigo:null, cantidad:0, ref_id:id, ref:"Revisado"});
   guardar(); pintarInventario();
+}
+
+/* ============================================================================
+   INVENTARIO DICOSA (fase 1a, 2026-10-29)
+   El archivo Inv de DICOSA dice cuánto hay por producto, bodega y lote.
+   Vendible = suma de «Cantidad.» en bodegas de tipo VENTA. La existencia de
+   la app se lleva a ese número con un ajuste por la diferencia, con id fijo
+   por importación (dicosa|fecha y hora local|código): importar dos veces el
+   mismo archivo no crea nada la segunda vez. El detalle se reemplaza entero.
+   Un producto de la app que no viene en el archivo pasa a 0 con el mismo ajuste.
+   Si una bodega no está en la lista de bodegas, no cambia nada.
+   ============================================================================ */
+
+/* --------------------------------------------- lector de .xlsx sin paquetes
+   Un .xlsx es un ZIP con XML adentro. Se lee el índice del ZIP, se descomprime
+   con DecompressionStream del navegador y se interpreta con DOMParser. Solo la
+   primera hoja y los textos compartidos (sharedStrings). */
+const XLSX_MALO = "El archivo no es un archivo .xlsx válido. No se cambió nada.";
+function xlsxZip(b){
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength), td = new TextDecoder();
+  let e = b.length - 22;
+  while(e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
+  if(e < 0) throw new Error(XLSX_MALO);
+  const n = dv.getUint16(e + 10, true);
+  let p = dv.getUint32(e + 16, true);
+  const out = {};
+  for(let i = 0; i < n; i++){
+    if(p + 46 > b.length || dv.getUint32(p, true) !== 0x02014b50) throw new Error(XLSX_MALO);
+    const metodo = dv.getUint16(p + 10, true), tam = dv.getUint32(p + 20, true);
+    const ln = dv.getUint16(p + 28, true), lx = dv.getUint16(p + 30, true), lc = dv.getUint16(p + 32, true);
+    const local = dv.getUint32(p + 42, true);
+    if(local + 30 > b.length || dv.getUint32(local, true) !== 0x04034b50) throw new Error(XLSX_MALO);
+    const ini = local + 30 + dv.getUint16(local + 26, true) + dv.getUint16(local + 28, true);
+    out[td.decode(b.subarray(p + 46, p + 46 + ln))] = {metodo, datos: b.subarray(ini, ini + tam)};
+    p += 46 + ln + lx + lc;
+  }
+  return out;
+}
+async function xlsxTexto(zip, nombre){
+  const f = zip[nombre];
+  if(!f) return null;
+  let datos = f.datos;
+  if(f.metodo === 8){
+    const s = new Blob([datos]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    datos = new Uint8Array(await new Response(s).arrayBuffer());
+  } else if(f.metodo !== 0) throw new Error(XLSX_MALO);
+  return new TextDecoder().decode(datos);
+}
+function xlsxXml(t){
+  if(t === null) throw new Error(XLSX_MALO);
+  const d = new DOMParser().parseFromString(t, "application/xml");
+  if(d.getElementsByTagName("parsererror").length) throw new Error(XLSX_MALO);
+  return d;
+}
+const xlsxTag = (n, tag) => Array.from(n.getElementsByTagNameNS("*", tag));
+const xlsxColumna = ref => [...ref.replace(/\d+$/, "")].reduce((n, l) => n * 26 + l.charCodeAt(0) - 64, 0) - 1;
+// Filas de la primera hoja: [{n: número de fila en Excel, celdas: [texto por columna]}].
+async function leerXlsx(archivo){
+  try{
+    const zip = xlsxZip(new Uint8Array(await archivo.arrayBuffer()));
+    const hoja1 = xlsxTag(xlsxXml(await xlsxTexto(zip, "xl/workbook.xml")), "sheet")[0];
+    const rid = hoja1 && (Array.from(hoja1.attributes).find(a => a.localName === "id" && a.prefix) || {}).value;
+    const rel = xlsxTag(xlsxXml(await xlsxTexto(zip, "xl/_rels/workbook.xml.rels")), "Relationship")
+      .find(r => r.getAttribute("Id") === rid);
+    const destino = rel.getAttribute("Target");
+    const ruta = destino.startsWith("/") ? destino.slice(1) : "xl/" + destino;
+    const ssTxt = await xlsxTexto(zip, "xl/sharedStrings.xml");
+    const ss = ssTxt === null ? [] : xlsxTag(xlsxXml(ssTxt), "si").map(si =>
+      xlsxTag(si, "t").filter(t => t.parentNode.localName !== "rPh").map(t => t.textContent).join(""));
+    return xlsxTag(xlsxXml(await xlsxTexto(zip, ruta)), "row").map((r, i) => {
+      const celdas = [];
+      xlsxTag(r, "c").forEach(c => {
+        const ref = c.getAttribute("r"), t = c.getAttribute("t"), v = xlsxTag(c, "v")[0];
+        let val = v ? v.textContent : "";
+        if(t === "s") val = ss[Number(val)] ?? "";
+        else if(t === "inlineStr") val = xlsxTag(c, "t").map(x => x.textContent).join("");
+        celdas[ref ? xlsxColumna(ref) : celdas.length] = val;
+      });
+      return {n: Number(r.getAttribute("r")) || i + 1, celdas: Array.from(celdas, x => x ?? "")};
+    });
+  }catch(e){ throw new Error(XLSX_MALO); }
+}
+
+/* ------------------------------------------------- columnas por encabezado */
+// Sin mayúsculas, tildes ni espacios: « Número de  Material» = «numerodematerial».
+function normalizarEncabezado(s){
+  return String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, "");
+}
+const INV_COLS = {codigo:["numerodematerial"], descripcion:["descripcion","descripciondematerial",
+  "descripciondelmaterial","textobrevedematerial","textobrevematerial","textobreve","denominacion"],
+  centro:["centro"], almacen:["almacen"], lote:["lote"], cantidad:["cantidad."],
+  vence:["fechadevencimiento"], consignacion_cod:["columna4"], consignacion:["columna5"]};
+const BOD_COLS = {cod:["cod.unico"], nombre:["nombrebodega"], zona:["zonageografica"],
+  mercado:["mercado"], tipo:["tipo"]};
+const NOMBRE_COL = {codigo:"Número de Material", descripcion:"descripción", centro:"Centro", almacen:"Almacén",
+  lote:"Lote", cantidad:"Cantidad.", vence:"Fecha de Vencimiento", consignacion_cod:"Columna4",
+  consignacion:"Columna5", cod:"COD. UNICO",
+  nombre:"NOMBRE BODEGA", zona:"ZONA GEOGRAFICA", mercado:"MERCADO", tipo:"TIPO"};
+// La fila de encabezados es la primera que tiene la primera columna pedida.
+function ubicarColumnas(filas, cols){
+  const clave = Object.values(cols)[0][0];
+  const h = filas.findIndex(f => f.celdas.some(c => normalizarEncabezado(c) === clave));
+  if(h < 0) return {error: "No se encontró la fila de encabezados (falta «"+NOMBRE_COL[Object.keys(cols)[0]]+"»)."};
+  const cab = filas[h].celdas.map(normalizarEncabezado), idx = {}, faltan = [];
+  Object.entries(cols).forEach(([k, cands]) => {
+    const i = cab.findIndex(c => cands.includes(c));
+    if(i < 0) faltan.push(NOMBRE_COL[k]); else idx[k] = i;
+  });
+  if(faltan.length) return {error: "Faltan columnas: "+faltan.join(", ")+". Encabezados del archivo: "+
+    filas[h].celdas.filter(c => String(c).trim()).join(" · ")+"."};
+  return {idx, datos: filas.slice(h + 1).filter(f => f.celdas.some(c => String(c).trim() !== ""))};
+}
+const tipoBodega = t => String(t ?? "").trim().toUpperCase().replace(/\s+/g, " ");
+const codigoMaterial = v => String(v ?? "").trim().replace(/\.0+$/, "");
+const redondear = x => Math.round(x * 1e6) / 1e6;
+// Número de serie de Excel (días desde 1899-12-30) a AAAA-MM-DD.
+function fechaSerie(v){
+  const t = String(v ?? "").trim(), n = Number(t);
+  if(!t) return null;
+  if(!isFinite(n)) return t;
+  return new Date(Math.round((n - 25569) * 86400000)).toISOString().slice(0, 10);
+}
+function selloLocal(d){
+  const p = n => String(n).padStart(2, "0");
+  return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+"T"+p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds());
+}
+// Sello de esta importación. Si otra ya usó ese segundo, el siguiente libre.
+function selloImportacion(){
+  let t = Date.now(), s;
+  while(D.movimientos.some(m => String(m.id).startsWith("dicosa|"+(s = selloLocal(new Date(t)))+"|"))) t += 1000;
+  return s;
+}
+
+/* ----------------------------------------------------------- quién importa */
+function puedeImportar(t){
+  return rolPantalla() === "local" || (typeof nubeEscribe === "function" && nubeEscribe(t));
+}
+// Del detalle, pedidos ve solo las bodegas VENTA; despacho, nada.
+function detalleVisible(){
+  const r = rolPantalla(), d = D.inv_detalle || [];
+  if(["local","admin","coordinador","administrativo"].includes(r)) return d;
+  if(r === "pedidos") return d.filter(x => x.tipo === "VENTA");
+  return [];
+}
+
+/* ---------------------------------------------------------------- bodegas */
+let BOD = null;
+$("#bodArchivo").onchange = async function(){
+  const f = this.files[0]; this.value = "";
+  BOD = null; $("#bodPrevia").innerHTML = ""; $("#bodMsg").innerHTML = "";
+  if(!f) return;
+  const mal = t => { $("#bodMsg").innerHTML = `<div class="aviso a-mal">${esc(t)}</div>`; };
+  if(!puedeImportar("bodegas")) return mal("Tu rol no carga bodegas.");
+  let filas;
+  try{ filas = await leerXlsx(f); }catch(e){ return mal(e.message); }
+  const u = ubicarColumnas(filas, BOD_COLS);
+  if(u.error) return mal(u.error+" No se cambió nada.");
+  const lista = {};
+  let sinCodigo = 0;
+  u.datos.forEach(fl => {
+    const v = k => String(fl.celdas[u.idx[k]] ?? "").trim();
+    const cod = v("cod").toUpperCase();
+    if(!cod){ sinCodigo++; return; }
+    lista[cod] = {cod_unico:cod, nombre:v("nombre"), zona:v("zona"), mercado:v("mercado"), tipo:tipoBodega(v("tipo"))};
+  });
+  BOD = Object.values(lista);
+  const porTipo = {};
+  BOD.forEach(b => { porTipo[b.tipo] = (porTipo[b.tipo]||0) + 1; });
+  $("#bodPrevia").innerHTML = `<div class="aviso a-info"><strong id="bodTotal">${BOD.length}</strong> bodegas en el archivo.
+    Por tipo: ${Object.entries(porTipo).map(([t,n]) =>
+      `<span data-tipo="${esc(t)}" data-n="${n}">${esc(t||"(sin tipo)")}: ${n}</span>`).join(" · ")}
+    ${sinCodigo ? `<br>${sinCodigo} fila(s) sin COD. UNICO no se toman en cuenta.` : ""}</div>
+    <button class="b" onclick="guardarBodegas()">Guardar bodegas</button>
+    <button class="s" onclick="BOD=null;$('#bodPrevia').innerHTML=''">Cancelar</button>`;
+};
+// Las bodegas del archivo se agregan o se actualizan; las demás se quedan.
+function guardarBodegas(){
+  if(!BOD || !puedeImportar("bodegas")) return;
+  let nuevas = 0;
+  BOD.forEach(b => {
+    const i = D.bodegas.findIndex(x => x.cod_unico === b.cod_unico);
+    if(i >= 0) D.bodegas[i] = b; else { D.bodegas.push(b); nuevas++; }
+  });
+  const n = BOD.length; BOD = null;
+  guardar();
+  $("#bodPrevia").innerHTML = "";
+  $("#bodMsg").innerHTML = `<div class="aviso a-ok">Bodegas guardadas: ${n} (${nuevas} nueva(s)).
+    En total hay ${D.bodegas.length}.</div>`;
+}
+
+/* ---------------------------------------------------------- inventario Inv */
+// Lo que tiene que estar listo antes de calcular. Con base compartida se
+// sincroniza primero, como en el corte. Devuelve el texto del problema o "".
+async function impListo(){
+  if(!puedeImportar("inv_detalle")) return "Tu rol no importa el inventario.";
+  if(!letraDispositivo()) return "Este dispositivo no tiene letra. Ponla en Ajustes, en «Este dispositivo».";
+  if(!corteInv()) return "Primero hay que hacer el corte de inventario (Ajustes).";
+  if(!(D.bodegas||[]).length) return "Primero carga el archivo de bodegas.";
+  if(enEquipo()){
+    if(!nubeActiva()) return "Entra con tu usuario antes de importar.";
+    if(NUBE.ocupado) return "Se está sincronizando. Intenta de nuevo en unos segundos.";
+    await nubeSincronizar(true);
+    if(NUBE.estado !== "en_linea" || NUBE.pendiente)
+      return "No se pudo dejar la sincronización al día. Revisa la conexión e intenta de nuevo.";
+  }
+  return "";
+}
+// Lee las filas del Inv contra las bodegas guardadas. No cambia nada.
+function analizarInv(filas){
+  const u = ubicarColumnas(filas, INV_COLS);
+  if(u.error) return {error: u.error};
+  const bod = Object.fromEntries(D.bodegas.map(b => [b.cod_unico, b]));
+  const desconocidas = [], malas = [], detalle = {}, vendible = {}, nombres = {}, tipos = {};
+  u.datos.forEach(f => {
+    const v = k => String(f.celdas[u.idx[k]] ?? "").trim();
+    const codigo = codigoMaterial(v("codigo"));
+    const bodega = (v("centro") + v("almacen")).toUpperCase();
+    const b = bod[bodega];
+    if(!b){ desconocidas.push({n:f.n, bodega, codigo}); return; }
+    const cant = Number(v("cantidad").replace(",", "."));
+    if(!codigo || v("cantidad") === "" || !isFinite(cant)){
+      malas.push({n:f.n, codigo, txt: !codigo ? "sin Número de Material" : "Cantidad. no es un número"}); return; }
+    tipos[b.tipo] = (tipos[b.tipo]||0) + 1;
+    if(!nombres[codigo]) nombres[codigo] = v("descripcion");
+    if(!(codigo in vendible)) vendible[codigo] = 0;
+    if(b.tipo === "VENTA") vendible[codigo] = redondear(vendible[codigo] + cant);
+    const lote = v("lote"), id = codigo+"|"+bodega+"|"+lote;
+    const d = detalle[id] || (detalle[id] = {id, codigo, bodega, tipo:b.tipo, lote,
+      vence:fechaSerie(v("vence")), consignacion_cod:v("consignacion_cod"), consignacion:v("consignacion"), cantidad:0});
+    d.cantidad = redondear(d.cantidad + cant);
+  });
+  return {filas:u.datos.length, materiales:Object.keys(vendible).length, vendible, nombres, tipos,
+          detalle:Object.values(detalle), desconocidas, malas};
+}
+// Diferencia de cada producto del archivo contra la existencia de hoy. Los
+// productos de la app que no vienen en el archivo pasan a 0 (aCero), si no lo están ya.
+function diferenciasInv(a){
+  const delArchivo = Object.keys(a.vendible).sort().map(c => {
+    const s = D.skus.find(x => x.codigo === c), actual = s ? existencia(s) : 0;
+    return {codigo:c, nombre: s ? s.nombre : (a.nombres[c] || ""), nuevo:!s, actual,
+            dicosa:a.vendible[c], dif:redondear(a.vendible[c] - actual)};
+  });
+  const aCero = D.skus.filter(s => !(s.codigo in a.vendible))
+    .map(s => ({codigo:s.codigo, nombre:s.nombre, nuevo:false, aCero:true, actual:existencia(s), dicosa:0}))
+    .filter(x => x.actual !== 0).map(x => ({...x, dif:redondear(-x.actual)}))
+    .sort((x, y) => x.codigo.localeCompare(y.codigo));
+  return delArchivo.concat(aCero);
+}
+function productoPorCompletar(c, nombre){
+  return {codigo:c, nombre: nombre || "Material "+c, marca:"", categoria:"Por completar",
+    unidad:"Unidad", contenido:"—", presentacion:"", peso:0, costo:null, precio:0, existencia:0,
+    minimo:0, restringido:false, motivo_restriccion:"", oferta:false, nuevo:false,
+    precio_oferta:null, rotacion:"C", por_completar:true};
+}
+
+let IMP = null;
+$("#impArchivo").onchange = async function(){
+  const f = this.files[0]; this.value = "";
+  IMP = null; $("#impPrevia").innerHTML = ""; $("#impMsg").innerHTML = "";
+  if(!f) return;
+  const mal = t => { $("#impMsg").innerHTML = `<div class="aviso a-mal">${esc(t)}</div>`; };
+  const pre = await impListo();
+  if(pre) return mal(pre);
+  let filas;
+  try{ filas = await leerXlsx(f); }catch(e){ return mal(e.message); }
+  const a = analizarInv(filas);
+  if(a.error) return mal(a.error+" No se cambió nada.");
+  if(a.desconocidas.length || a.malas.length){
+    $("#impMsg").innerHTML = `<div class="aviso a-mal"><strong>La importación se detuvo. No se cambió nada.</strong>
+      ${a.desconocidas.length ? `<br>${a.desconocidas.length} fila(s) con una bodega que no está en la lista de bodegas.
+        Agrega esas bodegas o corrige el archivo:` : ""}
+      <ul>${a.desconocidas.map(x => `<li>Fila ${x.n}: bodega ${esc(x.bodega)} (material ${esc(x.codigo)})</li>`).join("")}
+          ${a.malas.map(x => `<li>Fila ${x.n}: ${esc(x.txt)} (material ${esc(x.codigo)})</li>`).join("")}</ul></div>`;
+    return;
+  }
+  IMP = {a, archivo:f.name};
+  pintarPreviaInv();
+};
+function pintarPreviaInv(){
+  const {a, archivo} = IMP, dif = diferenciasInv(a);
+  const cambian = dif.filter(x => x.dif !== 0 || x.nuevo), nCero = dif.filter(x => x.aCero).length;
+  IMP.nCero = nCero;
+  $("#impPrevia").innerHTML = `<div class="aviso a-info"><strong>Vista previa: todavía no cambió nada.</strong>
+    <br>Archivo ${esc(archivo)} · filas <strong id="impFilas">${a.filas}</strong>
+    · productos <strong id="impMateriales">${a.materiales}</strong>
+    · nuevos por completar <strong id="impNuevos">${dif.filter(x=>x.nuevo).length}</strong>
+    · con diferencia <strong id="impAjustes">${dif.filter(x=>x.dif!==0 && !x.aCero).length}</strong>
+    · no vienen en el archivo y pasan a 0 <strong id="impACero">${nCero}</strong>
+    <br>Filas por tipo de bodega: <span id="impTipos">${Object.entries(a.tipos).map(([t,n]) =>
+      `<span data-tipo="${esc(t)}" data-n="${n}">${esc(t||"(sin tipo)")}: ${n}</span>`).join(" · ")}</span></div>
+    ${cambian.length ? `<div class="tabla-wrap"><table><thead><tr><th>Código</th><th>Producto</th>
+      <th class="num">Existencia ahora</th><th class="num">Vendible DICOSA</th><th class="num">Ajuste</th></tr></thead><tbody>
+      ${cambian.map(x => `<tr><td>${esc(x.codigo)}</td><td>${esc(x.nombre)}${x.nuevo?' <span class="pill p-med">nuevo, por completar</span>':''}${x.aCero?' <span class="pill p-mal">no viene en el archivo, pasa a 0</span>':''}</td>
+        <td class="num">${x.actual}</td><td class="num">${x.dicosa}</td>
+        <td class="num"><strong>${x.dif>0?"+":""}${x.dif}</strong></td></tr>`).join("")}</tbody></table></div>`
+      : `<p class="mini">Ningún producto cambia de existencia.</p>`}
+    <p class="mini">El detalle por bodega y lote (${a.detalle.length} fila(s)) reemplaza al anterior.</p>
+    ${nCero ? `<p><label><input type="checkbox" id="impConfirmaCero" style="width:auto"
+      onchange="$('#impConfirmar').disabled=!this.checked"> Entiendo que ${nCero} producto(s) pasan a 0</label></p>` : ""}
+    <button class="b" id="impConfirmar" onclick="confirmarImportacion()"${nCero ? " disabled" : ""}>Confirmar importación</button>
+    <button class="s" onclick="IMP=null;$('#impPrevia').innerHTML=''">Cancelar</button>`;
+}
+async function confirmarImportacion(){
+  if(!IMP) return;
+  const casilla = $("#impConfirmaCero");
+  if(casilla && !casilla.checked) return;
+  const pre = await impListo();
+  if(pre){ $("#impMsg").innerHTML = `<div class="aviso a-mal">${esc(pre)}</div>`; return; }
+  const {a} = IMP;
+  // Se recalcula con lo que hay ahora (la sincronización pudo traer movimientos).
+  // Si cambió cuántos pasan a 0, no se escribe nada y se vuelve a la vista previa.
+  const dif = diferenciasInv(a);
+  if(dif.filter(x => x.aCero).length !== IMP.nCero){
+    pintarPreviaInv();
+    $("#impMsg").innerHTML = `<div class="aviso a-mal">Los datos cambiaron al sincronizar.
+      Revisa la vista previa y confirma de nuevo.</div>`;
+    return;
+  }
+  IMP = null;
+  const sello = selloImportacion();
+  let nuevos = 0, ajustes = 0, aCero = 0;
+  // Marca de la importación (pendiente 167): sello y códigos del archivo. Va en
+  // el primer ajuste; si no hubo ajustes, en un movimiento sin código ni cantidad.
+  const imp = {sello, codigos:Object.keys(a.vendible).sort()};
+  dif.forEach(x => {
+    if(x.nuevo){ D.skus.push(productoPorCompletar(x.codigo, a.nombres[x.codigo])); nuevos++; }
+    if(x.dif === 0) return;
+    movimiento({id:"dicosa|"+sello+"|"+x.codigo, tipo:"ajuste", codigo:x.codigo, cantidad:x.dif,
+      ref:"Inv DICOSA", motivo:"Importación Inv DICOSA "+sello, ...(ajustes ? {} : {importacion:imp})});
+    ajustes++;
+    if(x.aCero) aCero++;
+  });
+  if(!ajustes) movimiento({id:"dicosa|"+sello+"|*", tipo:"importacion", codigo:null, cantidad:0,
+    ref:"Inv DICOSA", motivo:"Importación Inv DICOSA "+sello, importacion:imp});
+  D.inv_detalle = a.detalle.map(d => ({...d}));
+  guardar();
+  $("#impPrevia").innerHTML = "";
+  $("#impMsg").innerHTML = `<div class="aviso a-ok"><strong>Importación hecha (${esc(sello)}).</strong>
+    ${ajustes} ajuste(s) de existencia (${aCero} a 0 porque no venían en el archivo), ${nuevos} producto(s) nuevo(s) por completar,
+    ${a.detalle.length} fila(s) de detalle.</div>`;
+  pintarInventario();
+}
+
+/* ------------------------------------------------- detalle por bodega y lote */
+function pintarDetalle(){
+  const d = detalleVisible();
+  const card = $("#detCard");
+  card.style.display = d.length ? "" : "none";
+  if(!d.length){ $("#tablaDetalle").innerHTML = ""; return; }
+  const bod = Object.fromEntries((D.bodegas||[]).map(b => [b.cod_unico, b]));
+  const nom = Object.fromEntries(D.skus.map(s => [s.codigo, s.nombre]));
+  const orden = (x, y) => x.codigo.localeCompare(y.codigo) || x.bodega.localeCompare(y.bodega) || x.lote.localeCompare(y.lote);
+  const tabla = (filas, conTipo) => `<div class="tabla-wrap"><table><thead><tr><th>Código</th><th>Producto</th>
+    <th>Bodega</th>${conTipo?'<th>Tipo</th>':''}<th>Lote</th><th>Vence</th><th>Consignación</th><th class="num">Cantidad</th></tr></thead><tbody>
+    ${filas.slice().sort(orden).map(x => `<tr data-codigo="${esc(x.codigo)}"><td>${esc(x.codigo)}</td>
+      <td>${esc(nom[x.codigo]||"")}</td><td>${esc(x.bodega)} <span class="mini">${esc((bod[x.bodega]||{}).nombre||"")}</span></td>
+      ${conTipo?`<td>${esc(x.tipo)}</td>`:''}<td>${esc(x.lote||"—")}</td><td>${esc(x.vence||"—")}</td>
+      <td>${esc(x.consignacion||"—")}</td><td class="num">${x.cantidad}</td></tr>`).join("")}</tbody></table></div>`;
+  const venta = d.filter(x => x.tipo === "VENTA"), otras = d.filter(x => x.tipo !== "VENTA");
+  $("#tablaDetalle").innerHTML = `<p class="mini"><strong>Bodegas VENTA</strong> (lo que se puede vender)</p>
+    <div id="detVenta">${venta.length ? tabla(venta, false) : '<p class="mini">Sin filas.</p>'}</div>
+    <div id="detOtras">${otras.length ? `<p class="mini" style="margin-top:12px"><strong>NO VENTA y MUESTRAS</strong>
+      (no cuentan en la existencia)</p>${tabla(otras, true)}` : ""}</div>`;
 }
 
 /* ------------------------------------------------------------ REPOSICIÓN */
@@ -3205,9 +3629,9 @@ const ROL_ENTRADA = {admin:"inicio", coordinador:"inicio", administrativo:"catal
                      despacho:"despacho", pedidos:"inicio", sin_rol:"ajustes"};
 // Tablas que cada rol sube. Lo demás solo se baja.
 const ROL_ESCRIBE = {
-  admin:          ["skus","clientes","pedidos","movimientos","avisos","config"],
-  coordinador:    ["skus","clientes","pedidos","movimientos","avisos"],
-  administrativo: ["skus","movimientos","avisos"],
+  admin:          ["skus","clientes","pedidos","movimientos","avisos","config","bodegas","inv_detalle"],
+  coordinador:    ["skus","clientes","pedidos","movimientos","avisos","bodegas","inv_detalle"],
+  administrativo: ["skus","movimientos","avisos","inv_detalle"],
   despacho:       ["pedidos","movimientos","avisos"],
   pedidos:        ["clientes","pedidos","movimientos","avisos"]
 };
@@ -3217,7 +3641,9 @@ const COLECCIONES = [
   {t:"clientes",    campo:"clientes",    clave:"id",     nombre:"clientes"},
   {t:"pedidos",     campo:"pedidos",     clave:"id",     nombre:"pedidos"},
   {t:"movimientos", campo:"movimientos", clave:"id",     nombre:"movimientos"},
-  {t:"avisos",      campo:"avisos",      clave:"id",     nombre:"avisos"}
+  {t:"avisos",      campo:"avisos",      clave:"id",     nombre:"avisos"},
+  {t:"bodegas",     campo:"bodegas",     clave:"cod_unico", nombre:"bodegas"},
+  {t:"inv_detalle", campo:"inv_detalle", clave:"id",     nombre:"detalle de inventario"}
 ];
 
 const NUBE = {
@@ -3267,7 +3693,10 @@ function nubeLeerEspejo(){
   try{
     const e = JSON.parse(localStorage.getItem(NUBE_MARK) || "null");
     if(e){ NUBE.espejo = e.espejo || {}; NUBE.desde = e.desde || NUBE.desde;
-           NUBE.espejo.costos = NUBE.espejo.costos || {}; return; }
+           NUBE.espejo.costos = NUBE.espejo.costos || {};
+           // Un espejo guardado antes de bodegas e inv_detalle no las trae.
+           COLECCIONES.forEach(c => NUBE.espejo[c.t] = NUBE.espejo[c.t] || {});
+           return; }
   }catch(e){}
   COLECCIONES.forEach(c => NUBE.espejo[c.t] = {});
   NUBE.espejo.config = {};
@@ -3335,6 +3764,7 @@ function nubeAplicarRol(){
   });
   $$("[data-costos]").forEach(e => e.style.display = veCostos() ? "" : "none");
   $$("[data-escribe]").forEach(e => e.style.display = panelSoloLectura(e.dataset.escribe) ? "none" : "");
+  $$("[data-importa]").forEach(e => e.style.display = puedeImportar(e.dataset.importa) ? "" : "none");
   const sub = document.getElementById("subNuevo");
   if(sub) sub.textContent = veCostos()
     ? "El sistema calcula el peso y la contribución mientras armas el pedido, y no te deja confirmar uno que pierde dinero."
@@ -3558,6 +3988,7 @@ async function nubeReconciliar(){
   // r.costos no se usa: los costos no son una colección propia en el navegador.
   COLECCIONES.forEach(c => {
     if(c.t === "movimientos") return;     // los movimientos no se quitan (D8)
+    if(!(c.t in r)) return;               // base sin esa tabla todavía: no se borra nada
     const vivos = new Set((r[c.t] || []).map(String));
     const antes = D[c.campo].length;
     D[c.campo] = D[c.campo].filter(x => {
@@ -3672,6 +4103,7 @@ async function nubePrimeraVez(){
     });
   }
   D.clientes = []; D.pedidos = []; D.movimientos = []; D.avisos = [];
+  D.bodegas = []; D.inv_detalle = [];
   // Los productos también los manda la base: si quedaran los locales que la
   // base no tiene, la vuelta siguiente los subiría como recién creados aquí.
   D.skus = [];
