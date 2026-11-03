@@ -219,7 +219,7 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
     <div class="sub-panel" id="t-buscar">
       <div class="fila">
         <div style="flex:2">
-          <label>Buscar por nombre, código o marca</label>
+          <label>Buscar por nombre o código</label>
           <input id="buscaSku" placeholder="Ej: guantes, jeringa, espéculo…" autocomplete="off">
         </div>
       </div>
@@ -321,7 +321,7 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
   <p class="sub2">Los precios son estimaciones de arranque. Reemplázalos con tus cotizaciones reales: haz clic en cualquier fila para editar.</p>
   <div class="card">
     <div class="fila noprint">
-      <div><label>Buscar</label><input id="filtroSku" placeholder="Nombre, código, marca…"></div>
+      <div><label>Buscar</label><input id="filtroSku" placeholder="Nombre o código…"></div>
       <div><label>Canal</label><select id="filtroCanal">
         <option value="">Todos</option><option value="express">Express</option>
         <option value="volumen">Volumen</option><option value="bloqueado">Bloqueado</option></select></div>
@@ -329,6 +329,15 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
       <div class="auto" data-costos><button class="s" onclick="exportarCatalogoCSV()">Exportar CSV</button></div>
     </div>
     <div id="tablaCatalogo" style="margin-top:12px"></div>
+  </div>
+  <div class="card" id="cdkCard" data-importa="catalogo">
+    <h3>Importar Catálogo DICOSA</h3>
+    <p class="mini">Archivo del Catálogo (.xlsx, primera hoja). Primero se ve una vista previa; nada cambia hasta confirmar.
+      Solo se cambian los datos que vienen de DICOSA (nombre, códigos, categoría, mínimos de pedido, precio en $ sin IVA e IVA).
+      Peso, precio de venta, mínimo de existencia, oferta y restricción no se tocan. Un código nuevo entra con existencia 0.</p>
+    <div class="fila"><div><label>Archivo del Catálogo</label><input id="cdkArchivo" type="file" accept=".xlsx"></div></div>
+    <div id="cdkPrevia"></div>
+    <div id="cdkMsg"></div>
   </div>
 </section>
 
@@ -449,6 +458,24 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
       <div class="auto"><button class="b" onclick="guardarBanco()">Guardar datos bancarios</button></div>
     </div>
     <div id="bancoMsg"></div>
+  </div>
+
+  <div class="card" id="tcCard">
+    <h3>Tipo de cambio</h3>
+    <p class="mini">Lempiras por dólar. El costo en lempiras de un producto con precio DICOSA en dólares es
+      precio en $ (sin IVA) × tipo de cambio vigente: el de fecha más reciente que no pase de hoy.
+      Sin tipo de cambio registrado, ese costo no está disponible (no cuenta como 0).
+      Los pedidos ya confirmados conservan el costo que guardaron. Los registros no se borran.</p>
+    <div class="grid g3" style="margin-top:10px">
+      <div><label>Fecha</label><input id="tcFecha" type="date"></div>
+      <div><label>L. por US$</label><input id="tcValor" type="number" min="0" step="0.0001"></div>
+      <div><label>Fuente (ej.: BCH, banco)</label><input id="tcFuente"></div>
+    </div>
+    <div class="fila" style="margin-top:12px">
+      <div class="auto"><button class="b" onclick="registrarTipoCambio()">Registrar tipo de cambio</button></div>
+    </div>
+    <div id="tcMsg"></div>
+    <div id="tcHistorial" style="margin-top:10px"></div>
   </div>
 
   <div class="card">
@@ -1372,6 +1399,51 @@ const hoy = () => new Date().toISOString().slice(0,10);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
 const dias = (a,b) => Math.round((new Date(b) - new Date(a)) / 86400000);
 const par = k => Number(D.params[k]);
+// Fecha local AAAA-MM-DD (hoy() es la fecha UTC).
+function fechaLocal(d){
+  const x = d || new Date(), p = n => String(n).padStart(2, "0");
+  return x.getFullYear() + "-" + p(x.getMonth() + 1) + "-" + p(x.getDate());
+}
+// Hasta 4 decimales, para los montos derivados (costo con IVA, en lempiras).
+const r4 = x => Math.round(x * 1e4) / 1e4;
+const USD = n => "US$ " + (Number(n)||0).toLocaleString("es-HN",{minimumFractionDigits:2,maximumFractionDigits:4});
+
+/* ---------------------------------------------- tipo de cambio y costo (1b)
+   El Catálogo DICOSA trae el precio en dólares sin IVA (costo_usd). El costo en
+   lempiras es costo_usd × tipo de cambio vigente: el registro de fecha más
+   reciente que no pase de hoy (D3). Sin tipo de cambio, el costo no está
+   disponible: null, nunca 0. Un producto sin costo en dólares usa su costo en
+   lempiras de siempre (D3a). El IVA solo se muestra: no entra al costo (D4a). */
+function tcVigente(){
+  const h = fechaLocal();
+  const l = (D.tipo_cambio || []).filter(t => t && t.fecha && t.fecha <= h && Number(t.valor) > 0)
+    .sort((a, b) => a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 :
+                    String(a.registrado||"") < String(b.registrado||"") ? -1 : 1);
+  return l.length ? l[l.length - 1] : null;
+}
+function costoDe(s){
+  if(!s) return undefined;
+  if(hayCosto(s.costo_usd)){
+    const t = tcVigente();
+    return t ? Number(s.costo_usd) * Number(t.valor) : null;
+  }
+  return s.costo;
+}
+// Costo con IVA, solo informativo: {usd, iva, usd_iva, l, l_iva}. null si no hay costo en $.
+function costoConIva(s){
+  if(!s || !hayCosto(s.costo_usd)) return null;
+  const usd = Number(s.costo_usd), iva = Number((s.dicosa||{}).iva) || 0, t = tcVigente();
+  return {usd, iva, usd_iva: r4(usd * (1 + iva)), tc: t,
+          l: t ? r4(usd * t.valor) : null, l_iva: t ? r4(usd * (1 + iva) * t.valor) : null};
+}
+
+// Para pedirse, un producto necesita precio de venta y peso mayores que 0 (D2).
+function faltaParaVender(s){
+  const f = [];
+  if(!(Number(s.precio) > 0)) f.push("precio de venta");
+  if(!(Number(s.peso) > 0))   f.push("peso");
+  return f;
+}
 
 function fecha(iso){
   if(!iso) return "—";
@@ -1402,7 +1474,7 @@ function cargar(){
 function migrar(){
   D.params  = D.params  || {};
   Object.entries(PARAMS_DEF).forEach(([k,o])=>{ if(D.params[k]===undefined) D.params[k]=o.v; });
-  ["skus","clientes","pedidos","movimientos","avisos","bodegas","inv_detalle"].forEach(k => { if(!D[k]) D[k]=[]; });
+  ["skus","clientes","pedidos","movimientos","avisos","bodegas","inv_detalle","tipo_cambio"].forEach(k => { if(!D[k]) D[k]=[]; });
   // Campos agregados tras la segunda revisión con el cliente
   D.skus.forEach(s => {
     if(s.oferta === undefined) s.oferta = false;
@@ -1441,8 +1513,14 @@ function migrar(){
     D.migrado_inventario_fisico = true;
   }
 
-  // Incorporar SKU nuevos del catálogo sin tocar los que el usuario ya editó
-  if(typeof CATALOGO_INICIAL !== "undefined"){
+  // Incorporar SKU nuevos del catálogo sin tocar los que el usuario ya editó.
+  // Con base compartida (sesión guardada o espejo de una sincronización) no:
+  // los productos los manda la base, y uno de práctica que la base quitó
+  // volvería a subirse como recién creado aquí (fase 1b, decisión 7). Las
+  // claves van escritas tal cual porque el script de la base carga después.
+  let conBase = false;
+  try{ conBase = !!(localStorage.getItem("sdim_sesion") || localStorage.getItem("sdim_espejo")); }catch(e){}
+  if(typeof CATALOGO_INICIAL !== "undefined" && !conBase){
     CATALOGO_INICIAL.forEach(n => {
       if(!D.skus.some(s => s.codigo === n.codigo))
         D.skus.push({...n, existencia:0, oferta:false, nuevo:true, precio_oferta:null,
@@ -1795,8 +1873,7 @@ $("#buscaSku").oninput = function(){
   const q = this.value.trim().toLowerCase();
   if(q.length < 2){ $("#resSku").innerHTML=""; return; }
   const r = D.skus.filter(s => !s.restringido &&
-    (s.nombre.toLowerCase().includes(q) || s.codigo.toLowerCase().includes(q) ||
-     (s.marca||"").toLowerCase().includes(q))).slice(0,8);
+    (s.nombre.toLowerCase().includes(q) || s.codigo.toLowerCase().includes(q))).slice(0,8);
   const bloq = D.skus.filter(s => s.restringido &&
     (s.nombre.toLowerCase().includes(q) || s.codigo.toLowerCase().includes(q)));
   $("#resSku").innerHTML =
@@ -1812,6 +1889,9 @@ function agregarLinea(codigo){
   if(s.restringido){ alert("Ese producto tiene distribución restringida y no puede venderse."); return; }
   if(s.por_completar){ alert("«"+s.nombre+"» está por completar: entró con el Inventario DICOSA "+
     "y no se puede vender hasta ponerle peso y precio en Catálogo."); return; }
+  const fv = faltaParaVender(s);
+  if(fv.length){ alert("«"+s.nombre+"» no se puede pedir: le falta "+fv.join(" y ")+
+    ". Complétalo en Catálogo."); return; }
   if(existencia(s) <= 0){
     alert("«"+s.nombre+"» está agotado.\n\nEl médico puede verlo en el catálogo pero no se puede "+
           "comprometer una entrega. Registra el ingreso en Inventario cuando llegue la compra."); return; }
@@ -1819,8 +1899,14 @@ function agregarLinea(codigo){
   const precio = (s.oferta && s.precio_oferta) ? s.precio_oferta : s.precio;
   const ex = P.lineas.find(l=>l.codigo===codigo);
   if(ex) ex.cantidad += cant;
-  else P.lineas.push({codigo:s.codigo, nombre:s.nombre, cantidad:cant,
-                      precio:precio, costo:s.costo, peso:s.peso});
+  else {
+    // El costo se fija aquí y el pedido lo conserva. Si viene del precio en
+    // dólares, la línea guarda también el tipo de cambio usado.
+    const t = hayCosto(s.costo_usd) ? tcVigente() : null;
+    P.lineas.push({codigo:s.codigo, nombre:s.nombre, cantidad:cant,
+                   precio:precio, costo:costoDe(s), peso:s.peso,
+                   ...(t ? {costo_usd:s.costo_usd, tc:{valor:t.valor, fecha:t.fecha}} : {})});
+  }
   const total = ex ? ex.cantidad : cant;
   const disp = disponible(s);
   if(disp < total){
@@ -1860,7 +1946,7 @@ function subtab(t){
 
 function tarjeta(s){
   // Un producto por completar se ve como agotado: no se puede agregar.
-  const agotado = disponible(s) <= 0 || !!s.por_completar;
+  const agotado = disponible(s) <= 0 || !!s.por_completar || faltaParaVender(s).length > 0;
   const oferta = !!s.oferta, nuevo = !!s.nuevo;
   const precio = oferta && s.precio_oferta ? s.precio_oferta : s.precio;
   const tag = agotado ? '<span class="tag t-ag">AGOTADO</span>'
@@ -1881,13 +1967,15 @@ function tarjeta(s){
 function pintarCatalogoCompra(){
   const sel = $("#catCategoria");
   if(sel && !sel.options.length){
-    const cats = [...new Set(D.skus.filter(s=>!s.restringido && !s.por_completar).map(s=>s.categoria))].sort();
+    const cats = [...new Set(D.skus.filter(s=>!s.restringido && !s.por_completar && !faltaParaVender(s).length)
+      .map(s=>s.categoria))].sort();
     sel.innerHTML = `<option value="">Todas las categorías</option>` +
       cats.map(c=>`<option>${esc(c)}</option>`).join("");
   }
   const cat = sel ? sel.value : "";
   const f = $("#catFiltro") ? $("#catFiltro").value : "";
-  let r = D.skus.filter(s=>!s.restringido && !s.por_completar);
+  // Sin precio de venta o sin peso no se ofrece al médico (D2).
+  let r = D.skus.filter(s=>!s.restringido && !s.por_completar && !faltaParaVender(s).length);
   if(cat) r = r.filter(s=>s.categoria===cat);
   if(f==="oferta") r = r.filter(s=>s.oferta);
   if(f==="nuevo")  r = r.filter(s=>s.nuevo);
@@ -1943,7 +2031,7 @@ function repetirUltimo(id){
   const p = D.pedidos.find(x=>x.id===id); if(!p) return;
   P.lineas = p.lineas.filter(l=>{
     const s = D.skus.find(x=>x.codigo===l.codigo);
-    return s && !s.restringido && !s.por_completar;
+    return s && !s.restringido && !s.por_completar && !faltaParaVender(s).length;
   }).map(l=>({...l}));
   const faltan = p.lineas.length - P.lineas.length;
   recalc();
@@ -1974,6 +2062,12 @@ function confirmarPedido(){
   if(pc.length){
     alert(pc.map(l=>"«"+l.nombre+"»: está por completar y no se puede vender, quítalo del pedido.").join("\n"));
     return; }
+  // Precio de venta y peso mayores que 0, con los datos de ahora (D2).
+  const sinVenta = P.lineas.map(l => ({l, f:faltaParaVender(D.skus.find(x=>x.codigo===l.codigo)||{})}))
+    .filter(x => x.f.length);
+  if(sinVenta.length){
+    alert(sinVenta.map(x=>"«"+x.l.nombre+"»: le falta "+x.f.join(" y ")+", quítalo del pedido.").join("\n"));
+    return; }
   const c = calcularPedido();
   const ahora = new Date().toISOString();
   let motivo = null;
@@ -2003,6 +2097,8 @@ function confirmarPedido(){
     nivel: c.nivel, canal: c.canal, estado: "confirmado",
     subtotal: c.sub, costo_prod: c.cost, cargo: c.cargo, total: c.total,
     peso: c.peso, margen: c.margen,
+    // Tipo de cambio con que se fijó el costo de las líneas en dólares (nota de origen).
+    tipo_cambio: (P.lineas.find(l => l.tc) || {}).tc || null,
     costo_entrega_est: c.costoEnt, contribucion_est: c.contrib,
     costo_entrega_real: null, contribucion_real: null,
     hecho_por: ($("#hechoPor")||{value:"El médico"}).value,
@@ -2560,24 +2656,28 @@ function pintarCatalogo(){
   const q = ($("#filtroSku").value||"").toLowerCase();
   const cn = $("#filtroCanal").value;
   const r = D.skus.filter(s =>
-    (!q || s.nombre.toLowerCase().includes(q) || s.codigo.toLowerCase().includes(q) ||
-     (s.marca||"").toLowerCase().includes(q)) && (!cn || canalDe(s)===cn));
+    (!q || s.nombre.toLowerCase().includes(q) || s.codigo.toLowerCase().includes(q)) && (!cn || canalDe(s)===cn));
   const conCostos = veCostos(), lectura = panelSoloLectura("catalogo");
+  const tc = tcVigente();
   $("#tablaCatalogo").innerHTML = `<p class="mini">${r.length} de ${D.skus.length} productos</p>
+   ${conCostos ? `<p class="mini" id="catTc">${tc ? `Tipo de cambio vigente: L. ${esc(String(tc.valor))} por US$ (${esc(tc.fecha)}${tc.fuente?", "+esc(tc.fuente):""}).`
+     : "Sin tipo de cambio registrado: los productos con precio DICOSA en dólares quedan sin costo."}</p>` : ""}
    <div class="tabla-wrap"><table>
-    <thead><tr><th>Código</th><th>Producto</th><th>Unidad</th><th>Contenido</th><th>Marca</th><th class="num">Peso</th>
+    <thead><tr><th>Código</th><th>Producto</th><th>Unidad</th><th>Contenido</th><th class="num">Peso</th>
       ${conCostos?'<th class="num">Costo</th>':''}<th class="num">Precio</th>${conCostos?'<th class="num">Margen</th>':''}
       <th class="num">L./kg</th><th>Canal</th><th class="num">Exist.</th><th>Marcas</th></tr></thead><tbody>
     ${r.map(s=>{
-      const m = !hayCosto(s.costo) ? null : s.precio? (s.precio-s.costo)/s.precio*100 : 0;
+      const co = costoDe(s);
+      // Sin costo, o sin precio de venta, no hay margen: «—» (antes un precio 0 daba «0%»).
+      const m = !hayCosto(co) || !(s.precio > 0) ? null : (s.precio-co)/s.precio*100;
       const dv = s.peso? s.precio/s.peso : 0;
       const cn = canalDe(s);
       const pc = cn==="express"?"p-ok":cn==="volumen"?"p-med":"p-mal";
       return `<tr${lectura?'':` style="cursor:pointer" onclick="abrirNuevoSku('${s.codigo}')"`}>
         <td>${esc(s.codigo)}</td><td>${esc(s.nombre)}</td>
-        <td>${esc(s.unidad||"—")}</td><td>${esc(s.contenido||"—")}</td><td>${esc(s.marca||"—")}</td>
-        <td class="num">${s.peso.toFixed(3)}</td>${conCostos?`<td class="num">${m===null?'—':L(s.costo)}</td>`:''}
-        <td class="num">${L(s.precio)}</td>${conCostos?`<td class="num"${m===null?' title="sin costo registrado">—':`>${m.toFixed(0)}%`}</td>`:''}
+        <td>${esc(s.unidad||"—")}</td><td>${esc(s.contenido||"—")}</td>
+        <td class="num">${(Number(s.peso)||0).toFixed(3)}</td>${conCostos?`<td class="num">${hayCosto(co)?L(co):'—'}</td>`:''}
+        <td class="num">${L(s.precio)}</td>${conCostos?`<td class="num"${m===null?' title="sin costo o sin precio de venta">—':`>${m.toFixed(0)}%`}</td>`:''}
         <td class="num">${Math.round(dv)}</td>
         <td><span class="pill ${pc}">${cn}</span></td>
         <td class="num">${disponible(s)>0?disponible(s):'<span class="pill p-gris">sin disp.</span>'}</td>
@@ -2592,25 +2692,51 @@ function canalDe(s){
 $("#filtroSku").oninput = pintarCatalogo;
 $("#filtroCanal").onchange = pintarCatalogo;
 
+// Datos que vienen del Catálogo DICOSA, solo lectura. El costo con IVA es
+// informativo: el costo y el margen usan el precio sin IVA (D4a).
+function fichaDicosa(s){
+  if(!s || (!s.dicosa && !hayCosto(s.costo_usd))) return "";
+  const d = s.dicosa || {}, v = x => (x === null || x === undefined || x === "") ? "—" : esc(String(x));
+  const ci = veCostos() ? costoConIva(s) : null;
+  const costo = !veCostos() ? "" : ci
+    ? `<div class="aviso a-info" id="sDicosaCosto" data-usd="${ci.usd}" data-iva="${ci.iva}" data-usd-iva="${ci.usd_iva}"
+         data-l="${ci.l ?? ""}" data-l-iva="${ci.l_iva ?? ""}">
+         <strong>Costo DICOSA:</strong> ${USD(ci.usd)} sin IVA · IVA ${r4(ci.iva*100)}% ·
+         sell in con IVA ${USD(ci.usd_iva)}<br>
+         ${ci.tc ? `En lempiras: ${L(ci.l)} sin IVA · ${L(ci.l_iva)} con IVA, con tipo de cambio L. ${esc(String(ci.tc.valor))}
+           del ${esc(ci.tc.fecha)}${ci.tc.fuente?" ("+esc(ci.tc.fuente)+")":""}.`
+           : "Sin tipo de cambio registrado: el costo en lempiras no está disponible."}
+         <br><span class="mini">El costo con IVA es informativo: el costo y el margen usan el precio sin IVA.</span></div>`
+    : `<div class="aviso a-med" id="sDicosaCosto">El Catálogo DICOSA no trae precio en $ para este producto: queda sin costo DICOSA.</div>`;
+  return `<hr><p class="mini" style="margin:0 0 8px"><strong>Datos del Catálogo DICOSA</strong>
+      (importado el ${v(d.importado)}; no se editan aquí)</p>
+    <div class="grid g3 mini">
+      <div>Código de barras: ${v(d.barras)}</div><div>Código interno DKT: ${v(d.dkt)}</div>
+      <div>IVA: ${d.iva === undefined ? "—" : r4(Number(d.iva)*100)+"%"}</div>
+      <div>Categoría DICOSA: ${v(d.categoria)}</div><div>Subcategoría: ${v(d.subcategoria)}</div>
+      <div>Mínimo de pedido: ${v(d.min_unidades)} unidades · ${v(d.min_cajas)} cajas</div>
+    </div>${costo}`;
+}
 function abrirNuevoSku(cod){
   const s = cod ? D.skus.find(x=>x.codigo===cod) : null;
   modal(`<h3 style="margin-top:0">${s?"Editar producto":"Producto nuevo"}</h3>
     <div class="grid g2" style="margin:14px 0">
       <div><label>Código *</label><input id="sC" value="${esc(s?.codigo||"")}" ${s?"readonly":""}></div>
       <div><label>Nombre *</label><input id="sN" value="${esc(s?.nombre||"")}"></div>
-      <div><label>Marca</label><input id="sM" value="${esc(s?.marca||"")}"></div>
       <div><label>Categoría</label><input id="sK" value="${esc(s?.categoria||"")}"></div>
       <div><label>Tipo de unidad</label>
         <input id="sU" value="${esc(s?.unidad||"")}" placeholder="Caja, Bolsa, Frasco, Rollo, Unidad…"></div>
       <div><label>Contenido de la unidad</label>
         <input id="sCn" value="${esc(s?.contenido||"")}" placeholder="100 unidades, 500 g, 1 L…"></div>
       <div><label>Peso en kg *</label><input id="sW" type="number" step="0.001" value="${s?.peso||""}"></div>
-      ${veCostos()?`<div><label>Costo (L.)</label><input id="sCo" type="number" step="0.01" value="${s?.costo||0}"></div>`:''}
+      ${veCostos() && !hayCosto(s?.costo_usd) ? `<div><label>Costo (L.)</label><input id="sCo" type="number" step="0.01"
+        value="${hayCosto(s?.costo) ? esc(String(s.costo)) : ""}" placeholder="Sin costo"></div>` : ''}
       <div><label>Precio de venta (L.)</label><input id="sPr" type="number" step="0.01" value="${s?.precio||0}"></div>
       <div><label>Existencia</label><input id="sE" type="number" value="${s?existencia(s):0}"
         ${s&&corteInv()?'readonly title="Se corrige con «Ajuste» en Inventario"':''}></div>
       <div><label>Mínimo</label><input id="sMin" type="number" value="${s?.minimo||0}"></div>
     </div>
+    ${fichaDicosa(s)}
     <hr>
     <p class="mini" style="margin:0 0 8px"><strong>Cómo lo ve el médico en el catálogo</strong></p>
     <div class="grid g2">
@@ -2636,11 +2762,15 @@ function guardarSku(cod){
   const r = $("#sR").checked, mot = $("#sMot").value.trim();
   if(r && !mot){ $("#sErr").innerHTML =
     `<div class="aviso a-mal">Si el producto está restringido, escribe por qué.</div>`; return; }
-  const datos = {codigo:c, nombre:n, marca:$("#sM").value.trim(), categoria:$("#sK").value.trim(),
+  // Pendiente 156: un costo vacío queda sin costo (null), no 0. Un 0 escrito sí es 0.
+  const coTxt = $("#sCo") ? $("#sCo").value.trim() : null, coNum = parseFloat(coTxt);
+  // La ficha ya no tiene marca; la que tenga el producto se queda como está.
+  const datos = {codigo:c, nombre:n, categoria:$("#sK").value.trim(),
     unidad:$("#sU").value.trim()||"Unidad", contenido:$("#sCn").value.trim()||"—",
     presentacion:($("#sU").value.trim()+" "+$("#sCn").value.trim()).trim(), peso:w,
-    // Quien no ve costos no los toca: la ficha guarda sin la clave costo.
-    ...(veCostos() ? {costo:parseFloat($("#sCo").value)||0} : {}),
+    // Quien no ve costos no los toca: la ficha guarda sin la clave costo. Un
+    // producto con precio DICOSA en dólares no tiene campo de costo en lempiras.
+    ...(veCostos() && coTxt !== null ? {costo: isFinite(coNum) ? coNum : null} : {}),
     precio:parseFloat($("#sPr").value)||0, existencia:parseInt($("#sE").value)||0,
     minimo:parseInt($("#sMin").value)||0, restringido:r, motivo_restriccion:mot,
     oferta:$("#sOf").checked, nuevo:$("#sNu").checked,
@@ -2673,12 +2803,16 @@ function pintarInventario(){
   if(f==="pago")  r = r.filter(s=>comprometido(s.codigo).esperandoPago>0);
 
   // Totales de la operación
-  let vFisico=0, vComp=0, vPago=0, uPago=0, nBajo=0, nCero=0;
+  let vFisico=0, vComp=0, vPago=0, uPago=0, nBajo=0, nCero=0, nSinCosto=0;
   D.skus.filter(s=>!s.restringido).forEach(s=>{
     const c = comprometido(s.codigo);
-    vFisico += existencia(s)*s.costo;
-    vComp   += c.total*s.costo;
-    vPago   += c.esperandoPago*s.costo;
+    // Sin costo (o sin tipo de cambio) el producto no entra en los valores: no cuenta como 0.
+    const co = costoDe(s);
+    if(hayCosto(co)){
+      vFisico += existencia(s)*co;
+      vComp   += c.total*co;
+      vPago   += c.esperandoPago*co;
+    } else if(existencia(s) || c.total) nSinCosto++;
     uPago   += c.esperandoPago;
     const d = disponible(s);
     if(d<=0) nCero++; else if(d<=s.minimo) nBajo++;
@@ -2705,7 +2839,8 @@ function pintarInventario(){
     ${kpi(L0(vComp),"Comprometido en pedidos")}
     ${kpi(L0(vPago),"Apartado esperando pago", vPago>0?"mal":"")}
     ${kpi(L0(vFisico-vComp),"Valor libre para vender","ok")}
-  </div>`;
+  </div>${nSinCosto ? `<p class="mini" id="invSinCosto">${nSinCosto} producto(s) con existencia o comprometido no tienen costo
+    (o falta el tipo de cambio) y no entran en estos valores.</p>` : ""}`;
 
   $("#tablaInventario").innerHTML = resumen + avisos + avisoRev + `<div class="tabla-wrap"><table>
     <thead><tr>
@@ -2727,8 +2862,9 @@ function pintarInventario(){
         <td class="num" style="${c.esperandoPago?'color:var(--rojo);font-weight:700':''}">${c.esperandoPago||"—"}</td>
         <td class="num"><strong>${d}</strong></td>
         <td class="num">${s.minimo}</td>
-        <td><span class="pill ${e.cls}">${e.txt}</span>${s.por_completar?' <span class="pill p-med">Por completar</span>':''}</td>
-        ${conCostos?`<td class="num">${L0(existencia(s)*s.costo)}</td>`:''}
+        <td><span class="pill ${e.cls}">${e.txt}</span>${s.por_completar?' <span class="pill p-med">Por completar</span>':''}${
+          faltaParaVender(s).length?` <span class="pill p-mal" data-falta="${esc(faltaParaVender(s).join(", "))}">Falta: ${esc(faltaParaVender(s).join(", "))}</span>`:''}</td>
+        ${conCostos?`<td class="num">${hayCosto(costoDe(s))?L0(existencia(s)*costoDe(s)):'—'}</td>`:''}
         ${corteInv()&&!lectura?`<td class="noprint"><button class="s" onclick="abrirAjuste('${s.codigo}')">Ajuste</button></td>`:''}</tr>`;
     }).join("")}</tbody></table></div>
     <p class="mini" style="margin-top:8px">
@@ -2757,7 +2893,12 @@ let invSel = null;
 function elegirInvSku(cod){
   invSel = D.skus.find(s=>s.codigo===cod);
   $("#invSku").value = invSel.nombre; $("#invRes").innerHTML="";
-  if(veCostos() && !$("#invCosto").value) $("#invCosto").value = invSel.costo;
+  // Con precio DICOSA en dólares el costo viene del Catálogo: el campo no se usa (D3a).
+  const usd = hayCosto(invSel.costo_usd), campo = $("#invCosto");
+  campo.disabled = usd;
+  campo.placeholder = usd ? "Viene del Catálogo DICOSA" : "";
+  if(usd) campo.value = "";
+  else if(veCostos() && !campo.value && hayCosto(invSel.costo)) campo.value = invSel.costo;
 }
 function registrarIngreso(){
   if(!invSel){ $("#invMsg").innerHTML=`<div class="aviso a-mal">Elige primero el producto.</div>`; return; }
@@ -2765,12 +2906,13 @@ function registrarIngreso(){
   if(c<=0){ $("#invMsg").innerHTML=`<div class="aviso a-mal">La cantidad debe ser mayor que cero.</div>`; return; }
   const co = parseFloat($("#invCosto").value);
   if(!corteInv()) invSel.existencia += c;        // antes del corte, como siempre
-  if(veCostos() && co>0) invSel.costo = co;
+  if(veCostos() && co>0 && !hayCosto(invSel.costo_usd)) invSel.costo = co;
   movimiento({tipo:"ingreso", codigo:invSel.codigo, cantidad:c, ref:"Compra"});
   guardar();
   $("#invMsg").innerHTML = `<div class="aviso a-ok">Ingresaron ${c} de ${esc(invSel.nombre)}.
     Existencia ahora: ${existencia(invSel)}.</div>`;
   $("#invSku").value=""; $("#invCant").value=1; $("#invCosto").value=""; invSel=null;
+  $("#invCosto").disabled = false; $("#invCosto").placeholder = "";
   pintarInventario();
 }
 
@@ -2921,14 +3063,20 @@ const NOMBRE_COL = {codigo:"Número de Material", descripcion:"descripción", ce
   consignacion:"Columna5", cod:"COD. UNICO",
   nombre:"NOMBRE BODEGA", zona:"ZONA GEOGRAFICA", mercado:"MERCADO", tipo:"TIPO"};
 // La fila de encabezados es la primera que tiene la primera columna pedida.
-function ubicarColumnas(filas, cols){
+// nombres: cómo se llaman las columnas en los mensajes; opcionales: columnas
+// que se leen si están, sin exigirlas.
+function ubicarColumnas(filas, cols, nombres = NOMBRE_COL, opcionales = {}){
   const clave = Object.values(cols)[0][0];
   const h = filas.findIndex(f => f.celdas.some(c => normalizarEncabezado(c) === clave));
-  if(h < 0) return {error: "No se encontró la fila de encabezados (falta «"+NOMBRE_COL[Object.keys(cols)[0]]+"»)."};
+  if(h < 0) return {error: "No se encontró la fila de encabezados (falta «"+nombres[Object.keys(cols)[0]]+"»)."};
   const cab = filas[h].celdas.map(normalizarEncabezado), idx = {}, faltan = [];
   Object.entries(cols).forEach(([k, cands]) => {
     const i = cab.findIndex(c => cands.includes(c));
-    if(i < 0) faltan.push(NOMBRE_COL[k]); else idx[k] = i;
+    if(i < 0) faltan.push(nombres[k]); else idx[k] = i;
+  });
+  Object.entries(opcionales).forEach(([k, cands]) => {
+    const i = cab.findIndex(c => cands.includes(c));
+    if(i >= 0) idx[k] = i;
   });
   if(faltan.length) return {error: "Faltan columnas: "+faltan.join(", ")+". Encabezados del archivo: "+
     filas[h].celdas.filter(c => String(c).trim()).join(" · ")+"."};
@@ -2957,6 +3105,8 @@ function selloImportacion(){
 
 /* ----------------------------------------------------------- quién importa */
 function puedeImportar(t){
+  // El Catálogo DICOSA lo importan solo admin y coordinador (fase 1b, D4).
+  if(t === "catalogo") return ["local","admin","coordinador"].includes(rolPantalla());
   return rolPantalla() === "local" || (typeof nubeEscribe === "function" && nubeEscribe(t));
 }
 // Del detalle, pedidos ve solo las bodegas VENTA; despacho, nada.
@@ -3071,7 +3221,7 @@ function diferenciasInv(a){
   return delArchivo.concat(aCero);
 }
 function productoPorCompletar(c, nombre){
-  return {codigo:c, nombre: nombre || "Material "+c, marca:"", categoria:"Por completar",
+  return {codigo:c, nombre: nombre || "Material "+c, categoria:"Por completar",
     unidad:"Unidad", contenido:"—", presentacion:"", peso:0, costo:null, precio:0, existencia:0,
     minimo:0, restringido:false, motivo_restriccion:"", oferta:false, nuevo:false,
     precio_oferta:null, rotacion:"C", por_completar:true};
@@ -3165,6 +3315,181 @@ async function confirmarImportacion(){
   pintarInventario();
 }
 
+/* ============================================================================
+   CATÁLOGO DICOSA (fase 1b, 2026-11-02)
+   El Catálogo dice qué es cada producto: nombre, códigos, categoría, mínimos
+   de pedido, precio en dólares sin IVA y tasa de IVA. Mismo flujo que el Inv:
+   leer, analizar, vista previa sin cambios, casilla y confirmar. Solo cambia
+   los campos que vienen de DICOSA; nunca peso, precio de venta, mínimo de
+   existencia, rotación, oferta ni restricción. Un código nuevo entra con
+   existencia 0 y sin movimiento. Un error en cualquier fila detiene todo.
+   ============================================================================ */
+const CAT_COLS = {codigo:["codigointernodicosa"], nombre:["descripciondematerial"],
+  barras:["codigodebarras:"], dkt:["codigointernodkt:"], categoria:["categoria:"], subcategoria:["subcategoria:"],
+  min_unidades:["cantidadminimadepedidoenunidades"], precio:["precioen$(siniva)"], iva:["aplicaiva(siono)"]};
+const CAT_OPCIONALES = {min_cajas:["cantidadminimadepedidoencajas"]};
+const CAT_NOMBRES = {codigo:"Código Interno Dicosa", nombre:"Descripción de Material", barras:"Código de Barras:",
+  dkt:"Código Interno DKT:", categoria:"Categoría:", subcategoria:"Subcategoría:",
+  min_unidades:"Cantidad Minima de Pedido en Unidades", min_cajas:"Cantidad Minima de Pedido en Cajas",
+  precio:"Precio en $ (Sin IVA)", iva:"Aplica IVA (SI O NO)"};
+const CAT_IVAS = [0, 0.15];
+// Celda numérica: {vacio} si no trae nada, {malo} si no es número, {n} si lo es.
+function numeroCelda(t){
+  const s = String(t ?? "").trim().replace(",", ".");
+  if(s === "") return {vacio:true};
+  const n = Number(s);
+  return isFinite(n) ? {n} : {malo:true};
+}
+// Lee las filas del Catálogo. No cambia nada.
+function analizarCatalogo(filas){
+  const u = ubicarColumnas(filas, CAT_COLS, CAT_NOMBRES, CAT_OPCIONALES);
+  if(u.error) return {error: u.error};
+  const prod = {}, malas = [], iva = {};
+  let sinCodigo = 0, sinPrecio = 0, precioCero = 0;
+  u.datos.forEach(f => {
+    const v = k => u.idx[k] === undefined ? "" : String(f.celdas[u.idx[k]] ?? "").trim();
+    const codigo = codigoMaterial(v("codigo"));
+    if(!codigo){ sinCodigo++; return; }
+    const mal = txt => malas.push({n:f.n, codigo, txt});
+    if(prod[codigo]) return mal("código repetido en el archivo");
+    const pr = numeroCelda(v("precio")), iv = numeroCelda(v("iva"));
+    const mu = numeroCelda(v("min_unidades")), mc = numeroCelda(v("min_cajas"));
+    if(pr.malo || pr.n < 0) return mal("«"+CAT_NOMBRES.precio+"» no es un número válido");
+    const tasa = iv.n === undefined ? undefined : CAT_IVAS.find(x => Math.abs(x - iv.n) < 1e-9);
+    if(tasa === undefined) return mal("«"+CAT_NOMBRES.iva+"» debe ser 0 o 0.15 (IVA)");
+    if(mu.malo || mc.malo || mu.n < 0 || mc.n < 0) return mal("la cantidad mínima de pedido no es un número válido");
+    if(pr.vacio) sinPrecio++; else if(pr.n === 0) precioCero++;
+    iva[tasa] = (iva[tasa] || 0) + 1;
+    // Precio vacío o 0: sin costo DICOSA (D1a), nunca un costo 0.
+    prod[codigo] = {nombre: v("nombre"), costo_usd: pr.vacio || pr.n === 0 ? null : pr.n,
+      dicosa: {barras: codigoMaterial(v("barras")), dkt: codigoMaterial(v("dkt")),
+        categoria: v("categoria"), subcategoria: v("subcategoria"),
+        min_unidades: mu.vacio ? null : mu.n, min_cajas: mc.vacio ? null : mc.n, iva: tasa}};
+  });
+  return {filas: u.datos.length, sinCodigo, sinPrecio, precioCero, iva, prod, malas};
+}
+// Los campos del Catálogo que tendría el producto después de importar.
+function camposCatalogo(s, p){
+  const n = {nombre: p.nombre || (s ? s.nombre : ""), costo_usd: p.costo_usd, dicosa: p.dicosa};
+  // D2a: la categoría de la app se toma de DICOSA solo si está vacía o «Por completar».
+  const cat = s ? s.categoria : "";
+  n.categoria = (!cat || cat === "Por completar") && p.dicosa.categoria ? p.dicosa.categoria : cat;
+  return n;
+}
+function sinFechaImportado(d){ if(!d) return null; const {importado, ...resto} = d; return resto; }
+// Qué pasa con cada código del archivo: nuevo, cambia o queda igual.
+function diferenciasCatalogo(a){
+  return Object.keys(a.prod).sort().map(c => {
+    const s = D.skus.find(x => x.codigo === c), n = camposCatalogo(s, a.prod[c]);
+    if(!s) return {codigo:c, nombre:n.nombre, nuevo:true, cambia:true};
+    const antes = nubeFirma({nombre:s.nombre, costo_usd:s.costo_usd ?? null, categoria:s.categoria,
+                             dicosa:sinFechaImportado(s.dicosa)});
+    const despues = nubeFirma({nombre:n.nombre, costo_usd:n.costo_usd, categoria:n.categoria, dicosa:n.dicosa});
+    return {codigo:c, nombre:n.nombre, nuevo:false, cambia: antes !== despues};
+  });
+}
+function productoDelCatalogo(c, p, fecha){
+  const n = camposCatalogo(null, p);
+  return {codigo:c, nombre: n.nombre || "Material "+c, categoria: n.categoria || "",
+    unidad:"Unidad", contenido:"—", presentacion:"", peso:0, precio:0, existencia:0, minimo:0,
+    restringido:false, motivo_restriccion:"", oferta:false, nuevo:false, precio_oferta:null, rotacion:"C",
+    costo_usd: p.costo_usd, dicosa: {...p.dicosa, importado: fecha}};
+}
+// Lo que tiene que estar listo antes de calcular. Con base compartida se
+// sincroniza primero, como en el Inv. Devuelve el texto del problema o "".
+async function catListo(){
+  if(!puedeImportar("catalogo")) return "Tu rol no importa el Catálogo.";
+  if(enEquipo()){
+    if(!nubeActiva()) return "Entra con tu usuario antes de importar.";
+    if(NUBE.ocupado) return "Se está sincronizando. Intenta de nuevo en unos segundos.";
+    await nubeSincronizar(true);
+    if(NUBE.estado !== "en_linea" || NUBE.pendiente)
+      return "No se pudo dejar la sincronización al día. Revisa la conexión e intenta de nuevo.";
+  }
+  return "";
+}
+
+let CDK = null;
+$("#cdkArchivo").onchange = async function(){
+  const f = this.files[0]; this.value = "";
+  CDK = null; $("#cdkPrevia").innerHTML = ""; $("#cdkMsg").innerHTML = "";
+  if(!f) return;
+  const mal = t => { $("#cdkMsg").innerHTML = `<div class="aviso a-mal">${esc(t)}</div>`; };
+  const pre = await catListo();
+  if(pre) return mal(pre);
+  let filas;
+  try{ filas = await leerXlsx(f); }catch(e){ return mal(e.message); }
+  const a = analizarCatalogo(filas);
+  if(a.error) return mal(a.error+" No se cambió nada.");
+  if(a.malas.length){
+    $("#cdkMsg").innerHTML = `<div class="aviso a-mal"><strong>La importación del Catálogo se detuvo. No se cambió nada.</strong>
+      <ul>${a.malas.map(x => `<li>Fila ${x.n}: ${esc(x.txt)} (código ${esc(x.codigo)})</li>`).join("")}</ul>
+      Corrige el archivo y vuelve a cargarlo.</div>`;
+    return;
+  }
+  CDK = {a, archivo:f.name};
+  pintarPreviaCatalogo();
+};
+function pintarPreviaCatalogo(){
+  const {a, archivo} = CDK, dif = diferenciasCatalogo(a);
+  const nuevos = dif.filter(x => x.nuevo), cambian = dif.filter(x => x.cambia && !x.nuevo);
+  CDK.n = {nuevos:nuevos.length, cambian:cambian.length};
+  $("#cdkPrevia").innerHTML = `<div class="aviso a-info"><strong>Vista previa: todavía no cambió nada.</strong>
+    <br>Archivo ${esc(archivo)} · filas <strong id="cdkFilas">${a.filas}</strong>
+    · sin código (se saltan) <strong id="cdkSinCodigo">${a.sinCodigo}</strong>
+    · se actualizan <strong id="cdkActualizan">${cambian.length}</strong>
+    · nuevos con existencia 0 <strong id="cdkNuevos">${nuevos.length}</strong>
+    · sin cambios <strong id="cdkSinCambio">${dif.length - nuevos.length - cambian.length}</strong>
+    <br>Sin precio en $ <strong id="cdkSinPrecio">${a.sinPrecio}</strong>
+    · con precio 0 <strong id="cdkPrecioCero">${a.precioCero}</strong> (los dos quedan sin costo)
+    · IVA: ${Object.entries(a.iva).map(([t, n]) =>
+      `<span data-iva="${esc(t)}" data-n="${n}">${r4(Number(t)*100)}%: ${n}</span>`).join(" · ")}</div>
+    ${nuevos.length || cambian.length ? `<div class="tabla-wrap"><table><thead><tr><th>Código</th><th>Producto</th><th></th></tr></thead><tbody>
+      ${nuevos.concat(cambian).map(x => `<tr><td>${esc(x.codigo)}</td><td>${esc(x.nombre)}</td>
+        <td>${x.nuevo ? '<span class="pill p-med">nuevo, existencia 0</span>' : '<span class="pill p-ok">se actualiza</span>'}</td></tr>`).join("")}
+      </tbody></table></div>` : `<p class="mini">Ningún producto cambia.</p>`}
+    <p class="mini">No se tocan peso, precio de venta, mínimo de existencia, rotación, oferta ni restricción.
+      Un producto nuevo no se puede pedir hasta ponerle precio de venta y peso en su ficha.</p>
+    <p><label><input type="checkbox" id="cdkCasilla" style="width:auto"
+      onchange="$('#cdkConfirmar').disabled=!this.checked"> Revisé la vista previa: se actualizan ${cambian.length}
+      y se crean ${nuevos.length} producto(s)</label></p>
+    <button class="b" id="cdkConfirmar" onclick="confirmarCatalogo()" disabled>Confirmar importación del Catálogo</button>
+    <button class="s" onclick="CDK=null;$('#cdkPrevia').innerHTML=''">Cancelar</button>`;
+}
+async function confirmarCatalogo(){
+  if(!CDK) return;
+  const casilla = $("#cdkCasilla");
+  if(!casilla || !casilla.checked) return;
+  const pre = await catListo();
+  if(pre){ $("#cdkMsg").innerHTML = `<div class="aviso a-mal">${esc(pre)}</div>`; return; }
+  const {a} = CDK;
+  // Se recalcula con lo que hay ahora (la sincronización pudo traer productos).
+  const dif = diferenciasCatalogo(a);
+  const nuevos = dif.filter(x => x.nuevo).length, cambian = dif.filter(x => x.cambia && !x.nuevo).length;
+  if(nuevos !== CDK.n.nuevos || cambian !== CDK.n.cambian){
+    pintarPreviaCatalogo();
+    $("#cdkMsg").innerHTML = `<div class="aviso a-mal">Los datos cambiaron al sincronizar.
+      Revisa la vista previa y confirma de nuevo.</div>`;
+    return;
+  }
+  CDK = null;
+  const fecha = fechaLocal();
+  dif.forEach(x => {
+    const p = a.prod[x.codigo];
+    if(x.nuevo){ D.skus.push(productoDelCatalogo(x.codigo, p, fecha)); return; }
+    if(!x.cambia) return;
+    const s = D.skus.find(y => y.codigo === x.codigo), n = camposCatalogo(s, p);
+    s.nombre = n.nombre; s.categoria = n.categoria;
+    s.costo_usd = n.costo_usd; s.dicosa = {...n.dicosa, importado: fecha};
+  });
+  guardar();
+  $("#cdkPrevia").innerHTML = "";
+  $("#cdkMsg").innerHTML = `<div class="aviso a-ok"><strong>Catálogo importado (${esc(fecha)}).</strong>
+    ${cambian} producto(s) actualizado(s), ${nuevos} nuevo(s) con existencia 0, ${dif.length - nuevos - cambian} sin cambios.
+    ${a.sinCodigo ? a.sinCodigo+" fila(s) sin código no se tomaron en cuenta." : ""}</div>`;
+  pintarCatalogo();
+}
+
 /* ------------------------------------------------- detalle por bodega y lote */
 function pintarDetalle(){
   const d = detalleVisible();
@@ -3256,10 +3581,14 @@ function armarPedidoSugerido(i){
   const s = D.skus.find(y=>y.codigo===x.codigo);
   if(!s){ alert("Ese producto ya no está en el catálogo."); return; }
   if(existencia(s) <= 0){ alert("«"+s.nombre+"» está agotado. Registra el ingreso antes de ofrecerlo."); return; }
+  const fv = faltaParaVender(s);
+  if(fv.length){ alert("«"+s.nombre+"» no se puede pedir: le falta "+fv.join(" y ")+". Complétalo en Catálogo."); return; }
+  const t = hayCosto(s.costo_usd) ? tcVigente() : null;
   P.cliente = x.cliente;
   P.lineas = [{codigo:s.codigo, nombre:s.nombre, cantidad:x.cantidad,
                precio:(s.oferta&&s.precio_oferta)?s.precio_oferta:s.precio,
-               costo:s.costo, peso:s.peso}];
+               costo:costoDe(s), peso:s.peso,
+               ...(t ? {costo_usd:s.costo_usd, tc:{valor:t.valor, fecha:t.fecha}} : {})}];
   ir("nuevo");
   elegirCliente(x.cliente.id);
   document.getElementById("canalSug").scrollIntoView({behavior:"smooth", block:"center"});
@@ -3282,6 +3611,7 @@ function pintarAjustes(){
     $("#bkTitular").value=b.titular||""; $("#bkTipo").value=b.tipo||""; }
   if($("#letraDisp")) $("#letraDisp").value = letraDispositivo();
   pintarCorte();
+  pintarTipoCambio();
   $("#params").innerHTML = Object.entries(PARAMS_DEF).map(([k,o])=>`
     <div><label>${o.d}</label>
       <div class="fila"><input id="pp_${k}" type="number" step="0.01" value="${D.params[k]}">
@@ -3326,6 +3656,38 @@ function guardarLetra(){
   catch(e){ $("#letraMsg").innerHTML = `<div class="aviso a-mal">No se pudo guardar la letra en este navegador.</div>`; return; }
   $("#letraDisp").value = l;
   $("#letraMsg").innerHTML = `<div class="aviso a-ok">Letra guardada. Los pedidos nuevos de este dispositivo saldrán como ${l}-…</div>`;
+}
+
+// Tipo de cambio (fase 1b, D3 y D5a): lo registra el admin, con fecha; queda
+// historial. Viaja a la base como la fila «tipo_cambio» de config.
+function pintarTipoCambio(){
+  if(!$("#tcHistorial")) return;
+  if(!$("#tcFecha").value) $("#tcFecha").value = fechaLocal();
+  const v = tcVigente();
+  const l = (D.tipo_cambio || []).slice().sort((a, b) => a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 :
+    String(a.registrado||"") < String(b.registrado||"") ? 1 : -1);
+  $("#tcHistorial").innerHTML = l.length ? `<div class="tabla-wrap"><table>
+    <thead><tr><th>Fecha</th><th class="num">L. por US$</th><th>Fuente</th><th>Registrado</th><th></th></tr></thead><tbody>
+    ${l.map(t => `<tr><td>${esc(t.fecha)}</td><td class="num">${esc(String(t.valor))}</td><td>${esc(t.fuente||"—")}</td>
+      <td class="mini">${fecha(t.registrado)}${t.letra?" · "+esc(t.letra):""}</td>
+      <td>${v && t.id === v.id ? '<span class="pill p-ok">vigente</span>' : t.fecha > fechaLocal() ? '<span class="pill p-gris">desde esa fecha</span>' : ''}</td></tr>`).join("")}
+    </tbody></table></div>`
+    : `<div class="aviso a-med">Sin tipo de cambio registrado: los productos con precio DICOSA en dólares quedan sin costo.</div>`;
+}
+function registrarTipoCambio(){
+  const f = ($("#tcFecha").value || "").trim(), v = parseFloat($("#tcValor").value), fu = ($("#tcFuente").value || "").trim();
+  const mal = t => { $("#tcMsg").innerHTML = `<div class="aviso a-mal">${t}</div>`; };
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(f)) return mal("Escribe la fecha del tipo de cambio.");
+  if(!(v > 0)) return mal("El tipo de cambio debe ser un número mayor que cero.");
+  D.tipo_cambio = D.tipo_cambio || [];
+  D.tipo_cambio.push({id: uid(), fecha: f, valor: v, fuente: fu, registrado: new Date().toISOString(), letra: letraDispositivo()});
+  guardar();
+  const vig = tcVigente();
+  $("#tcMsg").innerHTML = `<div class="aviso a-ok">Registrado: L. ${esc(String(v))} por US$ del ${esc(f)}.
+    ${f > fechaLocal() ? "Aplica desde esa fecha. " : ""}Vigente hoy: ${vig ? "L. "+esc(String(vig.valor))+" ("+esc(vig.fecha)+")" : "ninguno"}.</div>`;
+  $("#tcValor").value = "";
+  pintarTipoCambio();
+  if(typeof recalc === "function") recalc();
 }
 
 // Rol con que se dibuja la pantalla; lo lleva la parte de la base compartida
@@ -3398,7 +3760,7 @@ function cargarEjemplo(){
 
   const sk = c => D.skus.find(s=>s.codigo===c);
   const linea = (cod,cant) => { const s=sk(cod); return s ?
-    {codigo:s.codigo,nombre:s.nombre,cantidad:cant,precio:s.precio,costo:s.costo,peso:s.peso} : null; };
+    {codigo:s.codigo,nombre:s.nombre,cantidad:cant,precio:s.precio,costo:costoDe(s),peso:s.peso} : null; };
   // asegurar existencia para los ejemplos. Después del corte, con ajustes
   // marcados como ejemplo, que «Borrar solo los ejemplos» quita (D9).
   ["GUA-001","CUR-004","ODO-001","ODO-002","INY-002","GLU-002"].forEach(c=>{
@@ -3544,12 +3906,22 @@ function exportarClientesCSV(){
   bajar("clientes-"+hoy()+".csv", csv(f));
 }
 function exportarCatalogoCSV(){
-  const f = [["codigo","nombre","marca","categoria","unidad","contenido","peso_kg","costo","precio",
-    "densidad_l_kg","canal","existencia","comprometido","esperando_pago","disponible","minimo","restringido"]];
-  D.skus.forEach(s=>{ const c=comprometido(s.codigo);
-    f.push([s.codigo,s.nombre,s.marca,s.categoria,s.unidad,s.contenido,s.peso,
-    s.costo,s.precio,(s.peso?(s.precio/s.peso).toFixed(1):0),canalDe(s),
-    existencia(s),c.total,c.esperandoPago,disponible(s),s.minimo,s.restringido?"SI":"NO"]);});
+  // Sin marca (fase 1b). costo es en lempiras: costo_usd × tipo de cambio si hay
+  // precio DICOSA en dólares. Las columnas con IVA son informativas (D4a).
+  const tc = tcVigente(), vacio = x => (x === null || x === undefined || x === "") ? "" : x;
+  const f = [["codigo","nombre","categoria","unidad","contenido","peso_kg","costo_usd","iva","costo_usd_con_iva",
+    "tipo_cambio","tipo_cambio_fecha","costo","costo_con_iva","precio",
+    "densidad_l_kg","canal","existencia","comprometido","esperando_pago","disponible","minimo","restringido",
+    "codigo_barras","codigo_dkt","categoria_dicosa","subcategoria_dicosa","min_pedido_unidades","min_pedido_cajas",
+    "catalogo_importado"]];
+  D.skus.forEach(s=>{ const c=comprometido(s.codigo), co=costoDe(s), ci=costoConIva(s), d=s.dicosa||{};
+    f.push([s.codigo,s.nombre,s.categoria,s.unidad,s.contenido,s.peso,
+    ci?ci.usd:"", d.iva===undefined?"":d.iva, ci?ci.usd_iva:"",
+    ci&&tc?tc.valor:"", ci&&tc?tc.fecha:"",
+    hayCosto(co)?r4(co):"", ci?vacio(ci.l_iva):"", s.precio,(s.peso?(s.precio/s.peso).toFixed(1):0),canalDe(s),
+    existencia(s),c.total,c.esperandoPago,disponible(s),s.minimo,s.restringido?"SI":"NO",
+    vacio(d.barras),vacio(d.dkt),vacio(d.categoria),vacio(d.subcategoria),
+    vacio(d.min_unidades),vacio(d.min_cajas),vacio(d.importado)]);});
   bajar("catalogo-"+hoy()+".csv", csv(f));
 }
 function exportarTodoCSV(){ exportarPedidosCSV(); exportarClientesCSV(); exportarCatalogoCSV(); }
@@ -3694,6 +4066,7 @@ function nubeLeerEspejo(){
     const e = JSON.parse(localStorage.getItem(NUBE_MARK) || "null");
     if(e){ NUBE.espejo = e.espejo || {}; NUBE.desde = e.desde || NUBE.desde;
            NUBE.espejo.costos = NUBE.espejo.costos || {};
+           NUBE.espejo.costos_usd = NUBE.espejo.costos_usd || {};   // antes de la fase 1b no venía
            // Un espejo guardado antes de bodegas e inv_detalle no las trae.
            COLECCIONES.forEach(c => NUBE.espejo[c.t] = NUBE.espejo[c.t] || {});
            return; }
@@ -3701,6 +4074,7 @@ function nubeLeerEspejo(){
   COLECCIONES.forEach(c => NUBE.espejo[c.t] = {});
   NUBE.espejo.config = {};
   NUBE.espejo.costos = {};
+  NUBE.espejo.costos_usd = {};
 }
 function nubeGuardarEspejo(){
   try{ localStorage.setItem(NUBE_MARK, JSON.stringify({espejo:NUBE.espejo, desde:NUBE.desde})); }catch(e){}
@@ -3709,6 +4083,7 @@ function nubeOlvidarEspejo(){
   NUBE.espejo = {}; COLECCIONES.forEach(c => NUBE.espejo[c.t] = {});
   NUBE.espejo.config = {};
   NUBE.espejo.costos = {};
+  NUBE.espejo.costos_usd = {};
   NUBE.desde = "1970-01-01T00:00:00Z";
   nubeGuardarEspejo();
 }
@@ -3716,7 +4091,9 @@ function nubeOlvidarEspejo(){
 // La base guarda el costo aparte (tabla costos), así que la firma de un
 // producto se toma sin él. El espejo de costos guarda el valor, no la firma:
 // con él se vuelve a poner el costo cuando el producto baja otra vez.
-function nubeSinCosto(item){ const {costo, ...resto} = item; return resto; }
+// Desde la fase 1b, lo mismo con el costo en dólares (costo_usd): la base lo
+// guarda en la misma fila de costos, que solo leen admin y coordinador.
+function nubeSinCosto(item){ const {costo, costo_usd, ...resto} = item; return resto; }
 function nubeFirmaFila(t, item){ return nubeFirma(t === "skus" ? nubeSinCosto(item) : item); }
 
 /* ---------------------------------------------------------------- roles --- */
@@ -3874,6 +4251,7 @@ function nubeCambiosLocales(){
   // la base lo saca de ahí y lo guarda en la tabla costos.
   const conCostos = veCostos();
   const ec = NUBE.espejo.costos = NUBE.espejo.costos || {};
+  const eu = NUBE.espejo.costos_usd = NUBE.espejo.costos_usd || {};
   COLECCIONES.forEach(c => {
     if(!nubeEscribe(c.t)) return;
     const esp = NUBE.espejo[c.t] = NUBE.espejo[c.t] || {};
@@ -3884,7 +4262,9 @@ function nubeCambiosLocales(){
       if(k === undefined || k === null) return;
       vivos[k] = true;
       const f = nubeFirmaFila(c.t, item);
-      const cambiaCosto = c.t === "skus" && conCostos && item.costo !== undefined && ec[k] !== item.costo;
+      const cambiaCosto = c.t === "skus" && conCostos &&
+        ((item.costo !== undefined && ec[k] !== item.costo) ||
+         (item.costo_usd !== undefined && eu[k] !== item.costo_usd));
       if(esp[k] !== f || cambiaCosto){
         const datos = c.t === "skus" && !conCostos ? nubeSinCosto(item) : item;
         filas.push({[c.clave]: String(k), datos: datos}); n++;
@@ -3899,7 +4279,8 @@ function nubeCambiosLocales(){
   if(!nubeEscribe("config")) return {lotes, n};
   const esp = NUBE.espejo.config = NUBE.espejo.config || {};
   const cfgFilas = [];
-  [["params", D.params], ["banco", D.banco]].forEach(([k, v]) => {
+  // Tipo de cambio (fase 1b): la lista entera, como una fila más de config.
+  [["params", D.params], ["banco", D.banco], ["tipo_cambio", D.tipo_cambio || []]].forEach(([k, v]) => {
     const f = nubeFirma(v);
     if(esp[k] !== f){ cfgFilas.push({clave:k, datos:v}); n++; }
   });
@@ -3924,6 +4305,7 @@ async function nubeSubir(){
       filas.forEach(f => {
         NUBE.espejo[t][f[c.clave]] = nubeFirmaFila(t, f.datos);
         if(t === "skus" && f.datos.costo !== undefined) NUBE.espejo.costos[f[c.clave]] = f.datos.costo;
+        if(t === "skus" && f.datos.costo_usd !== undefined) NUBE.espejo.costos_usd[f[c.clave]] = f.datos.costo_usd;
       });
     }
     for(const k of borrar){
@@ -3943,8 +4325,9 @@ function nubeAplicar(campo, clave, tabla, filas){
     const fi = nubeFirmaFila(tabla, item);
     if(NUBE.espejo[tabla][k] === fi) return;      // ya lo teníamos igual
     // El producto llega sin costo: se le pone el último que mandó la base.
-    const ec = NUBE.espejo.costos || {};
+    const ec = NUBE.espejo.costos || {}, eu = NUBE.espejo.costos_usd || {};
     if(tabla === "skus" && item.costo === undefined && ec[k] !== undefined) item.costo = ec[k];
+    if(tabla === "skus" && item.costo_usd === undefined && eu[k] !== undefined) item.costo_usd = eu[k];
     const arr = D[campo];
     const i = arr.findIndex(x => String(x[clave]) === k);
     if(i >= 0) arr[i] = item; else arr.push(item);
@@ -3962,18 +4345,25 @@ async function nubeBajar(){
   // Costos: la base solo los manda a quien puede leerlos (admin y coordinador).
   // Se ponen en cada producto para que los márgenes sigan funcionando.
   const ec = NUBE.espejo.costos = NUBE.espejo.costos || {};
+  const eu = NUBE.espejo.costos_usd = NUBE.espejo.costos_usd || {};
   (r.costos || []).forEach(f => {
-    const k = String(f.k), v = f.d ? f.d.costo : undefined;
-    if(v === undefined) return;
-    ec[k] = v;
+    const k = String(f.k), d = f.d || {};
     const s = D.skus.find(x => String(x.codigo) === k);
-    if(s && s.costo !== v){ s.costo = v; n++; }
+    if(d.costo !== undefined){
+      ec[k] = d.costo;
+      if(s && s.costo !== d.costo){ s.costo = d.costo; n++; }
+    }
+    if(d.costo_usd !== undefined){
+      eu[k] = d.costo_usd;
+      if(s && s.costo_usd !== d.costo_usd){ s.costo_usd = d.costo_usd; n++; }
+    }
   });
   (r.config || []).forEach(f => {
     const fi = nubeFirma(f.d);
     if(NUBE.espejo.config[f.k] === fi) return;
     if(f.k === "params") D.params = f.d;
     if(f.k === "banco")  D.banco  = f.d;
+    if(f.k === "tipo_cambio") D.tipo_cambio = Array.isArray(f.d) ? f.d : [];
     NUBE.espejo.config[f.k] = fi;
     n++;
   });
@@ -4107,9 +4497,11 @@ async function nubePrimeraVez(){
   // Los productos también los manda la base: si quedaran los locales que la
   // base no tiene, la vuelta siguiente los subiría como recién creados aquí.
   D.skus = [];
+  // El tipo de cambio también lo manda la base: uno local de otra isla no vale.
+  D.tipo_cambio = [];
   const n = await nubeBajar();
   // Parámetros y cuenta que la base no trae se quedan aquí, pero no se suben.
-  [["params", D.params], ["banco", D.banco]].forEach(([k, v]) => {
+  [["params", D.params], ["banco", D.banco], ["tipo_cambio", D.tipo_cambio]].forEach(([k, v]) => {
     if(NUBE.espejo.config[k] === undefined) NUBE.espejo.config[k] = nubeFirma(v);
   });
   await nubeReconciliar();
