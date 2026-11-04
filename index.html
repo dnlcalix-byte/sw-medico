@@ -2665,7 +2665,7 @@ function pintarCatalogo(){
    <div class="tabla-wrap"><table>
     <thead><tr><th>Código</th><th>Producto</th><th>Unidad</th><th>Contenido</th><th class="num">Peso</th>
       ${conCostos?'<th class="num">Costo</th>':''}<th class="num">Precio</th>${conCostos?'<th class="num">Margen</th>':''}
-      <th class="num">L./kg</th><th>Canal</th><th class="num">Exist.</th><th>Marcas</th></tr></thead><tbody>
+      <th class="num">L./kg</th><th>Canal</th><th class="num" title="Disponible: existencia menos lo comprometido en pedidos abiertos">Disp.</th><th>Marcas</th></tr></thead><tbody>
     ${r.map(s=>{
       const co = costoDe(s);
       // Sin costo, o sin precio de venta, no hay margen: «—» (antes un precio 0 daba «0%»).
@@ -4605,8 +4605,8 @@ function nubeTarjeta(){
     '<div class="grid g2">' +
       '<div style="margin-bottom:12px"><label>Dirección del proyecto (Project URL)</label>' +
       '<input id="nbUrl" placeholder="https://xxxxxxxx.supabase.co" value="'+esc(NUBE.url)+'"></div>' +
-      '<div style="margin-bottom:12px"><label>Llave pública (anon public key)</label>' +
-      '<input id="nbKey" placeholder="eyJhbGciOi..." value="'+esc(NUBE.key)+'"></div>' +
+      '<div style="margin-bottom:12px"><label>Llave pública (publishable o anon)</label>' +
+      '<input id="nbKey" placeholder="sb_publishable_..." value="'+esc(NUBE.key)+'"></div>' +
     '</div>' +
     '<button class="b" onclick="nubeGuardarCfg()">Guardar conexión</button>' +
     (cfg ? ' <button class="s" onclick="nubeLogin()">Entrar con mi usuario</button>' : '') +
@@ -4621,6 +4621,23 @@ function nubeDato(t, v){
          'letter-spacing:.4px">'+esc(t)+'</div><div style="font-size:15px;font-weight:600;margin-top:2px">'+v+'</div></div>';
 }
 
+// Qué llave se pegó (174): "publica" es la publishable (sb_publishable_) o la
+// anon (JWT con rol anon); "secreta" es sb_secret_ o un JWT con rol
+// service_role; "otra" es todo lo demás. El rol del JWT se lee aquí mismo,
+// sin consultar a nadie.
+function nubeTipoLlave(k){
+  if(/^sb_publishable_\S+$/.test(k)) return "publica";
+  if(k.startsWith("sb_secret_")) return "secreta";
+  const p = k.split(".");
+  if(p.length !== 3) return "otra";
+  let rol;
+  try{
+    const b = p[1].replace(/-/g,"+").replace(/_/g,"/");
+    rol = JSON.parse(atob(b + "===".slice((b.length + 3) % 4))).role;
+  }catch(e){ return "otra"; }
+  return rol === "anon" ? "publica" : rol === "service_role" ? "secreta" : "otra";
+}
+
 function nubeGuardarCfg(){
   const u = (document.getElementById("nbUrl").value || "").trim().replace(/\/+$/,"");
   const k = (document.getElementById("nbKey").value || "").trim();
@@ -4628,9 +4645,16 @@ function nubeGuardarCfg(){
     alert("La dirección debe verse así:\n\nhttps://abcdefghijkl.supabase.co\n\n" +
           "La encuentras en Supabase, en Settings → API → Project URL."); return;
   }
-  if(k.length < 40){
-    alert("La llave pública se ve larga, algo así como:\n\neyJhbGciOiJIUzI1NiIsInR5cCI6...\n\n" +
-          "La encuentras en Supabase, en Settings → API → anon public."); return;
+  const donde = "La encuentras en Supabase, en Project Settings, API Keys " +
+                "(la publishable; la anon está en el botón View legacy API keys).";
+  const tipo = nubeTipoLlave(k);
+  if(tipo === "secreta"){
+    alert("Esa es una llave secreta: no se pega aquí ni en ningún navegador.\n\n" +
+          "Usa la llave pública: la publishable (sb_publishable_...) o la anon.\n\n" + donde); return;
+  }
+  if(tipo !== "publica"){
+    alert("La llave pública se ve así:\n\nsb_publishable_...\n\n" +
+          "o, si es la anon, eyJhbGciOiJIUzI1NiIsInR5cCI6...\n\n" + donde); return;
   }
   try{ localStorage.setItem(NUBE_CFG, JSON.stringify({url:u, key:k})); }catch(e){}
   NUBE.url = u; NUBE.key = k;
