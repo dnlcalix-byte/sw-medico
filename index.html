@@ -313,6 +313,16 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
     </div>
     <div id="tablaClientes" style="margin-top:12px"></div>
   </div>
+  <div class="card" id="cliCard" data-importa="clientes">
+    <h3>Importar Clientes DICOSA</h3>
+    <p class="mini">Archivo Clientes (.xlsx, primera hoja). Primero se ve una vista previa; nada cambia hasta confirmar.
+      DICOSA manda en nombre, teléfono, dirección y sus datos (código, contacto, grupo, especialidad, zona, departamento,
+      municipio, ubicación y generador). Crédito, referencia y tipo no se tocan. Un cliente que deja de venir no se borra:
+      se marca. Los pedidos ya hechos conservan sus datos.</p>
+    <div class="fila"><div><label>Archivo de Clientes</label><input id="cliArchivo" type="file" accept=".xlsx"></div></div>
+    <div id="cliPrevia"></div>
+    <div id="cliMsg"></div>
+  </div>
 </section>
 
 <!-- ============================================================ CATALOGO -->
@@ -476,6 +486,19 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
     </div>
     <div id="tcMsg"></div>
     <div id="tcHistorial" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card" id="genCard">
+    <h3>Responsables de Clientes DICOSA</h3>
+    <p class="mini">Cada Generador de Demanda del archivo de Clientes con el correo del usuario del equipo que lo atiende.
+      Se aplica en la próxima importación de Clientes. Sin responsable, un cliente nuevo queda con quien importa y uno
+      que ya existe conserva el suyo. La base solo acepta correos de usuarios del equipo; con otro correo, el cliente
+      no cambia de responsable.</p>
+    <div id="genTabla" style="margin-top:10px"></div>
+    <div class="fila" style="margin-top:12px">
+      <div class="auto"><button class="b" onclick="guardarGeneradores()">Guardar responsables</button></div>
+    </div>
+    <div id="genMsg"></div>
   </div>
 
   <div class="card">
@@ -1488,6 +1511,9 @@ function migrar(){
     if(p.pago === undefined) p.pago = null;
   });
   D.clientes.forEach(c => { if(c.credito === undefined) c.credito = false; });
+  // Fase 1c: responsable por generador (config), responsables por enviar y ya enviados.
+  ["generadores","asignar","asignado"].forEach(k => {
+    if(!D[k] || typeof D[k] !== "object" || Array.isArray(D[k])) D[k] = {}; });
   // Los avisos de reposición no tenían identificador propio. La base compartida
   // necesita uno por fila para saber cuál es cuál entre dispositivos.
   D.avisos.forEach(a => { if(!a.id) a.id = (a.cliente_id||"x") + "|" + (a.codigo||"y") + "|" + (a.fecha||""); });
@@ -2593,16 +2619,22 @@ function guardarBanco(){
 /* -------------------------------------------------------------- CLIENTES */
 function pintarClientes(){
   const q = ($("#filtroCli").value||"").toLowerCase();
-  const r = D.clientes.filter(c=>!q||c.nombre.toLowerCase().includes(q)||c.telefono.includes(q));
+  const r = D.clientes.filter(c=>!q||c.nombre.toLowerCase().includes(q)||c.telefono.includes(q)||
+    String((c.dicosa||{}).codigo||"").includes(q));
+  // Código, Especialidad, Municipio y Generador vienen de DICOSA (fase 1c); lat y lon no se muestran.
   $("#tablaClientes").innerHTML = r.length ? `<div class="tabla-wrap"><table>
-    <thead><tr><th>Nombre</th><th>Tipo</th><th>Teléfono</th><th>Dirección</th>
+    <thead><tr><th>Código</th><th>Nombre</th><th>Tipo</th><th>Teléfono</th><th>Dirección</th>
+      <th>Especialidad</th><th>Municipio</th><th>Generador</th>
       <th class="num">Pedidos</th><th class="num">Ticket prom.</th><th>Cobro</th><th class="noprint"></th></tr></thead><tbody>
     ${r.map(c=>{
       const ps = D.pedidos.filter(p=>p.cliente_id===c.id&&p.estado!=="cancelado");
       const tp = ps.length? ps.reduce((a,p)=>a+p.total,0)/ps.length : 0;
-      return `<tr><td><strong>${esc(c.nombre)}</strong></td><td>${esc(c.tipo)}</td>
+      const dk = c.dicosa || {};
+      return `<tr><td>${esc(dk.codigo||"—")}</td><td><strong>${esc(c.nombre)}</strong>
+        ${dk.no_vino?'<br><span class="pill p-med">no vino en la última importación</span>':''}</td><td>${esc(c.tipo)}</td>
         <td>${esc(c.telefono)}</td><td>${esc(c.direccion||"—")}<br>
         <span class="mini">${esc(c.referencia||"")}</span></td>
+        <td>${esc(dk.especialidad||"—")}</td><td>${esc(dk.municipio||"—")}</td><td>${esc(dk.generador||"—")}</td>
         <td class="num">${ps.length}</td><td class="num">${ps.length?L0(tp):"—"}</td>
         <td>${c.credito?'<span class="pill p-ok">crédito</span>':'<span class="pill p-gris">depósito</span>'}</td>
         <td class="noprint"><button class="s" onclick="abrirNuevoCliente('${c.id}')">Editar</button></td></tr>`;
@@ -2613,17 +2645,26 @@ $("#filtroCli").oninput = pintarClientes;
 
 function abrirNuevoCliente(id){
   const c = id ? D.clientes.find(x=>x.id===id) : null;
+  // Cliente de DICOSA (fase 1c): nombre, teléfono y dirección los manda el archivo.
+  const dk = esClienteDicosa(c) ? (c.dicosa || {}) : null, ro = dk ? " readonly" : "";
+  const dato = (t, v) => `<div><span class="mini">${t}</span><br>${esc(v===null||v===undefined||v===""?"—":v)}</div>`;
   modal(`<h3 style="margin-top:0">${c?"Editar cliente":"Cliente nuevo"}</h3>
     <p class="mini">Solo los datos mínimos para poder entregar.</p>
+    ${dk ? `<div class="aviso a-info">Cliente de DICOSA: nombre, teléfono y dirección <strong>lo manda DICOSA</strong>;
+      se cambian en su archivo de Clientes.${dk.no_vino?" No vino en la última importación ("+esc(dk.no_vino)+").":""}
+      <div class="grid g3" style="margin-top:8px">${dato("Código", dk.codigo)}${dato("Contacto", dk.contacto)}
+        ${dato("Grupo", dk.grupo)}${dato("Especialidad", dk.especialidad)}${dato("Zona de venta", dk.zona)}
+        ${dato("Departamento", dk.departamento)}${dato("Municipio", dk.municipio)}${dato("Generador", dk.generador)}
+        ${dato("Importado", dk.importado)}</div></div>` : ""}
     <div class="grid g2" style="margin:14px 0">
-      <div><label>Nombre del consultorio o médico *</label><input id="cN" value="${esc(c?.nombre||"")}"></div>
-      <div><label>Teléfono *</label><input id="cT" value="${esc(c?.telefono||"")}" placeholder="+504 ..."></div>
+      <div><label>Nombre del consultorio o médico *</label><input id="cN" value="${esc(c?.nombre||"")}"${ro}></div>
+      <div><label>Teléfono *</label><input id="cT" value="${esc(c?.telefono||"")}" placeholder="+504 ..."${ro}></div>
       <div><label>Tipo</label><select id="cTipo">
         ${["Médico general","Médico especialista","Odontólogo","Clínica","Otro"]
           .map(t=>`<option ${c?.tipo===t?"selected":""}>${t}</option>`).join("")}</select></div>
       <div><label>Zona o cluster</label><input id="cZ" value="${esc(c?.zona||"")}" placeholder="Ej: Torre médica 1"></div>
     </div>
-    <div><label>Dirección de entrega *</label><input id="cD" value="${esc(c?.direccion||"")}"></div>
+    <div><label>Dirección de entrega *</label><input id="cD" value="${esc(c?.direccion||"")}"${ro}></div>
     <div style="margin-top:10px"><label>Referencia para llegar</label>
       <input id="cR" value="${esc(c?.referencia||"")}" placeholder="Ej: frente al ascensor, local 302"></div>
     <hr>
@@ -2636,10 +2677,17 @@ function abrirNuevoCliente(id){
     <button class="s" onclick="cerrarModal()">Cancelar</button>`);
 }
 function guardarCliente(id){
-  const n = $("#cN").value.trim(), t = $("#cT").value.trim(), d = $("#cD").value.trim();
+  const actual = id ? D.clientes.find(c=>c.id===id) : null;
+  // Cliente de DICOSA: nombre, teléfono y dirección no se cambian aquí, aunque
+  // alguien quite el readonly; y su teléfono no se revisa contra los demás
+  // (el archivo puede traer dos clientes con el mismo teléfono).
+  const deDicosa = esClienteDicosa(actual);
+  const n = deDicosa ? actual.nombre : $("#cN").value.trim(),
+        t = deDicosa ? actual.telefono : $("#cT").value.trim(),
+        d = deDicosa ? actual.direccion : $("#cD").value.trim();
   if(!n || !t || !d){ $("#cErr").innerHTML =
     `<div class="aviso a-mal">Nombre, teléfono y dirección son obligatorios.</div>`; return; }
-  const dup = D.clientes.find(c=>c.telefono===t && c.id!==id);
+  const dup = deDicosa ? null : D.clientes.find(c=>c.telefono===t && c.id!==id);
   if(dup){ $("#cErr").innerHTML =
     `<div class="aviso a-mal">Ese teléfono ya está registrado a nombre de ${esc(dup.nombre)}.</div>`; return; }
   const datos = {nombre:n, telefono:t, tipo:$("#cTipo").value, zona:$("#cZ").value.trim(),
@@ -3105,8 +3153,9 @@ function selloImportacion(){
 
 /* ----------------------------------------------------------- quién importa */
 function puedeImportar(t){
-  // El Catálogo DICOSA lo importan solo admin y coordinador (fase 1b, D4).
-  if(t === "catalogo") return ["local","admin","coordinador"].includes(rolPantalla());
+  // El Catálogo DICOSA (fase 1b, D4) y los Clientes DICOSA (fase 1c, decisión 5)
+  // los importan solo admin y coordinador.
+  if(t === "catalogo" || t === "clientes") return ["local","admin","coordinador"].includes(rolPantalla());
   return rolPantalla() === "local" || (typeof nubeEscribe === "function" && nubeEscribe(t));
 }
 // Del detalle, pedidos ve solo las bodegas VENTA; despacho, nada.
@@ -3490,6 +3539,224 @@ async function confirmarCatalogo(){
   pintarCatalogo();
 }
 
+/* ============================================================================
+   CLIENTES DICOSA (fase 1c, 2026-11-03)
+   Mismo flujo que el Catálogo: leer, analizar, vista previa sin cambios,
+   casilla y confirmar. El id es fijo (dicosa-<Código de Cliente>): reimportar
+   actualiza el mismo cliente. DICOSA manda en nombre, teléfono, dirección y
+   datos.dicosa; crédito, referencia, tipo y zona de la app no se tocan. Un
+   cliente que deja de venir no se borra (borrarlo aquí lo borraría de la base):
+   se marca con dicosa.no_vino. Fila sin código, nombre, teléfono o dirección,
+   o código repetido: se detiene todo. Teléfono repetido: solo aviso.
+   ============================================================================ */
+const CLI_COLS = {codigo:["codigodecliente"], nombre:["nombredecliente"], contacto:["contacto"],
+  telefono:["telefono"], grupo:["grupodeclientes"], especialidad:["especialidadmedica"],
+  zona:["descr.zonadeventa"], departamento:["departamento"], municipio:["municipio"],
+  lat:["lat"], lon:["lon"], direccion:["direccion"], generador:["generadordedemanda"]};
+const CLI_NOMBRES = {codigo:"Código de Cliente", nombre:"Nombre de Cliente", contacto:"Contacto",
+  telefono:"Telefono", grupo:"Grupo de Clientes", especialidad:"Especialidad Medica",
+  zona:"Descr. Zona de Venta", departamento:"Departamento", municipio:"Municipio", lat:"lat", lon:"lon",
+  direccion:"Dirección", generador:"Generador de Demanda"};
+const CLI_PREFIJO = "dicosa-";
+function esClienteDicosa(c){ return !!c && String(c.id).startsWith(CLI_PREFIJO); }
+// Teléfono para comparar: solo dígitos y sin el 504 del país al inicio.
+function telComparable(t){
+  const d = String(t ?? "").replace(/\D/g, "");
+  return d.length === 11 && d.startsWith("504") ? d.slice(3) : d;
+}
+// Lee las filas de Clientes. No cambia nada.
+function analizarClientes(filas){
+  const u = ubicarColumnas(filas, CLI_COLS, CLI_NOMBRES);
+  if(u.error) return {error: u.error};
+  const cli = {}, malas = [], porTel = {};
+  u.datos.forEach(f => {
+    const v = k => String(f.celdas[u.idx[k]] ?? "").trim();
+    const codigo = codigoMaterial(v("codigo"));
+    const mal = txt => malas.push({n:f.n, codigo, txt});
+    if(!codigo) return mal("sin «"+CLI_NOMBRES.codigo+"»");
+    const id = CLI_PREFIJO + codigo;
+    if(cli[id]) return mal("código repetido en el archivo");
+    const faltan = ["nombre","telefono","direccion"].filter(k => !v(k));
+    if(faltan.length) return mal("sin «"+faltan.map(k => CLI_NOMBRES[k]).join("», «")+"»");
+    const la = numeroCelda(v("lat")), lo = numeroCelda(v("lon"));
+    if(la.malo || lo.malo) return mal("«lat» o «lon» no es un número");
+    const telefono = codigoMaterial(v("telefono"));
+    cli[id] = {nombre:v("nombre"), telefono, direccion:v("direccion"),
+      dicosa:{codigo, contacto:v("contacto"), grupo:v("grupo"), especialidad:v("especialidad"),
+        zona:v("zona"), departamento:v("departamento"), municipio:v("municipio"),
+        lat: la.vacio ? null : la.n, lon: lo.vacio ? null : lo.n, generador:v("generador")}};
+    const t = telComparable(telefono);
+    (porTel[t] = porTel[t] || []).push(id);
+  });
+  const telRepetidos = Object.values(porTel).filter(ids => ids.length > 1)
+    .map(ids => ({telefono: cli[ids[0]].telefono, codigos: ids.map(i => cli[i].dicosa.codigo)}));
+  return {filas: u.datos.length, cli, malas, telRepetidos};
+}
+function sinMarcasDicosa(d){ if(!d) return null; const {importado, no_vino, ...resto} = d; return resto; }
+// Qué pasa con cada cliente: nuevo, cambia o igual; quiénes no vinieron (y no
+// estaban marcados ya); y qué clientes hechos a mano comparten teléfono.
+function diferenciasClientes(a){
+  const filas = Object.keys(a.cli).sort().map(id => {
+    const c = D.clientes.find(x => x.id === id), n = a.cli[id];
+    if(!c) return {id, nombre:n.nombre, nuevo:true, cambia:true};
+    const antes = nubeFirma({nombre:c.nombre, telefono:c.telefono, direccion:c.direccion, dicosa:sinMarcasDicosa(c.dicosa)});
+    const despues = nubeFirma({nombre:n.nombre, telefono:n.telefono, direccion:n.direccion, dicosa:n.dicosa});
+    return {id, nombre:n.nombre, nuevo:false, cambia: antes !== despues || !!(c.dicosa && c.dicosa.no_vino)};
+  });
+  const noVinieron = D.clientes.filter(c => esClienteDicosa(c) && !a.cli[c.id] && !(c.dicosa && c.dicosa.no_vino));
+  const tels = {};
+  Object.values(a.cli).forEach(n => { tels[telComparable(n.telefono)] = n; });
+  const manuales = D.clientes.filter(c => !esClienteDicosa(c) && tels[telComparable(c.telefono)])
+    .map(c => ({c, dicosa: tels[telComparable(c.telefono)]}));
+  return {filas, noVinieron, manuales};
+}
+// Clientes del archivo cuyo generador tiene responsable y que todavía no se
+// le enviaron a ese responsable (decisión 4). Sin responsable: nada.
+function asignacionesClientes(a){
+  const g = D.generadores || {}, hecho = D.asignado || {}, out = {};
+  Object.entries(a.cli).forEach(([id, n]) => {
+    const r = String(g[n.dicosa.generador] || "").trim();
+    if(r && hecho[id] !== r) out[id] = r;
+  });
+  return out;
+}
+function puedeAsignar(){ return ["admin","coordinador"].includes(rolPantalla()); }
+// Lo que tiene que estar listo antes de calcular. Con base compartida se
+// sincroniza primero, como en el Catálogo. Devuelve el texto del problema o "".
+async function cliListo(){
+  if(!puedeImportar("clientes")) return "Tu rol no importa Clientes.";
+  if(enEquipo()){
+    if(!nubeActiva()) return "Entra con tu usuario antes de importar.";
+    if(NUBE.ocupado) return "Se está sincronizando. Intenta de nuevo en unos segundos.";
+    await nubeSincronizar(true);
+    if(NUBE.estado !== "en_linea" || NUBE.pendiente)
+      return "No se pudo dejar la sincronización al día. Revisa la conexión e intenta de nuevo.";
+  }
+  return "";
+}
+
+let CLI = null;
+$("#cliArchivo").onchange = async function(){
+  const f = this.files[0]; this.value = "";
+  CLI = null; $("#cliPrevia").innerHTML = ""; $("#cliMsg").innerHTML = "";
+  if(!f) return;
+  const mal = t => { $("#cliMsg").innerHTML = `<div class="aviso a-mal">${esc(t)}</div>`; };
+  const pre = await cliListo();
+  if(pre) return mal(pre);
+  let filas;
+  try{ filas = await leerXlsx(f); }catch(e){ return mal(e.message); }
+  const a = analizarClientes(filas);
+  if(a.error) return mal(a.error+" No se cambió nada.");
+  if(a.malas.length){
+    $("#cliMsg").innerHTML = `<div class="aviso a-mal"><strong>La importación de Clientes se detuvo. No se cambió nada.</strong>
+      <ul>${a.malas.map(x => `<li>Fila ${x.n}: ${esc(x.txt)}${x.codigo ? " (código "+esc(x.codigo)+")" : ""}</li>`).join("")}</ul>
+      Corrige el archivo y vuelve a cargarlo.</div>`;
+    return;
+  }
+  CLI = {a, archivo:f.name};
+  pintarPreviaClientes();
+};
+function pintarPreviaClientes(){
+  const {a, archivo} = CLI, d = diferenciasClientes(a), asig = asignacionesClientes(a);
+  const nuevos = d.filas.filter(x => x.nuevo), cambian = d.filas.filter(x => x.cambia && !x.nuevo);
+  CLI.n = {nuevos:nuevos.length, cambian:cambian.length, noVinieron:d.noVinieron.length};
+  const g = D.generadores || {}, porGen = {};
+  Object.values(a.cli).forEach(n => { const k = n.dicosa.generador; porGen[k] = (porGen[k] || 0) + 1; });
+  $("#cliPrevia").innerHTML = `<div class="aviso a-info"><strong>Vista previa: todavía no cambió nada.</strong>
+    <br>Archivo ${esc(archivo)} · filas <strong id="cliFilas">${a.filas}</strong>
+    · nuevos <strong id="cliNuevos">${nuevos.length}</strong>
+    · se actualizan <strong id="cliActualizan">${cambian.length}</strong>
+    · sin cambios <strong id="cliSinCambio">${d.filas.length - nuevos.length - cambian.length}</strong>
+    · no vienen en el archivo (se marcan, no se borran) <strong id="cliNoVinieron">${d.noVinieron.length}</strong>
+    <br>Responsables: ${Object.keys(porGen).sort().map(k => `${esc(k || "(sin generador)")} (${porGen[k]}): ${
+      g[k] ? esc(g[k]) : "sin responsable"}`).join(" · ")}
+    · cambian de responsable <strong id="cliAsignar">${Object.keys(asig).length}</strong>
+    <br><span class="mini">Sin responsable, un cliente nuevo queda con quien importa y uno que ya existe conserva el suyo.</span></div>
+    <div class="aviso ${a.telRepetidos.length ? "a-med" : "a-info"}">Teléfonos repetidos en el archivo
+      <strong id="cliTelRepetidos">${a.telRepetidos.length}</strong> (no detienen la importación)${a.telRepetidos.length ? ":" : "."}
+      ${a.telRepetidos.map(x => `<br>${esc(x.telefono)}: códigos ${x.codigos.map(esc).join(", ")}`).join("")}
+      <br>Clientes hechos a mano con el teléfono de un cliente de DICOSA <strong id="cliManuales">${d.manuales.length}</strong>
+      (no se juntan: los dos quedan)${d.manuales.length ? ":" : "."}
+      ${d.manuales.map(x => `<br>${esc(x.c.nombre)} (${esc(x.c.telefono)}) y ${esc(x.dicosa.nombre)}, código ${esc(x.dicosa.dicosa.codigo)}`).join("")}</div>
+    ${nuevos.length || cambian.length || d.noVinieron.length ? `<div class="tabla-wrap"><table><thead><tr><th>Código</th><th>Cliente</th><th></th></tr></thead><tbody>
+      ${nuevos.concat(cambian).map(x => `<tr><td>${esc(a.cli[x.id].dicosa.codigo)}</td><td>${esc(x.nombre)}</td>
+        <td>${x.nuevo ? '<span class="pill p-med">nuevo</span>' : '<span class="pill p-ok">se actualiza</span>'}</td></tr>`).join("")}
+      ${d.noVinieron.map(c => `<tr><td>${esc((c.dicosa||{}).codigo||"")}</td><td>${esc(c.nombre)}</td>
+        <td><span class="pill p-mal">no vino, se marca</span></td></tr>`).join("")}
+      </tbody></table></div>` : `<p class="mini">Ningún cliente cambia.</p>`}
+    <p class="mini">Crédito, referencia, tipo y zona de la app no se tocan. Un cliente nuevo entra como tipo Otro, sin crédito.</p>
+    <p><label><input type="checkbox" id="cliCasilla" style="width:auto"
+      onchange="$('#cliConfirmar').disabled=!this.checked"> Revisé la vista previa: se crean ${nuevos.length},
+      se actualizan ${cambian.length} y se marcan ${d.noVinieron.length} cliente(s)</label></p>
+    <button class="b" id="cliConfirmar" onclick="confirmarClientes()" disabled>Confirmar importación de Clientes</button>
+    <button class="s" onclick="CLI=null;$('#cliPrevia').innerHTML=''">Cancelar</button>`;
+}
+async function confirmarClientes(){
+  if(!CLI) return;
+  const casilla = $("#cliCasilla");
+  if(!casilla || !casilla.checked) return;
+  const pre = await cliListo();
+  if(pre){ $("#cliMsg").innerHTML = `<div class="aviso a-mal">${esc(pre)}</div>`; return; }
+  const {a} = CLI;
+  // Se recalcula con lo que hay ahora (la sincronización pudo traer clientes).
+  const d = diferenciasClientes(a);
+  const nuevos = d.filas.filter(x => x.nuevo).length, cambian = d.filas.filter(x => x.cambia && !x.nuevo).length;
+  if(nuevos !== CLI.n.nuevos || cambian !== CLI.n.cambian || d.noVinieron.length !== CLI.n.noVinieron){
+    pintarPreviaClientes();
+    $("#cliMsg").innerHTML = `<div class="aviso a-mal">Los datos cambiaron al sincronizar.
+      Revisa la vista previa y confirma de nuevo.</div>`;
+    return;
+  }
+  CLI = null;
+  const fecha = fechaLocal();
+  d.filas.forEach(x => {
+    const n = a.cli[x.id];
+    if(x.nuevo){
+      D.clientes.push({id:x.id, nombre:n.nombre, telefono:n.telefono, tipo:"Otro", zona:"",
+        direccion:n.direccion, referencia:"", credito:false, alta:new Date().toISOString(),
+        dicosa:{...n.dicosa, importado:fecha}});
+      return;
+    }
+    if(!x.cambia) return;
+    const c = D.clientes.find(y => y.id === x.id);
+    c.nombre = n.nombre; c.telefono = n.telefono; c.direccion = n.direccion;
+    c.dicosa = {...n.dicosa, importado:fecha};
+  });
+  d.noVinieron.forEach(c => { c.dicosa = {...(c.dicosa || {}), no_vino:fecha}; });
+  // Responsables por enviar: los sube la sincronización (solo admin y coordinador).
+  const asig = asignacionesClientes(a);
+  D.asignar = {...(D.asignar || {}), ...asig};
+  guardar();
+  $("#cliPrevia").innerHTML = "";
+  $("#cliMsg").innerHTML = `<div class="aviso a-ok"><strong>Clientes importados (${esc(fecha)}).</strong>
+    ${nuevos} nuevo(s), ${cambian} actualizado(s), ${d.filas.length - nuevos - cambian} sin cambios,
+    ${d.noVinieron.length} marcado(s) porque no vinieron. ${Object.keys(asig).length} cambian de responsable.</div>`;
+  pintarClientes();
+}
+
+/* ------------------------------------------- responsables por generador --- */
+function pintarGeneradores(){
+  if(!$("#genTabla")) return;
+  const g = D.generadores || {}, n = {};
+  D.clientes.filter(esClienteDicosa).forEach(c => {
+    const k = (c.dicosa || {}).generador; if(k) n[k] = (n[k] || 0) + 1; });
+  const lista = [...new Set([...Object.keys(n), ...Object.keys(g)])].sort();
+  $("#genTabla").innerHTML = lista.length ? `<div class="tabla-wrap"><table><thead><tr><th>Generador de Demanda</th>
+    <th class="num">Clientes</th><th>Correo del responsable</th></tr></thead><tbody>
+    ${lista.map(k => `<tr><td>${esc(k)}</td><td class="num">${n[k] || 0}</td>
+      <td><input data-gen="${esc(k)}" value="${esc(g[k] || "")}" placeholder="correo del usuario del equipo"></td></tr>`).join("")}
+    </tbody></table></div>`
+    : `<p class="mini">Todavía no hay clientes de DICOSA: los generadores aparecen después de la primera importación.</p>`;
+}
+function guardarGeneradores(){
+  const g = {};
+  $$("#genTabla input[data-gen]").forEach(i => { const v = i.value.trim(); if(v) g[i.dataset.gen] = v; });
+  D.generadores = g;
+  guardar();
+  $("#genMsg").innerHTML = `<div class="aviso a-ok">Responsables guardados. Se aplican en la próxima importación de Clientes.</div>`;
+  setTimeout(() => { if($("#genMsg")) $("#genMsg").innerHTML = ""; }, 6000);
+}
+
 /* ------------------------------------------------- detalle por bodega y lote */
 function pintarDetalle(){
   const d = detalleVisible();
@@ -3612,6 +3879,7 @@ function pintarAjustes(){
   if($("#letraDisp")) $("#letraDisp").value = letraDispositivo();
   pintarCorte();
   pintarTipoCambio();
+  pintarGeneradores();
   $("#params").innerHTML = Object.entries(PARAMS_DEF).map(([k,o])=>`
     <div><label>${o.d}</label>
       <div class="fila"><input id="pp_${k}" type="number" step="0.01" value="${D.params[k]}">
@@ -4275,21 +4543,46 @@ function nubeCambiosLocales(){
     if(filas.length || borrar.length) lotes[c.t] = {c, filas, borrar};
     n += borrar.length;
   });
+  // Responsables de clientes importados (fase 1c): solo admin y coordinador
+  // los envían; la base además los valida contra equipo (sql/clientes-1c.sql).
+  const asignar = puedeAsignar() ? Object.entries(D.asignar || {}) : [];
+  n += asignar.length;
   // Parámetros y cuenta bancaria: solo admin escribe config.
-  if(!nubeEscribe("config")) return {lotes, n};
+  if(!nubeEscribe("config")) return {lotes, n, asignar};
   const esp = NUBE.espejo.config = NUBE.espejo.config || {};
   const cfgFilas = [];
   // Tipo de cambio (fase 1b): la lista entera, como una fila más de config.
-  [["params", D.params], ["banco", D.banco], ["tipo_cambio", D.tipo_cambio || []]].forEach(([k, v]) => {
+  // Responsables por generador (fase 1c): también una fila de config.
+  [["params", D.params], ["banco", D.banco], ["tipo_cambio", D.tipo_cambio || []],
+   ["generadores", D.generadores || {}]].forEach(([k, v]) => {
     const f = nubeFirma(v);
     if(esp[k] !== f){ cfgFilas.push({clave:k, datos:v}); n++; }
   });
   if(cfgFilas.length) lotes.config = {c:{t:"config", clave:"clave"}, filas:cfgFilas, borrar:[]};
-  return {lotes, n};
+  return {lotes, n, asignar};
+}
+
+// Cambia el responsable (asignado_a) de los clientes anotados en D.asignar, con
+// un PATCH por responsable y nunca dentro del upsert: si un envío mezclara filas
+// con y sin asignado_a, las que no lo traen lo dejarían vacío. Va después de
+// subir los clientes, para que los nuevos ya existan en la base.
+async function nubeSubirAsignar(lista){
+  const por = {};
+  lista.forEach(([id, r]) => { (por[r] = por[r] || []).push(id); });
+  for(const [r, ids] of Object.entries(por)){
+    for(let i = 0; i < ids.length; i += 100){
+      const parte = ids.slice(i, i + 100);
+      const filtro = "in.(" + parte.map(x => '"' + String(x).replace(/["\\]/g, "") + '"').join(",") + ")";
+      await nubeFetch("/rest/v1/clientes?id=" + encodeURIComponent(filtro), {
+        method:"PATCH", headers:{"Prefer":"return=minimal"}, body:{asignado_a:r}});
+      D.asignado = D.asignado || {};
+      parte.forEach(id => { D.asignado[id] = r; if(D.asignar && D.asignar[id] === r) delete D.asignar[id]; });
+    }
+  }
 }
 
 async function nubeSubir(){
-  const {lotes, n} = nubeCambiosLocales();
+  const {lotes, n, asignar} = nubeCambiosLocales();
   if(!n) return 0;
   for(const t of Object.keys(lotes)){
     const {c, filas, borrar} = lotes[t];
@@ -4313,6 +4606,7 @@ async function nubeSubir(){
       delete NUBE.espejo[t][k];
     }
   }
+  if(asignar && asignar.length) await nubeSubirAsignar(asignar);
   return n;
 }
 
@@ -4364,6 +4658,7 @@ async function nubeBajar(){
     if(f.k === "params") D.params = f.d;
     if(f.k === "banco")  D.banco  = f.d;
     if(f.k === "tipo_cambio") D.tipo_cambio = Array.isArray(f.d) ? f.d : [];
+    if(f.k === "generadores") D.generadores = f.d && typeof f.d === "object" && !Array.isArray(f.d) ? f.d : {};
     NUBE.espejo.config[f.k] = fi;
     n++;
   });
@@ -4499,9 +4794,12 @@ async function nubePrimeraVez(){
   D.skus = [];
   // El tipo de cambio también lo manda la base: uno local de otra isla no vale.
   D.tipo_cambio = [];
+  // Responsables (fase 1c): los manda la base; lo anotado aquí es de otra isla.
+  D.generadores = {}; D.asignar = {}; D.asignado = {};
   const n = await nubeBajar();
   // Parámetros y cuenta que la base no trae se quedan aquí, pero no se suben.
-  [["params", D.params], ["banco", D.banco], ["tipo_cambio", D.tipo_cambio]].forEach(([k, v]) => {
+  [["params", D.params], ["banco", D.banco], ["tipo_cambio", D.tipo_cambio],
+   ["generadores", D.generadores]].forEach(([k, v]) => {
     if(NUBE.espejo.config[k] === undefined) NUBE.espejo.config[k] = nubeFirma(v);
   });
   await nubeReconciliar();
