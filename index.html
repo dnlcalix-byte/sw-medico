@@ -150,6 +150,11 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
 </header>
 
 <main>
+<!-- 161 (fase A): aviso fijo mientras no haya sesión. Va en el flujo de la página,
+     no flotando, para no tapar nada. Lo muestra u oculta nubePintarPill. -->
+<div id="avisoLocal" class="aviso a-med noprint" style="display:none">
+  <strong>Modo local: nada llega al equipo.</strong> Lo que registres aquí queda solo en este navegador.
+</div>
 
 <!-- ============================================================ INICIO -->
 <section class="panel on" id="p-inicio">
@@ -430,6 +435,7 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
       <div class="auto"><button class="b" onclick="guardarLetra()">Guardar letra</button></div>
     </div>
     <div id="letraMsg"></div>
+    <p class="mini" id="persistInfo" style="margin-top:10px"></p>
   </div>
 
   <div class="card">
@@ -495,10 +501,22 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
       que ya existe conserva el suyo. La base solo acepta correos de usuarios del equipo; con otro correo, el cliente
       no cambia de responsable.</p>
     <div id="genTabla" style="margin-top:10px"></div>
+    <div id="genRechazados"></div>
     <div class="fila" style="margin-top:12px">
       <div class="auto"><button class="b" onclick="guardarGeneradores()">Guardar responsables</button></div>
     </div>
     <div id="genMsg"></div>
+  </div>
+
+  <div class="card" id="equipoCard">
+    <h3>Usuarios del equipo</h3>
+    <p class="mini">El nombre con que se muestra cada usuario en Clientes y en Responsables de Clientes DICOSA.
+      Los usuarios y sus roles se crean en Supabase; aquí solo se pone el nombre. Necesita la base compartida.</p>
+    <div id="equipoTabla" style="margin-top:10px"></div>
+    <div class="fila" style="margin-top:12px">
+      <div class="auto"><button class="b" onclick="guardarNombresEquipo()">Guardar nombres</button></div>
+    </div>
+    <div id="equipoMsg"></div>
   </div>
 
   <div class="card">
@@ -1512,7 +1530,9 @@ function migrar(){
   });
   D.clientes.forEach(c => { if(c.credito === undefined) c.credito = false; });
   // Fase 1c: responsable por generador (config), responsables por enviar y ya enviados.
-  ["generadores","asignar","asignado"].forEach(k => {
+  // Fase A: responsables que la base no aceptó (rechazado) y asignado_a de cada
+  // cliente tal como lo manda la base (responsables; nunca se sube).
+  ["generadores","asignar","asignado","rechazado","responsables"].forEach(k => {
     if(!D[k] || typeof D[k] !== "object" || Array.isArray(D[k])) D[k] = {}; });
   // Los avisos de reposición no tenían identificador propio. La base compartida
   // necesita uno por fila para saber cuál es cuál entre dispositivos.
@@ -1557,6 +1577,8 @@ function migrar(){
 // Guardado en este navegador. Es el primer destino de todo cambio: aunque no
 // haya internet ni base compartida, la información queda a salvo aquí.
 function guardarLocal(){
+  // Desconectando (fase A): lo de la base ya se borró; nada lo vuelve a escribir.
+  if(typeof NUBE !== "undefined" && NUBE.saliendo) return;
   olvidarExistencia();   // el cálculo de existencias se rehace con los datos nuevos
   try{ localStorage.setItem(CLAVE, JSON.stringify(D)); }
   catch(e){ alert("No se pudieron guardar los datos en este navegador.\n\n"+
@@ -1593,9 +1615,14 @@ function yaDescontadoDicosa(p, codigo){
   const v = p.pago && p.pago.verificado_en;
   return !!(u && v && u.codigos.has(codigo) && v < u.fecha);
 }
+// 176b (fase A): con rol pedidos, la base no manda los pedidos de otros. De los
+// abiertos solo llega lo necesario para esta cuenta (estado, pago y líneas, sin
+// cliente), con pedidos_abiertos_ajenos(); vive solo en memoria.
+let PEDIDOS_AJENOS = [];
 function comprometido(codigo){
   let total = 0, esperandoPago = 0;
-  D.pedidos.forEach(p => {
+  D.pedidos.concat(PEDIDOS_AJENOS).forEach(p => {
+    if(!p || !Array.isArray(p.lineas)) return;
     if(!ABIERTOS.includes(p.estado)) return;
     if(yaDescontadoDicosa(p, codigo)) return;
     p.lineas.forEach(l => {
@@ -2137,9 +2164,8 @@ function confirmarPedido(){
     override_existencia_letra: motivoEx ? letra : null
   };
   // El producto queda COMPROMETIDO, no descontado: sigue físicamente en bodega
-  // hasta que se entrega. Así el inventario refleja lo que realmente hay.
-  D.movimientos.push({id:uid(), fecha:new Date().toISOString(), tipo:"reserva",
-    codigo:"—", cantidad:0, ref:"Pedido "+ped.numero+" comprometido"});
+  // hasta que se entrega. Así el inventario refleja lo que realmente hay. (Fase A,
+  // 162: ya no se anota la «reserva» de cantidad 0; nada la usaba.)
   D.pedidos.unshift(ped);
   guardar();
   limpiarPedido();
@@ -2176,7 +2202,10 @@ function pintarInicio(){
     (conCostos ? kpi2(L0(contribProm), "Contribución por pedido", contribProm>=0?"ok":"mal",
          "Es el número que define si el negocio existe. Últimos 30 días.") : "") +
     kpi2(L0(ticket), "Ticket promedio", "", "Segunda palanca de rentabilidad. Sube con el pedido mínimo.") +
-    kpi2(pedDia.toFixed(1), "Pedidos por día", "", "Meta de equilibrio: alrededor de 24 a 28.") +
+    // 157 (fase A): el rol pedidos solo ve sus pedidos; la meta es del equipo.
+    (rolPantalla() === "pedidos"
+      ? kpi2(String(mes.length), "Tus pedidos, últimos 30 días", "", "Los pedidos de tus clientes.")
+      : kpi2(pedDia.toFixed(1), "Pedidos por día", "", "Meta de equilibrio: alrededor de 24 a 28.")) +
     kpi2(sla===null?"—":sla.toFixed(0)+"%", "Entregas a tiempo",
          sla===null?"":(sla>=90?"ok":"mal"), "Medido por nosotros, no por el proveedor.");
 
@@ -2418,7 +2447,8 @@ function tarjetaPedido(p, f){
             : restan < 0 ? `${Math.abs(restan)} min TARDE`
             : `faltan ${restan} min`;
   const colCro = restan===null ? "var(--gris)" : restan<0 ? "var(--rojo)" : restan<10 ? "#D68910" : "var(--verde)";
-  // En solo lectura no se avanza el pedido ni se registra el depósito.
+  // En solo lectura no hay ningún botón de acción (160, fase A): ni avanzar,
+  // ni depósito, ni courier, ni imprimir, ni avisar al cliente.
   const lectura = panelSoloLectura("despacho");
   return `<div class="ped ${cls}">
     <div class="t"><span class="num2">#${p.numero}</span>
@@ -2428,15 +2458,15 @@ function tarjetaPedido(p, f){
     <ul>${p.lineas.map(l=>`<li><strong>${l.cantidad}×</strong> ${esc(l.nombre)}</li>`).join("")}</ul>
     <div class="dir">${L0(p.total)} · ${p.peso.toFixed(2)} kg · <strong>${esc(p.canal)}</strong></div>
     <div style="margin-top:6px">${badgePago(p)}</div>
-    <div class="acc noprint">
-      ${lectura ? "" : `<button class="b" ${f.e==="listo" && !pagoLibera(p) ? "disabled title='Falta verificar el depósito'":""}
-        onclick="avanzar('${p.id}')">${f.btn}</button>`}
-      ${!pagoLibera(p) ? `${lectura ? "" : `<button class="s" onclick="registrarDeposito('${p.id}')">Registrar depósito</button>`}
+    ${lectura ? "" : `<div class="acc noprint">
+      <button class="b" ${f.e==="listo" && !pagoLibera(p) ? "disabled title='Falta verificar el depósito'":""}
+        onclick="avanzar('${p.id}')">${f.btn}</button>
+      ${!pagoLibera(p) ? `<button class="s" onclick="registrarDeposito('${p.id}')">Registrar depósito</button>
         <button class="s" onclick="pedirDeposito('${p.id}')">Pedir depósito</button>`:""}
       ${f.e==="listo" ? `<button class="s" onclick="copiarCourier('${p.id}')">Datos al courier</button>`:""}
       ${f.e==="preparando" ? `<button class="s" onclick="imprimirPicking('${p.id}')">Imprimir</button>`:""}
       <button class="s" onclick="avisarCliente('${p.id}')">Avisar al cliente</button>
-    </div></div>`;
+    </div>`}</div>`;
 }
 
 function avanzar(id){
@@ -2622,9 +2652,12 @@ function pintarClientes(){
   const r = D.clientes.filter(c=>!q||c.nombre.toLowerCase().includes(q)||c.telefono.includes(q)||
     String((c.dicosa||{}).codigo||"").includes(q));
   // Código, Especialidad, Municipio y Generador vienen de DICOSA (fase 1c); lat y lon no se muestran.
+  // Responsable (fase A): asignado_a que manda la base, con el nombre del equipo si lo
+  // tiene; solo para admin y coordinador.
+  const conResp = puedeAsignar(), resp = D.responsables || {};
   $("#tablaClientes").innerHTML = r.length ? `<div class="tabla-wrap"><table>
     <thead><tr><th>Código</th><th>Nombre</th><th>Tipo</th><th>Teléfono</th><th>Dirección</th>
-      <th>Especialidad</th><th>Municipio</th><th>Generador</th>
+      <th>Especialidad</th><th>Municipio</th><th>Generador</th>${conResp?'<th>Responsable</th>':''}
       <th class="num">Pedidos</th><th class="num">Ticket prom.</th><th>Cobro</th><th class="noprint"></th></tr></thead><tbody>
     ${r.map(c=>{
       const ps = D.pedidos.filter(p=>p.cliente_id===c.id&&p.estado!=="cancelado");
@@ -2635,6 +2668,7 @@ function pintarClientes(){
         <td>${esc(c.telefono)}</td><td>${esc(c.direccion||"—")}<br>
         <span class="mini">${esc(c.referencia||"")}</span></td>
         <td>${esc(dk.especialidad||"—")}</td><td>${esc(dk.municipio||"—")}</td><td>${esc(dk.generador||"—")}</td>
+        ${conResp?`<td>${esc(nombreEquipo(resp[c.id]) || resp[c.id] || "—")}</td>`:''}
         <td class="num">${ps.length}</td><td class="num">${ps.length?L0(tp):"—"}</td>
         <td>${c.credito?'<span class="pill p-ok">crédito</span>':'<span class="pill p-gris">depósito</span>'}</td>
         <td class="noprint"><button class="s" onclick="abrirNuevoCliente('${c.id}')">Editar</button></td></tr>`;
@@ -2667,11 +2701,11 @@ function abrirNuevoCliente(id){
     <div><label>Dirección de entrega *</label><input id="cD" value="${esc(c?.direccion||"")}"${ro}></div>
     <div style="margin-top:10px"><label>Referencia para llegar</label>
       <input id="cR" value="${esc(c?.referencia||"")}" placeholder="Ej: frente al ascensor, local 302"></div>
-    <hr>
+    ${puedeCredito() ? `<hr>
     <label><input type="checkbox" id="cCred" ${c?.credito?"checked":""} style="width:auto">
       Crédito autorizado — sus pedidos salen sin esperar depósito</label>
     <p class="mini" style="margin-top:5px">Úsalo solo con clientes de confianza probada.
-      Sin esta marca, cada pedido necesita depósito verificado antes de salir.</p>
+      Sin esta marca, cada pedido necesita depósito verificado antes de salir.</p>` : ""}
     <div id="cErr"></div><hr>
     <button class="b" onclick="guardarCliente('${id||""}')">Guardar</button>
     <button class="s" onclick="cerrarModal()">Cancelar</button>`);
@@ -2690,9 +2724,11 @@ function guardarCliente(id){
   const dup = deDicosa ? null : D.clientes.find(c=>c.telefono===t && c.id!==id);
   if(dup){ $("#cErr").innerHTML =
     `<div class="aviso a-mal">Ese teléfono ya está registrado a nombre de ${esc(dup.nombre)}.</div>`; return; }
+  // Crédito (150, fase A): solo admin y coordinador lo marcan; los demás conservan
+  // el que tenía el cliente (uno nuevo, sin crédito). La base hace lo mismo.
   const datos = {nombre:n, telefono:t, tipo:$("#cTipo").value, zona:$("#cZ").value.trim(),
                  direccion:d, referencia:$("#cR").value.trim(),
-                 credito:$("#cCred").checked};
+                 credito: puedeCredito() ? $("#cCred").checked : !!(actual && actual.credito)};
   if(id){ Object.assign(D.clientes.find(c=>c.id===id), datos); }
   else { const nc = {id:uid(), ...datos, alta:new Date().toISOString()};
          D.clientes.push(nc); guardar(); cerrarModal(); elegirCliente(nc.id); pintarClientes(); return; }
@@ -3302,7 +3338,8 @@ $("#impArchivo").onchange = async function(){
 function pintarPreviaInv(){
   const {a, archivo} = IMP, dif = diferenciasInv(a);
   const cambian = dif.filter(x => x.dif !== 0 || x.nuevo), nCero = dif.filter(x => x.aCero).length;
-  IMP.nCero = nCero;
+  // 164 (fase A): firma de la lista completa que se muestra, no solo los conteos.
+  IMP.nCero = nCero; IMP.firma = nubeFirma(dif);
   $("#impPrevia").innerHTML = `<div class="aviso a-info"><strong>Vista previa: todavía no cambió nada.</strong>
     <br>Archivo ${esc(archivo)} · filas <strong id="impFilas">${a.filas}</strong>
     · productos <strong id="impMateriales">${a.materiales}</strong>
@@ -3331,9 +3368,10 @@ async function confirmarImportacion(){
   if(pre){ $("#impMsg").innerHTML = `<div class="aviso a-mal">${esc(pre)}</div>`; return; }
   const {a} = IMP;
   // Se recalcula con lo que hay ahora (la sincronización pudo traer movimientos).
-  // Si cambió cuántos pasan a 0, no se escribe nada y se vuelve a la vista previa.
+  // Si cambió la lista (no solo cuántos pasan a 0), no se escribe nada y se
+  // vuelve a la vista previa.
   const dif = diferenciasInv(a);
-  if(dif.filter(x => x.aCero).length !== IMP.nCero){
+  if(nubeFirma(dif) !== IMP.firma){
     pintarPreviaInv();
     $("#impMsg").innerHTML = `<div class="aviso a-mal">Los datos cambiaron al sincronizar.
       Revisa la vista previa y confirma de nuevo.</div>`;
@@ -3483,6 +3521,7 @@ function pintarPreviaCatalogo(){
   const {a, archivo} = CDK, dif = diferenciasCatalogo(a);
   const nuevos = dif.filter(x => x.nuevo), cambian = dif.filter(x => x.cambia && !x.nuevo);
   CDK.n = {nuevos:nuevos.length, cambian:cambian.length};
+  CDK.firma = nubeFirma(dif);   // 164 (fase A): la lista completa
   $("#cdkPrevia").innerHTML = `<div class="aviso a-info"><strong>Vista previa: todavía no cambió nada.</strong>
     <br>Archivo ${esc(archivo)} · filas <strong id="cdkFilas">${a.filas}</strong>
     · sin código (se saltan) <strong id="cdkSinCodigo">${a.sinCodigo}</strong>
@@ -3515,7 +3554,7 @@ async function confirmarCatalogo(){
   // Se recalcula con lo que hay ahora (la sincronización pudo traer productos).
   const dif = diferenciasCatalogo(a);
   const nuevos = dif.filter(x => x.nuevo).length, cambian = dif.filter(x => x.cambia && !x.nuevo).length;
-  if(nuevos !== CDK.n.nuevos || cambian !== CDK.n.cambian){
+  if(nubeFirma(dif) !== CDK.firma){
     pintarPreviaCatalogo();
     $("#cdkMsg").innerHTML = `<div class="aviso a-mal">Los datos cambiaron al sincronizar.
       Revisa la vista previa y confirma de nuevo.</div>`;
@@ -3611,16 +3650,35 @@ function diferenciasClientes(a){
   return {filas, noVinieron, manuales};
 }
 // Clientes del archivo cuyo generador tiene responsable y que todavía no se
-// le enviaron a ese responsable (decisión 4). Sin responsable: nada.
+// le enviaron a ese responsable (decisión 4). Sin responsable: nada. Si la base
+// ya rechazó ese mismo responsable para el cliente (179, fase A), no se reenvía
+// hasta que el generador tenga otro.
 function asignacionesClientes(a){
-  const g = D.generadores || {}, hecho = D.asignado || {}, out = {};
+  const g = D.generadores || {}, hecho = D.asignado || {}, no = D.rechazado || {}, out = {};
   Object.entries(a.cli).forEach(([id, n]) => {
     const r = String(g[n.dicosa.generador] || "").trim();
-    if(r && hecho[id] !== r) out[id] = r;
+    if(r && hecho[id] !== r && no[id] !== r) out[id] = r;
   });
   return out;
 }
 function puedeAsignar(){ return ["admin","coordinador"].includes(rolPantalla()); }
+// Crédito del cliente (150, fase A): sin usuario, como siempre; con usuario, solo
+// admin y coordinador.
+function puedeCredito(){ return ["local","admin","coordinador"].includes(rolPantalla()); }
+// Nombre de un usuario del equipo (12a, fase A), o "" si no tiene o no se conoce.
+// La lista la trae la parte de la base compartida (equipo_lista), solo en memoria.
+function nombreEquipo(usuario){
+  const l = (typeof NUBE !== "undefined" && Array.isArray(NUBE.equipo)) ? NUBE.equipo : [];
+  const u = String(usuario || "").trim().toLowerCase();
+  if(!u) return "";
+  const e = l.find(x => String(x.email || "").trim().toLowerCase() === u);
+  return e && e.nombre ? String(e.nombre) : "";
+}
+// Firma de lo que muestra la vista previa de Clientes (164, fase A).
+function firmaPreviaClientes(d, asig){
+  return nubeFirma({filas: d.filas, noVinieron: d.noVinieron.map(c => c.id),
+    manuales: d.manuales.map(x => [x.c.id, x.dicosa.dicosa.codigo]), asig});
+}
 // Lo que tiene que estar listo antes de calcular. Con base compartida se
 // sincroniza primero, como en el Catálogo. Devuelve el texto del problema o "".
 async function cliListo(){
@@ -3660,6 +3718,7 @@ function pintarPreviaClientes(){
   const {a, archivo} = CLI, d = diferenciasClientes(a), asig = asignacionesClientes(a);
   const nuevos = d.filas.filter(x => x.nuevo), cambian = d.filas.filter(x => x.cambia && !x.nuevo);
   CLI.n = {nuevos:nuevos.length, cambian:cambian.length, noVinieron:d.noVinieron.length};
+  CLI.firma = firmaPreviaClientes(d, asig);   // 164 (fase A): la lista completa
   const g = D.generadores || {}, porGen = {};
   Object.values(a.cli).forEach(n => { const k = n.dicosa.generador; porGen[k] = (porGen[k] || 0) + 1; });
   $("#cliPrevia").innerHTML = `<div class="aviso a-info"><strong>Vista previa: todavía no cambió nada.</strong>
@@ -3669,7 +3728,7 @@ function pintarPreviaClientes(){
     · sin cambios <strong id="cliSinCambio">${d.filas.length - nuevos.length - cambian.length}</strong>
     · no vienen en el archivo (se marcan, no se borran) <strong id="cliNoVinieron">${d.noVinieron.length}</strong>
     <br>Responsables: ${Object.keys(porGen).sort().map(k => `${esc(k || "(sin generador)")} (${porGen[k]}): ${
-      g[k] ? esc(g[k]) : "sin responsable"}`).join(" · ")}
+      g[k] ? esc(nombreEquipo(g[k]) || g[k]) : "sin responsable"}`).join(" · ")}
     · cambian de responsable <strong id="cliAsignar">${Object.keys(asig).length}</strong>
     <br><span class="mini">Sin responsable, un cliente nuevo queda con quien importa y uno que ya existe conserva el suyo.</span></div>
     <div class="aviso ${a.telRepetidos.length ? "a-med" : "a-info"}">Teléfonos repetidos en el archivo
@@ -3701,7 +3760,7 @@ async function confirmarClientes(){
   // Se recalcula con lo que hay ahora (la sincronización pudo traer clientes).
   const d = diferenciasClientes(a);
   const nuevos = d.filas.filter(x => x.nuevo).length, cambian = d.filas.filter(x => x.cambia && !x.nuevo).length;
-  if(nuevos !== CLI.n.nuevos || cambian !== CLI.n.cambian || d.noVinieron.length !== CLI.n.noVinieron){
+  if(firmaPreviaClientes(d, asignacionesClientes(a)) !== CLI.firma){
     pintarPreviaClientes();
     $("#cliMsg").innerHTML = `<div class="aviso a-mal">Los datos cambiaron al sincronizar.
       Revisa la vista previa y confirma de nuevo.</div>`;
@@ -3741,12 +3800,22 @@ function pintarGeneradores(){
   D.clientes.filter(esClienteDicosa).forEach(c => {
     const k = (c.dicosa || {}).generador; if(k) n[k] = (n[k] || 0) + 1; });
   const lista = [...new Set([...Object.keys(n), ...Object.keys(g)])].sort();
+  // 12a (fase A): el nombre del usuario va encima, como texto; el campo sigue siendo el correo.
   $("#genTabla").innerHTML = lista.length ? `<div class="tabla-wrap"><table><thead><tr><th>Generador de Demanda</th>
     <th class="num">Clientes</th><th>Correo del responsable</th></tr></thead><tbody>
-    ${lista.map(k => `<tr><td>${esc(k)}</td><td class="num">${n[k] || 0}</td>
-      <td><input data-gen="${esc(k)}" value="${esc(g[k] || "")}" placeholder="correo del usuario del equipo"></td></tr>`).join("")}
+    ${lista.map(k => { const nom = nombreEquipo(g[k]); return `<tr><td>${esc(k)}</td><td class="num">${n[k] || 0}</td>
+      <td>${nom ? `<div class="mini"><strong>${esc(nom)}</strong></div>` : ""}
+        <input data-gen="${esc(k)}" value="${esc(g[k] || "")}" placeholder="correo del usuario del equipo"></td></tr>`; }).join("")}
     </tbody></table></div>`
     : `<p class="mini">Todavía no hay clientes de DICOSA: los generadores aparecen después de la primera importación.</p>`;
+  // 179 (fase A): los que la base no aceptó, con el responsable pedido.
+  const no = Object.entries(D.rechazado || {});
+  const nomCli = id => (D.clientes.find(c => c.id === id) || {}).nombre;
+  $("#genRechazados").innerHTML = no.length
+    ? `<div class="aviso a-med">La base no aceptó el responsable de ${no.length} cliente(s); siguen con el que tenían.
+       Revisa que el correo sea de un usuario del equipo:<br>${no.map(([id, r]) =>
+         `${esc(nomCli(id) ? nomCli(id) + " (" + id + ")" : id)}: ${esc(nombreEquipo(r) || r)}`).join("<br>")}</div>`
+    : "";
 }
 function guardarGeneradores(){
   const g = {};
@@ -3880,6 +3949,7 @@ function pintarAjustes(){
   pintarCorte();
   pintarTipoCambio();
   pintarGeneradores();
+  pintarPersistencia();
   $("#params").innerHTML = Object.entries(PARAMS_DEF).map(([k,o])=>`
     <div><label>${o.d}</label>
       <div class="fila"><input id="pp_${k}" type="number" step="0.01" value="${D.params[k]}">
@@ -3924,6 +3994,26 @@ function guardarLetra(){
   catch(e){ $("#letraMsg").innerHTML = `<div class="aviso a-mal">No se pudo guardar la letra en este navegador.</div>`; return; }
   $("#letraDisp").value = l;
   $("#letraMsg").innerHTML = `<div class="aviso a-ok">Letra guardada. Los pedidos nuevos de este dispositivo saldrán como ${l}-…</div>`;
+}
+
+// Almacenamiento persistente (11a, fase A): al arrancar se pide al navegador que
+// no borre estos datos por falta de espacio. "si", "no", "no_disponible" o null
+// (todavía sin respuesta).
+let PERSISTENTE = null;
+function pintarPersistencia(){
+  const el = $("#persistInfo"); if(!el) return;
+  el.textContent = {
+    si: "Almacenamiento persistente: sí. El navegador no borra estos datos por falta de espacio.",
+    no: "Almacenamiento persistente: no. El navegador podría borrar estos datos si le falta espacio; descarga respaldos.",
+    no_disponible: "Almacenamiento persistente: este navegador no lo permite; descarga respaldos."
+  }[PERSISTENTE] || "Almacenamiento persistente: consultando…";
+}
+async function pedirPersistencia(){
+  try{
+    PERSISTENTE = (navigator.storage && navigator.storage.persist)
+      ? (await navigator.storage.persist() ? "si" : "no") : "no_disponible";
+  }catch(e){ PERSISTENTE = "no_disponible"; }
+  pintarPersistencia();
 }
 
 // Tipo de cambio (fase 1b, D3 y D5a): lo registra el admin, con fecha; queda
@@ -4221,6 +4311,7 @@ pintarCatalogoCompra();
 pintarHabituales();
 recalc();
 pintarInicio();
+pedirPersistencia();
 </script>
 
 <script>
@@ -4273,8 +4364,18 @@ const ROL_ESCRIBE = {
   coordinador:    ["skus","clientes","pedidos","movimientos","avisos","bodegas","inv_detalle"],
   administrativo: ["skus","movimientos","avisos","inv_detalle"],
   despacho:       ["pedidos","movimientos","avisos"],
-  pedidos:        ["clientes","pedidos","movimientos","avisos"]
+  // 162 (fase A): pedidos no crea movimientos (la base tampoco lo deja).
+  pedidos:        ["clientes","pedidos","avisos"]
 };
+// 162 (fase A): qué movimientos sube cada rol, la misma regla que la base
+// (sql/acceso-a.sql). Una sola fila prohibida haría fallar todo el envío.
+function nubeSubeMovimiento(m){
+  const r = nubeRolPantalla();
+  if(r === "admin" || r === "coordinador") return true;
+  if(r === "despacho") return !!m && m.tipo === "despacho";
+  if(r === "administrativo") return !!m && m.tipo !== "despacho";
+  return false;
+}
 
 const COLECCIONES = [
   {t:"skus",        campo:"skus",        clave:"codigo", nombre:"productos"},
@@ -4299,7 +4400,9 @@ const NUBE = {
   vueltas: 0,
   timer: null,
   rol: undefined,            // undefined: sin usuario (local); null: usuario sin rol
-  rolLeido: false            // ya se preguntó mi_rol() en esta carga de la página
+  rolLeido: false,           // ya se preguntó mi_rol() en esta carga de la página
+  equipo: [],                // fase A: [{email, nombre, rol}] de equipo_lista (admin y coordinador)
+  saliendo: false            // fase A: se está desconectando; nada se vuelve a guardar
 };
 
 /* ------------------------------------------------------------- utilidades */
@@ -4335,6 +4438,7 @@ function nubeLeerEspejo(){
     if(e){ NUBE.espejo = e.espejo || {}; NUBE.desde = e.desde || NUBE.desde;
            NUBE.espejo.costos = NUBE.espejo.costos || {};
            NUBE.espejo.costos_usd = NUBE.espejo.costos_usd || {};   // antes de la fase 1b no venía
+           NUBE.espejo.pedidos_costos = NUBE.espejo.pedidos_costos || {};   // antes de la fase A no venía
            // Un espejo guardado antes de bodegas e inv_detalle no las trae.
            COLECCIONES.forEach(c => NUBE.espejo[c.t] = NUBE.espejo[c.t] || {});
            return; }
@@ -4343,6 +4447,7 @@ function nubeLeerEspejo(){
   NUBE.espejo.config = {};
   NUBE.espejo.costos = {};
   NUBE.espejo.costos_usd = {};
+  NUBE.espejo.pedidos_costos = {};
 }
 function nubeGuardarEspejo(){
   try{ localStorage.setItem(NUBE_MARK, JSON.stringify({espejo:NUBE.espejo, desde:NUBE.desde})); }catch(e){}
@@ -4352,6 +4457,7 @@ function nubeOlvidarEspejo(){
   NUBE.espejo.config = {};
   NUBE.espejo.costos = {};
   NUBE.espejo.costos_usd = {};
+  NUBE.espejo.pedidos_costos = {};
   NUBE.desde = "1970-01-01T00:00:00Z";
   nubeGuardarEspejo();
 }
@@ -4362,7 +4468,45 @@ function nubeOlvidarEspejo(){
 // Desde la fase 1b, lo mismo con el costo en dólares (costo_usd): la base lo
 // guarda en la misma fila de costos, que solo leen admin y coordinador.
 function nubeSinCosto(item){ const {costo, costo_usd, ...resto} = item; return resto; }
-function nubeFirmaFila(t, item){ return nubeFirma(t === "skus" ? nubeSinCosto(item) : item); }
+
+// Costos del pedido (150, fase A): la base los saca de pedidos y los guarda en
+// pedidos_costos, que solo leen admin y coordinador. Igual que con los productos,
+// la firma del pedido se toma sin ellos y el espejo guarda sus valores (no la
+// firma), para volver a ponerlos cuando el pedido baja sin ellos.
+const PED_COSTOS = ["costo_prod","margen","contribucion_est","contribucion_real","tipo_cambio"];
+const LIN_COSTOS = ["costo","costo_usd","tc"];
+function nubePedidoSinCosto(p){
+  const o = {...p};
+  PED_COSTOS.forEach(k => delete o[k]);
+  if(Array.isArray(p.lineas)) o.lineas = p.lineas.map(l => {
+    if(!l || typeof l !== "object") return l;
+    const x = {...l}; LIN_COSTOS.forEach(k => delete x[k]); return x; });
+  return o;
+}
+// Lo mismo que guarda la base en pedidos_costos: solo las claves presentes;
+// "lineas" (por posición) solo si alguna línea trae alguna.
+function nubePedidoCostos(p){
+  const d = {};
+  PED_COSTOS.forEach(k => { if(k in p) d[k] = p[k]; });
+  const ls = Array.isArray(p.lineas) ? p.lineas : [];
+  if(ls.some(l => l && typeof l === "object" && LIN_COSTOS.some(k => k in l)))
+    d.lineas = ls.map(l => { const x = {};
+      if(l && typeof l === "object") LIN_COSTOS.forEach(k => { if(k in l) x[k] = l[k]; });
+      return x; });
+  return d;
+}
+function nubePedidoTraeCostos(p){
+  return PED_COSTOS.some(k => k in p) || (Array.isArray(p.lineas) &&
+    p.lineas.some(l => l && typeof l === "object" && LIN_COSTOS.some(k => k in l)));
+}
+function nubePonerCostosPedido(p, c){
+  PED_COSTOS.forEach(k => { if(k in c) p[k] = c[k]; });
+  (Array.isArray(c.lineas) ? c.lineas : []).forEach((x, i) => {
+    if(p.lineas && p.lineas[i] && x && typeof x === "object") Object.assign(p.lineas[i], x); });
+}
+function nubeFirmaFila(t, item){
+  return nubeFirma(t === "skus" ? nubeSinCosto(item) : t === "pedidos" ? nubePedidoSinCosto(item) : item);
+}
 
 /* ---------------------------------------------------------------- roles --- */
 
@@ -4402,6 +4546,10 @@ function nubeEscribe(t){
 // Menú, textos y botones según el rol. Sin usuario deja todo como siempre.
 function nubeAplicarRol(){
   const r = nubeRolPantalla();
+  // 180 (fase A): los responsables por generador son solo de admin y coordinador.
+  if(r !== "local" && !["admin","coordinador"].includes(r)) D.generadores = {};
+  // 176b: los pedidos ajenos solo se usan con rol pedidos.
+  if(r !== "pedidos") PEDIDOS_AJENOS = [];
   $$("nav button").forEach(b => {
     const p = b.dataset.p;
     const ve = r === "local" || (p === "ajustes" ? r === "admin" : !!nubePanelModo(p));
@@ -4499,14 +4647,20 @@ async function nubeEntrar(email, clave){
                      expira: Date.now() + (j.expires_in||3600)*1000, email: email});
 }
 
+// 161 (fase A): desconectar limpia de este navegador lo que vino de la base
+// (datos, espejo, sesión y rol) y vuelve a empezar. Se conservan la conexión
+// guardada (dirección y llave) y la letra. En la base no se borra nada.
 function nubeSalir(){
-  nubeGuardarSesion(null);
-  // Sin usuario, todo vuelve a verse como en modo local.
-  nubeGuardarRol(undefined); NUBE.rolLeido = false;
-  NUBE.estado = "local"; NUBE.detalle = "";
+  const aviso = "Se va a desconectar este navegador.\n\n" +
+    "Se borran de aquí los datos que vinieron de la base (en la base quedan) y este navegador vuelve a empezar." +
+    (NUBE.pendiente ? "\n\nATENCIÓN: hay cambios que todavía no llegaron a la base y se pierden." : "") +
+    "\n\n¿Continuar?";
+  if(!confirm(aviso)) return;
+  NUBE.saliendo = true;
   if(NUBE.timer){ clearInterval(NUBE.timer); NUBE.timer = null; }
-  nubePintarPill();
-  nubeAplicarRol();
+  clearTimeout(nubeTimerEmpuje);
+  try{ [NUBE_SES, NUBE_ROL, NUBE_MARK, CLAVE].forEach(k => localStorage.removeItem(k)); }catch(e){}
+  location.reload();
 }
 
 /* --------------------------------------------------------------- subir --- */
@@ -4520,6 +4674,7 @@ function nubeCambiosLocales(){
   const conCostos = veCostos();
   const ec = NUBE.espejo.costos = NUBE.espejo.costos || {};
   const eu = NUBE.espejo.costos_usd = NUBE.espejo.costos_usd || {};
+  const ep = NUBE.espejo.pedidos_costos = NUBE.espejo.pedidos_costos || {};
   COLECCIONES.forEach(c => {
     if(!nubeEscribe(c.t)) return;
     const esp = NUBE.espejo[c.t] = NUBE.espejo[c.t] || {};
@@ -4529,12 +4684,18 @@ function nubeCambiosLocales(){
       const k = item[c.clave];
       if(k === undefined || k === null) return;
       vivos[k] = true;
+      // 162 (fase A): solo los tipos de movimiento que el rol puede crear.
+      if(c.t === "movimientos" && !nubeSubeMovimiento(item)) return;
       const f = nubeFirmaFila(c.t, item);
-      const cambiaCosto = c.t === "skus" && conCostos &&
+      const cambiaCosto = (c.t === "skus" && conCostos &&
         ((item.costo !== undefined && ec[k] !== item.costo) ||
-         (item.costo_usd !== undefined && eu[k] !== item.costo_usd));
+         (item.costo_usd !== undefined && eu[k] !== item.costo_usd))) ||
+        // 150 (fase A): costos del pedido, solo si el rol los ve.
+        (c.t === "pedidos" && conCostos && nubePedidoTraeCostos(item) &&
+         nubeFirma(ep[k] || {}) !== nubeFirma(nubePedidoCostos(item)));
       if(esp[k] !== f || cambiaCosto){
-        const datos = c.t === "skus" && !conCostos ? nubeSinCosto(item) : item;
+        const datos = c.t === "skus" && !conCostos ? nubeSinCosto(item)
+                    : c.t === "pedidos" && !conCostos ? nubePedidoSinCosto(item) : item;
         filas.push({[c.clave]: String(k), datos: datos}); n++;
       }
     });
@@ -4566,6 +4727,9 @@ function nubeCambiosLocales(){
 // un PATCH por responsable y nunca dentro del upsert: si un envío mezclara filas
 // con y sin asignado_a, las que no lo traen lo dejarían vacío. Va después de
 // subir los clientes, para que los nuevos ya existan en la base.
+// 179 (fase A): la base devuelve cada fila cambiada con su asignado_a. Si no
+// volvió o volvió con otro (sin distinguir mayúsculas), la base no lo aceptó:
+// queda en D.rechazado, se avisa en Ajustes y no se reenvía con ese mismo responsable.
 async function nubeSubirAsignar(lista){
   const por = {};
   lista.forEach(([id, r]) => { (por[r] = por[r] || []).push(id); });
@@ -4573,10 +4737,17 @@ async function nubeSubirAsignar(lista){
     for(let i = 0; i < ids.length; i += 100){
       const parte = ids.slice(i, i + 100);
       const filtro = "in.(" + parte.map(x => '"' + String(x).replace(/["\\]/g, "") + '"').join(",") + ")";
-      await nubeFetch("/rest/v1/clientes?id=" + encodeURIComponent(filtro), {
-        method:"PATCH", headers:{"Prefer":"return=minimal"}, body:{asignado_a:r}});
-      D.asignado = D.asignado || {};
-      parte.forEach(id => { D.asignado[id] = r; if(D.asignar && D.asignar[id] === r) delete D.asignar[id]; });
+      const vuelta = await nubeFetch("/rest/v1/clientes?id=" + encodeURIComponent(filtro) + "&select=id,asignado_a", {
+        method:"PATCH", headers:{"Prefer":"return=representation"}, body:{asignado_a:r}});
+      const ok = new Set((Array.isArray(vuelta) ? vuelta : [])
+        .filter(f => f && String(f.asignado_a || "").trim().toLowerCase() === r.trim().toLowerCase())
+        .map(f => String(f.id)));
+      D.asignado = D.asignado || {}; D.rechazado = D.rechazado || {};
+      parte.forEach(id => {
+        if(ok.has(String(id))){ D.asignado[id] = r; delete D.rechazado[id]; }
+        else D.rechazado[id] = r;
+        if(D.asignar && D.asignar[id] === r) delete D.asignar[id];
+      });
     }
   }
 }
@@ -4599,6 +4770,8 @@ async function nubeSubir(){
         NUBE.espejo[t][f[c.clave]] = nubeFirmaFila(t, f.datos);
         if(t === "skus" && f.datos.costo !== undefined) NUBE.espejo.costos[f[c.clave]] = f.datos.costo;
         if(t === "skus" && f.datos.costo_usd !== undefined) NUBE.espejo.costos_usd[f[c.clave]] = f.datos.costo_usd;
+        if(t === "pedidos" && nubePedidoTraeCostos(f.datos))
+          NUBE.espejo.pedidos_costos[f[c.clave]] = nubePedidoCostos(f.datos);
       });
     }
     for(const k of borrar){
@@ -4614,14 +4787,24 @@ async function nubeSubir(){
 
 function nubeAplicar(campo, clave, tabla, filas){
   let n = 0;
+  const conCostos = veCostos();
   filas.forEach(f => {
-    const item = f.d, k = String(f.k);
+    // 150 (fase A): a un rol que no ve costos el pedido le queda sin ellos,
+    // aunque la base (antes de acceso-a.sql) todavía los mande.
+    const item = tabla === "pedidos" && !conCostos && f.d ? nubePedidoSinCosto(f.d) : f.d, k = String(f.k);
     const fi = nubeFirmaFila(tabla, item);
     if(NUBE.espejo[tabla][k] === fi) return;      // ya lo teníamos igual
     // El producto llega sin costo: se le pone el último que mandó la base.
     const ec = NUBE.espejo.costos || {}, eu = NUBE.espejo.costos_usd || {};
     if(tabla === "skus" && item.costo === undefined && ec[k] !== undefined) item.costo = ec[k];
     if(tabla === "skus" && item.costo_usd === undefined && eu[k] !== undefined) item.costo_usd = eu[k];
+    // Lo mismo con el pedido: si trae costos (base vieja), esos son los de la
+    // base; si no, se le ponen los últimos que mandó pedidos_costos.
+    if(tabla === "pedidos" && conCostos){
+      const ep = NUBE.espejo.pedidos_costos = NUBE.espejo.pedidos_costos || {};
+      if(nubePedidoTraeCostos(item)) ep[k] = nubePedidoCostos(item);
+      else if(ep[k]) nubePonerCostosPedido(item, ep[k]);
+    }
     const arr = D[campo];
     const i = arr.findIndex(x => String(x[clave]) === k);
     if(i >= 0) arr[i] = item; else arr.push(item);
@@ -4636,6 +4819,25 @@ async function nubeBajar(){
   const r = await nubeRpc("cambios", {desde: NUBE.desde});
   let n = 0;
   COLECCIONES.forEach(c => { n += nubeAplicar(c.campo, c.clave, c.t, r[c.t] || []); });
+  // Responsable de cada cliente (fase A): la base lo manda aparte, en "a". Se
+  // guarda solo en este navegador y nunca se sube.
+  const rs = D.responsables = D.responsables || {};
+  (r.clientes || []).forEach(f => {
+    if(!f || !("a" in f)) return;
+    const k = String(f.k);
+    if(rs[k] !== f.a){ if(f.a === null || f.a === undefined) delete rs[k]; else rs[k] = f.a; n++; }
+  });
+  // Costos de los pedidos (150, fase A): solo llegan a admin y coordinador.
+  const ep = NUBE.espejo.pedidos_costos = NUBE.espejo.pedidos_costos || {};
+  if(veCostos()) (r.pedidos_costos || []).forEach(f => {
+    const k = String(f.k), d = f.d || {};
+    ep[k] = d;
+    const p = D.pedidos.find(x => String(x.id) === k);
+    if(!p) return;
+    const antes = nubeFirma(nubePedidoCostos(p));
+    nubePonerCostosPedido(p, d);
+    if(nubeFirma(nubePedidoCostos(p)) !== antes) n++;
+  });
   // Costos: la base solo los manda a quien puede leerlos (admin y coordinador).
   // Se ponen en cada producto para que los márgenes sigan funcionando.
   const ec = NUBE.espejo.costos = NUBE.espejo.costos || {};
@@ -4658,7 +4860,8 @@ async function nubeBajar(){
     if(f.k === "params") D.params = f.d;
     if(f.k === "banco")  D.banco  = f.d;
     if(f.k === "tipo_cambio") D.tipo_cambio = Array.isArray(f.d) ? f.d : [];
-    if(f.k === "generadores") D.generadores = f.d && typeof f.d === "object" && !Array.isArray(f.d) ? f.d : {};
+    // 180 (fase A): solo admin y coordinador usan los responsables por generador.
+    if(f.k === "generadores") D.generadores = puedeAsignar() && f.d && typeof f.d === "object" && !Array.isArray(f.d) ? f.d : {};
     NUBE.espejo.config[f.k] = fi;
     n++;
   });
@@ -4688,6 +4891,30 @@ async function nubeReconciliar(){
   return n;
 }
 
+// 176b (fase A): con rol pedidos, de los pedidos abiertos de otros solo estado,
+// pago y líneas (sin cliente), para que el disponible sea el real. Si la base
+// todavía no tiene la función (antes de acceso-a.sql), se sigue sin ellos.
+async function nubeTraerAjenos(){
+  if(nubeRolPantalla() !== "pedidos"){ PEDIDOS_AJENOS = []; return 0; }
+  let a;
+  try{ a = await nubeRpc("pedidos_abiertos_ajenos", {}); }catch(e){ return 0; }
+  const nuevos = Array.isArray(a) ? a.filter(p => p && Array.isArray(p.lineas)) : [];
+  if(nubeFirma(nuevos) === nubeFirma(PEDIDOS_AJENOS)) return 0;
+  PEDIDOS_AJENOS = nuevos;
+  return 1;
+}
+// 12a (fase A): usuarios del equipo con su nombre (admin y coordinador), solo en
+// memoria. Sin la función en la base, la lista queda como estaba.
+async function nubeTraerEquipo(){
+  if(!puedeAsignar()){ NUBE.equipo = []; return 0; }
+  let e;
+  try{ e = await nubeRpc("equipo_lista", {}); }catch(x){ return 0; }
+  const l = Array.isArray(e) ? e.filter(x => x && x.email) : [];
+  if(nubeFirma(l) === nubeFirma(NUBE.equipo)) return 0;
+  NUBE.equipo = l;
+  return 1;
+}
+
 /* -------------------------------------------------------- sincronización --- */
 
 async function nubeSincronizar(forzar){
@@ -4700,7 +4927,11 @@ async function nubeSincronizar(forzar){
     const subidos = await nubeSubir();
     let bajados = await nubeBajar();
     NUBE.vueltas++;
-    if(forzar || NUBE.vueltas % 8 === 1) bajados += await nubeReconciliar();
+    const completa = forzar || NUBE.vueltas % 8 === 1;
+    if(completa) bajados += await nubeReconciliar();
+    bajados += await nubeTraerAjenos();
+    if(completa) bajados += await nubeTraerEquipo();
+    if(NUBE.saliendo) return;      // se desconectó mientras tanto: no se guarda nada
     if(subidos || bajados){
       guardarLocal();
       if(typeof recalc === "function") recalc();
@@ -4771,7 +5002,7 @@ async function nubePrimeraVez(){
   const espMov = (NUBE.espejo && NUBE.espejo.movimientos) || {};
   const pendientes = Object.keys(espMov).length && nubeEscribe("movimientos") ? D.movimientos.filter(m =>
     m.id && m.id !== CORTE_ID && !String(m.id).startsWith("ini|") && !m.ejemplo &&
-    espMov[m.id] !== nubeFirma(m)) : [];
+    espMov[m.id] !== nubeFirma(m) && nubeSubeMovimiento(m)) : [];
   nubeOlvidarEspejo();
   if(vacia && nubeRolPantalla() === "admin"){
     await nubeSubir();
@@ -4796,6 +5027,8 @@ async function nubePrimeraVez(){
   D.tipo_cambio = [];
   // Responsables (fase 1c): los manda la base; lo anotado aquí es de otra isla.
   D.generadores = {}; D.asignar = {}; D.asignado = {};
+  // Fase A: rechazados y responsables también son de la base.
+  D.rechazado = {}; D.responsables = {};
   const n = await nubeBajar();
   // Parámetros y cuenta que la base no trae se quedan aquí, pero no se suben.
   [["params", D.params], ["banco", D.banco], ["tipo_cambio", D.tipo_cambio],
@@ -4831,6 +5064,9 @@ function nubePintarPill(){
   }
   el.style.background = m.b; el.style.color = m.c;
   el.textContent = m.p + " " + m.t + extra;
+  // 161 (fase A): aviso fijo mientras este navegador no tenga sesión.
+  const av = document.getElementById("avisoLocal");
+  if(av) av.style.display = NUBE.sesion ? "none" : "";
   el.title = NUBE.detalle || (NUBE.sesion ? NUBE.sesion.email : "Los datos viven solo en este navegador");
 }
 
@@ -5037,21 +5273,24 @@ function nubeHaySesion(){
 // quita antes de abrir nubeLogin, que no se abre si ya hay una capa.
 function nubeBienvenida(){
   if(document.getElementById("nubeCapa")) return;
+  const conCfg = !!(NUBE.url && NUBE.key);
   const capa = document.createElement("div");
   capa.id = "nubeCapa";
   capa.innerHTML =
     '<div id="nubeCaja">' +
       '<h3>Sistema de Distribución — Insumos Médicos</h3>' +
-      '<p class="s">Entra con tu usuario para trabajar con la base del equipo, ' +
-      'o sigue solo en este navegador como hasta ahora.</p>' +
+      (conCfg ? '<p class="s">Este navegador ya está preparado para la base del equipo: entra con tu usuario.</p>'
+              : '<p class="s">Entra con tu usuario para trabajar con la base del equipo, ' +
+                'o sigue solo en este navegador como hasta ahora.</p>') +
       '<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">' +
         '<button class="b" id="nbBienEntrar">Entrar con mi usuario</button>' +
-        '<button class="s" id="nbBienLocal">Seguir solo en este navegador</button>' +
+        // 161 (fase A): un navegador que ya tiene conexión guardada no pasa a modo local.
+        (conCfg ? '' : '<button class="s" id="nbBienLocal">Seguir solo en este navegador</button>') +
       '</div>' +
     '</div>';
   document.body.appendChild(capa);
   const cerrar = () => capa.remove();
-  document.getElementById("nbBienLocal").onclick = cerrar;
+  if(!conCfg) document.getElementById("nbBienLocal").onclick = cerrar;
   document.getElementById("nbBienEntrar").onclick = function(){
     cerrar();
     if(NUBE.url && NUBE.key){ nubeLogin(); return; }
@@ -5072,6 +5311,46 @@ function nubeBienvenida(){
   setTimeout(() => { const b = document.getElementById("nbBienEntrar"); if(b) b.focus(); }, 30);
 }
 
+/* ------------------------------------------- usuarios del equipo (12a) --- */
+
+// Tarjeta de Ajustes, solo admin (como todas las que no llevan data-todos). El
+// correo y el rol se ven; el nombre se edita y lo guarda equipo_poner_nombre.
+function pintarEquipo(){
+  const t = document.getElementById("equipoTabla");
+  if(!t) return;
+  const l = NUBE.equipo || [];
+  t.innerHTML = !nubeActiva()
+    ? '<p class="mini">Sin base compartida no hay usuarios del equipo.</p>'
+    : l.length ? '<div class="tabla-wrap"><table><thead><tr><th>Usuario (correo)</th><th>Rol</th><th>Nombre</th></tr></thead><tbody>' +
+        l.map(e => '<tr><td>' + esc(e.email) + '</td><td>' + esc(e.rol || "—") + '</td>' +
+          '<td><input data-equipo="' + esc(e.email) + '" value="' + esc(e.nombre || "") + '" placeholder="Nombre para mostrar"></td></tr>').join("") +
+        '</tbody></table></div>'
+    : '<p class="mini">La base no devolvió usuarios. Pulsa «Sincronizar ahora» en Base compartida.</p>';
+}
+async function guardarNombresEquipo(){
+  const msg = t => { const m = document.getElementById("equipoMsg"); if(m) m.innerHTML = t; };
+  if(!nubeActiva() || nubeRolPantalla() !== "admin"){
+    msg('<div class="aviso a-mal">Solo el administrador, con la base compartida, pone los nombres.</div>'); return; }
+  const cambios = [];
+  document.querySelectorAll("#equipoTabla input[data-equipo]").forEach(i => {
+    const e = (NUBE.equipo || []).find(x => x.email === i.dataset.equipo);
+    const v = i.value.trim();
+    if(e && v !== String(e.nombre || "")) cambios.push({p_email: e.email, p_nombre: v});
+  });
+  if(!cambios.length){ msg('<div class="aviso a-info">No hay nombres cambiados.</div>'); return; }
+  const malos = [];
+  try{
+    for(const c of cambios) if(await nubeRpc("equipo_poner_nombre", c) !== true) malos.push(c.p_email);
+    NUBE.equipo = [];
+    await nubeTraerEquipo();
+  }catch(e){ msg('<div class="aviso a-mal">' + esc(String(e.message || e)) + '</div>'); return; }
+  pintarEquipo();
+  if(typeof pintarGeneradores === "function") pintarGeneradores();
+  msg(malos.length
+    ? '<div class="aviso a-mal">La base no guardó el nombre de: ' + malos.map(esc).join(", ") + '.</div>'
+    : '<div class="aviso a-ok">Nombres guardados (' + cambios.length + ').</div>');
+}
+
 /* ------------------------------------------------------------- arranque --- */
 
 // La tarjeta de la nube se agrega arriba de Ajustes sin tocar el resto.
@@ -5088,6 +5367,7 @@ if(typeof pintarAjustes === "function"){
       p.insertAdjacentHTML("afterbegin", nubeTarjeta());
       nubeAplicarAjustes();
     }
+    pintarEquipo();
     // Con base compartida, el aviso de respaldo ya no es el mismo: la
     // información deja de depender de una sola computadora.
     const av = document.getElementById("avisoRespaldoAjustes");
