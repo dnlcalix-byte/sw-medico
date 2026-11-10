@@ -333,7 +333,7 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
 <!-- ============================================================ CATALOGO -->
 <section class="panel" id="p-catalogo">
   <h2>Catálogo</h2>
-  <p class="sub2">Los precios son estimaciones de arranque. Reemplázalos con tus cotizaciones reales: haz clic en cualquier fila para editar.</p>
+  <p class="sub2" data-escribe="catalogo">Haz clic en cualquier fila para editar un producto.</p>
   <div class="card">
     <div class="fila noprint">
       <div><label>Buscar</label><input id="filtroSku" placeholder="Nombre o código…"></div>
@@ -2655,7 +2655,15 @@ function pintarClientes(){
   // Responsable (fase A): asignado_a que manda la base, con el nombre del equipo si lo
   // tiene; solo para admin y coordinador.
   const conResp = puedeAsignar(), resp = D.responsables || {};
-  $("#tablaClientes").innerHTML = r.length ? `<div class="tabla-wrap"><table>
+  // B3: el responsable que la base no aceptó se ve también aquí (admin y coordinador),
+  // no solo en Ajustes; y «a mano» marca al cliente que la importación no reasigna.
+  const no = conResp ? (D.rechazado || {}) : {};
+  const noLista = Object.entries(no).map(([id, u]) => [D.clientes.find(c => c.id === id), u]).filter(([c]) => c);
+  const avisoNo = noLista.length
+    ? `<div class="aviso a-med" id="cliRechazados">La base no aceptó el responsable de ${noLista.length} cliente(s); siguen con el que tenían.
+       Revisa que sea un usuario del equipo:<br>${noLista.map(([c, u]) =>
+         `${esc(c.nombre)}: ${esc(nombreEquipo(u) || u)}`).join("<br>")}</div>` : "";
+  $("#tablaClientes").innerHTML = avisoNo + (r.length ? `<div class="tabla-wrap"><table>
     <thead><tr><th>Código</th><th>Nombre</th><th>Tipo</th><th>Teléfono</th><th>Dirección</th>
       <th>Especialidad</th><th>Municipio</th><th>Generador</th>${conResp?'<th>Responsable</th>':''}
       <th class="num">Pedidos</th><th class="num">Ticket prom.</th><th>Cobro</th><th class="noprint"></th></tr></thead><tbody>
@@ -2668,14 +2676,43 @@ function pintarClientes(){
         <td>${esc(c.telefono)}</td><td>${esc(c.direccion||"—")}<br>
         <span class="mini">${esc(c.referencia||"")}</span></td>
         <td>${esc(dk.especialidad||"—")}</td><td>${esc(dk.municipio||"—")}</td><td>${esc(dk.generador||"—")}</td>
-        ${conResp?`<td>${esc(nombreEquipo(resp[c.id]) || resp[c.id] || "—")}</td>`:''}
+        ${conResp?`<td>${esc(nombreEquipo(resp[c.id]) || resp[c.id] || "—")}${
+          c.resp_manual?' <span class="pill p-gris">a mano</span>':''}${
+          no[c.id]?`<br><span class="pill p-mal">no aceptado: ${esc(nombreEquipo(no[c.id]) || no[c.id])}</span>`:''}</td>`:''}
         <td class="num">${ps.length}</td><td class="num">${ps.length?L0(tp):"—"}</td>
         <td>${c.credito?'<span class="pill p-ok">crédito</span>':'<span class="pill p-gris">depósito</span>'}</td>
         <td class="noprint"><button class="s" onclick="abrirNuevoCliente('${c.id}')">Editar</button></td></tr>`;
     }).join("")}</tbody></table></div>`
-    : `<div class="vacio">Todavía no hay clientes registrados.</div>`;
+    : `<div class="vacio">Todavía no hay clientes registrados.</div>`);
 }
 $("#filtroCli").oninput = pintarClientes;
+
+// B3: responsable en la ficha del cliente, solo para admin y coordinador. La lista
+// es la de equipo_lista() (en memoria), con el nombre cuando lo hay. El valor actual
+// es el que está por enviarse o, si no, el que manda la base.
+function fichaResponsable(c){
+  if(!puedeAsignar()) return "";
+  const eq = (typeof NUBE !== "undefined" && Array.isArray(NUBE.equipo)) ? NUBE.equipo : [];
+  const igual = (x, y) => String(x || "").trim().toLowerCase() === String(y || "").trim().toLowerCase();
+  const actual = c ? String((D.asignar || {})[c.id] || (D.responsables || {})[c.id] || "").trim() : "";
+  const lista = eq.map(e => String(e.email));
+  const enLista = lista.find(u => igual(u, actual));
+  const ops = (actual ? "" : `<option value="">${c ? "(sin cambio)" : "Quien lo crea"}</option>`) +
+    (actual && !enLista ? `<option value="${esc(actual)}" selected>${esc(actual)}</option>` : "") +
+    lista.map(u => `<option value="${esc(u)}"${igual(u, actual) ? " selected" : ""}>${esc(nombreEquipo(u) || u)}</option>`).join("");
+  const no = c ? (D.rechazado || {})[c.id] : "";
+  const marcado = !!(c && c.resp_manual);
+  return `<hr>
+    <div><label>Responsable${marcado ? ' <span class="pill p-gris">asignado a mano</span>' : ""}</label>
+      <select id="cResp" data-actual="${esc(enLista || actual)}">${ops}</select></div>
+    <p class="mini" style="margin-top:5px">${c ? "Si lo cambias, los pedidos de este cliente pasan con él al nuevo responsable. " : ""}
+      Un cliente asignado aquí queda «asignado a mano»: la importación de Clientes no lo devuelve a su generador.
+      ${eq.length ? "" : "No se pudo traer la lista de usuarios del equipo; sincroniza e intenta de nuevo."}</p>
+    ${no ? `<div class="aviso a-med" id="cRespRechazo">La base no aceptó a ${esc(nombreEquipo(no) || no)} como responsable;
+      el cliente sigue con el que tenía. Revisa que sea un usuario del equipo.</div>` : ""}
+    ${marcado && esClienteDicosa(c) ? `<label><input type="checkbox" id="cRespQuitar" style="width:auto">
+      Devolverlo a su generador en la próxima importación de Clientes (quita «asignado a mano»)</label>` : ""}`;
+}
 
 function abrirNuevoCliente(id){
   const c = id ? D.clientes.find(x=>x.id===id) : null;
@@ -2706,6 +2743,7 @@ function abrirNuevoCliente(id){
       Crédito autorizado — sus pedidos salen sin esperar depósito</label>
     <p class="mini" style="margin-top:5px">Úsalo solo con clientes de confianza probada.
       Sin esta marca, cada pedido necesita depósito verificado antes de salir.</p>` : ""}
+    ${fichaResponsable(c)}
     <div id="cErr"></div><hr>
     <button class="b" onclick="guardarCliente('${id||""}')">Guardar</button>
     <button class="s" onclick="cerrarModal()">Cancelar</button>`);
@@ -2729,8 +2767,25 @@ function guardarCliente(id){
   const datos = {nombre:n, telefono:t, tipo:$("#cTipo").value, zona:$("#cZ").value.trim(),
                  direccion:d, referencia:$("#cR").value.trim(),
                  credito: puedeCredito() ? $("#cCred").checked : !!(actual && actual.credito)};
-  if(id){ Object.assign(D.clientes.find(c=>c.id===id), datos); }
+  // B3: responsable elegido en la ficha (solo admin y coordinador). Cambiarlo marca
+  // al cliente como asignado a mano y lo apunta para el envío de siempre
+  // (nubeSubirAsignar); la casilla quita la marca sin cambiar el responsable.
+  const sel = puedeAsignar() ? $("#cResp") : null;
+  const pedido = sel ? sel.value.trim() : "";
+  const cambiaResp = !!pedido && pedido.toLowerCase() !== String(sel.dataset.actual || "").trim().toLowerCase();
+  const quitaMarca = !!sel && !cambiaResp && !!($("#cRespQuitar") && $("#cRespQuitar").checked);
+  if(cambiaResp && id && !confirm("Los pedidos de este cliente pasan con él a " + (nombreEquipo(pedido) || pedido) +
+      ".\n\nEl responsable anterior deja de verlos si su rol es pedidos.\n\n¿Cambiar el responsable?")) return;
+  const responsable = cl => {
+    if(cambiaResp){
+      cl.resp_manual = true;
+      D.asignar = {...(D.asignar || {}), [cl.id]: pedido};
+      if(D.rechazado) delete D.rechazado[cl.id];
+    }else if(quitaMarca) delete cl.resp_manual;
+  };
+  if(id){ const cl = D.clientes.find(c=>c.id===id); Object.assign(cl, datos); responsable(cl); }
   else { const nc = {id:uid(), ...datos, alta:new Date().toISOString()};
+         responsable(nc);
          D.clientes.push(nc); guardar(); cerrarModal(); elegirCliente(nc.id); pintarClientes(); return; }
   guardar(); cerrarModal(); pintarClientes();
 }
@@ -3653,13 +3708,27 @@ function diferenciasClientes(a){
 // le enviaron a ese responsable (decisión 4). Sin responsable: nada. Si la base
 // ya rechazó ese mismo responsable para el cliente (179, fase A), no se reenvía
 // hasta que el generador tenga otro.
+// B3: un cliente asignado a mano (resp_manual, que viaja con el cliente) nunca
+// se reasigna aquí. Y si este navegador conoce el responsable que tiene el
+// cliente en la base (D.responsables), se compara contra ese, sin distinguir
+// mayúsculas; si no lo conoce, contra lo que recuerda haber enviado (D.asignado).
 function asignacionesClientes(a){
   const g = D.generadores || {}, hecho = D.asignado || {}, no = D.rechazado || {}, out = {};
+  const enBase = D.responsables || {}, manual = clientesAMano();
   Object.entries(a.cli).forEach(([id, n]) => {
     const r = String(g[n.dicosa.generador] || "").trim();
-    if(r && hecho[id] !== r && no[id] !== r) out[id] = r;
+    if(!r || no[id] === r || manual.has(id)) return;
+    const ya = enBase[id] ? String(enBase[id]).trim().toLowerCase() === r.toLowerCase() : hecho[id] === r;
+    if(!ya) out[id] = r;
   });
   return out;
+}
+function clientesAMano(){ return new Set(D.clientes.filter(c => c.resp_manual).map(c => c.id)); }
+// Clientes del archivo que la importación respeta por estar asignados a mano:
+// los marcados cuyo generador tiene responsable (sin la marca, se le enviarían).
+function respetadosClientes(a){
+  const g = D.generadores || {}, manual = clientesAMano();
+  return Object.keys(a.cli).filter(id => manual.has(id) && String(g[a.cli[id].dicosa.generador] || "").trim()).sort();
 }
 function puedeAsignar(){ return ["admin","coordinador"].includes(rolPantalla()); }
 // Crédito del cliente (150, fase A): sin usuario, como siempre; con usuario, solo
@@ -3675,9 +3744,9 @@ function nombreEquipo(usuario){
   return e && e.nombre ? String(e.nombre) : "";
 }
 // Firma de lo que muestra la vista previa de Clientes (164, fase A).
-function firmaPreviaClientes(d, asig){
+function firmaPreviaClientes(d, asig, respetados){
   return nubeFirma({filas: d.filas, noVinieron: d.noVinieron.map(c => c.id),
-    manuales: d.manuales.map(x => [x.c.id, x.dicosa.dicosa.codigo]), asig});
+    manuales: d.manuales.map(x => [x.c.id, x.dicosa.dicosa.codigo]), asig, respetados: respetados || []});
 }
 // Lo que tiene que estar listo antes de calcular. Con base compartida se
 // sincroniza primero, como en el Catálogo. Devuelve el texto del problema o "".
@@ -3715,12 +3784,22 @@ $("#cliArchivo").onchange = async function(){
   pintarPreviaClientes();
 };
 function pintarPreviaClientes(){
-  const {a, archivo} = CLI, d = diferenciasClientes(a), asig = asignacionesClientes(a);
+  const {a, archivo} = CLI, d = diferenciasClientes(a), asig = asignacionesClientes(a), respetados = respetadosClientes(a);
   const nuevos = d.filas.filter(x => x.nuevo), cambian = d.filas.filter(x => x.cambia && !x.nuevo);
   CLI.n = {nuevos:nuevos.length, cambian:cambian.length, noVinieron:d.noVinieron.length};
-  CLI.firma = firmaPreviaClientes(d, asig);   // 164 (fase A): la lista completa
+  CLI.firma = firmaPreviaClientes(d, asig, respetados);   // 164 (fase A): la lista completa
   const g = D.generadores || {}, porGen = {};
   Object.values(a.cli).forEach(n => { const k = n.dicosa.generador; porGen[k] = (porGen[k] || 0) + 1; });
+  // B3 y 183: la tabla lista también los que cambian de responsable y los que se
+  // respetan por estar asignados a mano; un cliente puede llevar más de una marca.
+  const nAsig = Object.keys(asig).length, marcas = {};
+  const marca = (id, html) => (marcas[id] = marcas[id] || []).push(html);
+  nuevos.forEach(x => marca(x.id, '<span class="pill p-med">nuevo</span>'));
+  cambian.forEach(x => marca(x.id, '<span class="pill p-ok">se actualiza</span>'));
+  Object.entries(asig).forEach(([id, r]) =>
+    marca(id, `<span class="pill p-med">cambia de responsable: ${esc(nombreEquipo(r) || r)}</span>`));
+  respetados.forEach(id => marca(id, '<span class="pill p-gris">asignado a mano: se respeta</span>'));
+  const enTabla = Object.keys(marcas);
   $("#cliPrevia").innerHTML = `<div class="aviso a-info"><strong>Vista previa: todavía no cambió nada.</strong>
     <br>Archivo ${esc(archivo)} · filas <strong id="cliFilas">${a.filas}</strong>
     · nuevos <strong id="cliNuevos">${nuevos.length}</strong>
@@ -3729,24 +3808,26 @@ function pintarPreviaClientes(){
     · no vienen en el archivo (se marcan, no se borran) <strong id="cliNoVinieron">${d.noVinieron.length}</strong>
     <br>Responsables: ${Object.keys(porGen).sort().map(k => `${esc(k || "(sin generador)")} (${porGen[k]}): ${
       g[k] ? esc(nombreEquipo(g[k]) || g[k]) : "sin responsable"}`).join(" · ")}
-    · cambian de responsable <strong id="cliAsignar">${Object.keys(asig).length}</strong>
-    <br><span class="mini">Sin responsable, un cliente nuevo queda con quien importa y uno que ya existe conserva el suyo.</span></div>
+    · cambian de responsable <strong id="cliAsignar">${nAsig}</strong>
+    · asignados a mano que se respetan <strong id="cliRespetados">${respetados.length}</strong>
+    <br><span class="mini">Sin responsable, un cliente nuevo queda con quien importa y uno que ya existe conserva el suyo.
+      Un cliente asignado a mano en su ficha no vuelve al responsable de su generador.</span></div>
     <div class="aviso ${a.telRepetidos.length ? "a-med" : "a-info"}">Teléfonos repetidos en el archivo
       <strong id="cliTelRepetidos">${a.telRepetidos.length}</strong> (no detienen la importación)${a.telRepetidos.length ? ":" : "."}
       ${a.telRepetidos.map(x => `<br>${esc(x.telefono)}: códigos ${x.codigos.map(esc).join(", ")}`).join("")}
       <br>Clientes hechos a mano con el teléfono de un cliente de DICOSA <strong id="cliManuales">${d.manuales.length}</strong>
       (no se juntan: los dos quedan)${d.manuales.length ? ":" : "."}
       ${d.manuales.map(x => `<br>${esc(x.c.nombre)} (${esc(x.c.telefono)}) y ${esc(x.dicosa.nombre)}, código ${esc(x.dicosa.dicosa.codigo)}`).join("")}</div>
-    ${nuevos.length || cambian.length || d.noVinieron.length ? `<div class="tabla-wrap"><table><thead><tr><th>Código</th><th>Cliente</th><th></th></tr></thead><tbody>
-      ${nuevos.concat(cambian).map(x => `<tr><td>${esc(a.cli[x.id].dicosa.codigo)}</td><td>${esc(x.nombre)}</td>
-        <td>${x.nuevo ? '<span class="pill p-med">nuevo</span>' : '<span class="pill p-ok">se actualiza</span>'}</td></tr>`).join("")}
+    ${enTabla.length || d.noVinieron.length ? `<div class="tabla-wrap"><table><thead><tr><th>Código</th><th>Cliente</th><th></th></tr></thead><tbody>
+      ${enTabla.map(id => `<tr><td>${esc(a.cli[id].dicosa.codigo)}</td><td>${esc(a.cli[id].nombre)}</td>
+        <td>${marcas[id].join(" ")}</td></tr>`).join("")}
       ${d.noVinieron.map(c => `<tr><td>${esc((c.dicosa||{}).codigo||"")}</td><td>${esc(c.nombre)}</td>
         <td><span class="pill p-mal">no vino, se marca</span></td></tr>`).join("")}
       </tbody></table></div>` : `<p class="mini">Ningún cliente cambia.</p>`}
     <p class="mini">Crédito, referencia, tipo y zona de la app no se tocan. Un cliente nuevo entra como tipo Otro, sin crédito.</p>
     <p><label><input type="checkbox" id="cliCasilla" style="width:auto"
       onchange="$('#cliConfirmar').disabled=!this.checked"> Revisé la vista previa: se crean ${nuevos.length},
-      se actualizan ${cambian.length} y se marcan ${d.noVinieron.length} cliente(s)</label></p>
+      se actualizan ${cambian.length}, se marcan ${d.noVinieron.length} y cambian de responsable ${nAsig} cliente(s)</label></p>
     <button class="b" id="cliConfirmar" onclick="confirmarClientes()" disabled>Confirmar importación de Clientes</button>
     <button class="s" onclick="CLI=null;$('#cliPrevia').innerHTML=''">Cancelar</button>`;
 }
@@ -3760,7 +3841,8 @@ async function confirmarClientes(){
   // Se recalcula con lo que hay ahora (la sincronización pudo traer clientes).
   const d = diferenciasClientes(a);
   const nuevos = d.filas.filter(x => x.nuevo).length, cambian = d.filas.filter(x => x.cambia && !x.nuevo).length;
-  if(firmaPreviaClientes(d, asignacionesClientes(a)) !== CLI.firma){
+  const respetados = respetadosClientes(a);
+  if(firmaPreviaClientes(d, asignacionesClientes(a), respetados) !== CLI.firma){
     pintarPreviaClientes();
     $("#cliMsg").innerHTML = `<div class="aviso a-mal">Los datos cambiaron al sincronizar.
       Revisa la vista previa y confirma de nuevo.</div>`;
@@ -3789,7 +3871,8 @@ async function confirmarClientes(){
   $("#cliPrevia").innerHTML = "";
   $("#cliMsg").innerHTML = `<div class="aviso a-ok"><strong>Clientes importados (${esc(fecha)}).</strong>
     ${nuevos} nuevo(s), ${cambian} actualizado(s), ${d.filas.length - nuevos - cambian} sin cambios,
-    ${d.noVinieron.length} marcado(s) porque no vinieron. ${Object.keys(asig).length} cambian de responsable.</div>`;
+    ${d.noVinieron.length} marcado(s) porque no vinieron. ${Object.keys(asig).length} cambian de responsable${
+      respetados.length ? "; " + respetados.length + " asignado(s) a mano se respetan" : ""}.</div>`;
   pintarClientes();
 }
 
@@ -4739,12 +4822,13 @@ async function nubeSubirAsignar(lista){
       const filtro = "in.(" + parte.map(x => '"' + String(x).replace(/["\\]/g, "") + '"').join(",") + ")";
       const vuelta = await nubeFetch("/rest/v1/clientes?id=" + encodeURIComponent(filtro) + "&select=id,asignado_a", {
         method:"PATCH", headers:{"Prefer":"return=representation"}, body:{asignado_a:r}});
-      const ok = new Set((Array.isArray(vuelta) ? vuelta : [])
+      const ok = new Map((Array.isArray(vuelta) ? vuelta : [])
         .filter(f => f && String(f.asignado_a || "").trim().toLowerCase() === r.trim().toLowerCase())
-        .map(f => String(f.id)));
-      D.asignado = D.asignado || {}; D.rechazado = D.rechazado || {};
+        .map(f => [String(f.id), f.asignado_a]));
+      D.asignado = D.asignado || {}; D.rechazado = D.rechazado || {}; D.responsables = D.responsables || {};
       parte.forEach(id => {
-        if(ok.has(String(id))){ D.asignado[id] = r; delete D.rechazado[id]; }
+        // B3: lo aceptado queda también como responsable conocido (nunca se sube).
+        if(ok.has(String(id))){ D.asignado[id] = r; delete D.rechazado[id]; D.responsables[id] = ok.get(String(id)); }
         else D.rechazado[id] = r;
         if(D.asignar && D.asignar[id] === r) delete D.asignar[id];
       });
@@ -5124,7 +5208,8 @@ function nubeTarjeta(){
       '<button class="b" onclick="nubeSincronizar(true)">Sincronizar ahora</button> ' +
       '<button class="s" onclick="nubeSalir()">Desconectar este navegador</button>' +
       '<p style="margin:14px 0 0;color:#6B7A8F;font-size:12px">' +
-      'Desconectar no borra nada de la base: solo deja de sincronizar en este navegador.</p>' +
+      'Desconectar no borra nada de la base, pero sí borra de este navegador los datos del equipo. ' +
+      'La conexión guardada (dirección y llave) y la letra del dispositivo se conservan.</p>' +
     '</div>';
   }
 
@@ -5177,7 +5262,7 @@ function nubeGuardarCfg(){
   const k = (document.getElementById("nbKey").value || "").trim();
   if(!/^https:\/\/[a-z0-9-]+\.supabase\.(co|in)$/i.test(u)){
     alert("La dirección debe verse así:\n\nhttps://abcdefghijkl.supabase.co\n\n" +
-          "La encuentras en Supabase, en Settings → API → Project URL."); return;
+          "La dirección (Project URL) se copia desde el botón Connect, arriba en el panel del proyecto de Supabase."); return;
   }
   const donde = "La encuentras en Supabase, en Project Settings, API Keys " +
                 "(la publishable; la anon está en el botón View legacy API keys).";
