@@ -129,6 +129,41 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
 .ped .acc{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
 .ped .acc button{font-size:11.5px;padding:5px 9px}
 @media print{.col{background:#fff}.ped{page-break-inside:avoid}}
+/* Fase 1g: Mostrar catálogo y Médicos, grandes y táctiles para tablet. */
+button.grande{font-size:16px;padding:13px 20px;min-height:48px}
+.mos-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+.mos-tabs button{background:#fff;border:1px solid var(--borde);color:var(--azul);border-radius:24px;
+  padding:12px 20px;min-height:48px;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer}
+.mos-tabs button.on{background:var(--azul);color:#fff;border-color:var(--azul)}
+.mos-sec{margin-bottom:22px}
+.mos-sec h3{margin:0 0 10px;font-size:16px;color:var(--azul);font-weight:700;border-bottom:2px solid var(--borde);padding-bottom:6px}
+.mos-rejilla{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+.mos-tar{display:flex;flex-direction:column;gap:5px;text-align:left;background:#fff;border:1px solid var(--borde);
+  border-radius:12px;padding:10px;cursor:pointer;font-family:inherit;color:var(--texto);box-shadow:var(--sombra);min-height:48px}
+.mos-tar:active{border-color:var(--azul2)}
+.mos-foto{display:flex;align-items:center;justify-content:center;aspect-ratio:4/3;background:#EEF2F7;border-radius:8px;
+  overflow:hidden;color:var(--gris);font-size:13px}
+.mos-foto img{width:100%;height:100%;object-fit:contain;background:#fff}
+.mos-foto img[hidden],.visor img[hidden],.visor [hidden]{display:none}
+.mos-n{font-size:15px;font-weight:600;line-height:1.3}
+.mos-c{font-size:12.5px;color:var(--gris)}
+.mos-p{font-size:18px;font-weight:700;color:var(--azul)}
+.mos-p small{font-size:12px;font-weight:600;color:var(--gris)}
+.mos-sinp{font-size:14px;font-weight:600;color:var(--gris)}
+.visor{position:fixed;inset:0;background:rgba(10,16,28,.92);display:none;z-index:120;align-items:center;justify-content:center;padding:12px}
+.visor.on{display:flex}
+.visor-caja{display:flex;flex-direction:column;align-items:center;gap:10px;width:100%;max-width:1200px;max-height:100%;color:#fff}
+.visor-fila{display:flex;align-items:center;gap:8px;width:100%;min-height:0;flex:1}
+#visorMarco{flex:1;display:flex;align-items:center;justify-content:center;min-width:0;height:72vh;background:#fff;border-radius:10px;
+  overflow:hidden;color:var(--gris);font-size:16px}
+#visorImg{max-width:100%;max-height:100%;object-fit:contain}
+.visor button{background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:50%;width:56px;height:56px;font-size:30px;
+  line-height:1;cursor:pointer;flex:0 0 56px;font-family:inherit}
+.visor button:disabled{opacity:.25;cursor:default}
+#visorCerrar{align-self:flex-end}
+#visorTxt{text-align:center;font-size:17px;line-height:1.45}
+#visorTxt .mos-p,#visorTxt .mos-p small,#visorTxt .mos-sinp{color:#fff}
+#visorPos{font-size:14px;opacity:.8;min-height:20px}
 </style>
 </head>
 <body>
@@ -145,6 +180,8 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
     <button data-p="catalogo">Catálogo</button>
     <button data-p="inventario">Inventario</button>
     <button data-p="reposicion">Reposición</button>
+    <button data-p="mostrar">Mostrar catálogo</button>
+    <button data-p="medicos">Médicos</button>
     <button data-p="ajustes">Ajustes</button>
   </nav>
 </header>
@@ -233,10 +270,11 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
 
     <div class="fila" style="margin-top:10px;align-items:center">
       <div class="auto" style="min-width:130px">
-        <label>Cantidad a agregar</label>
+        <label>Inners a agregar</label>
         <input id="cant" type="number" value="1" min="1" step="1" style="width:110px">
       </div>
-      <div class="auto mini" style="padding-bottom:8px">Se aplica al siguiente producto que agregues.</div>
+      <div class="auto mini" style="padding-bottom:8px">Se aplica al siguiente producto que agregues.
+        La unidad de venta es el inner: cantidades, precios y peso son por inner.</div>
     </div>
 
     <div id="lineas" style="margin-top:12px"></div>
@@ -322,7 +360,8 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
     <h3>Importar Clientes DICOSA</h3>
     <p class="mini">Archivo Clientes (.xlsx, primera hoja). Primero se ve una vista previa; nada cambia hasta confirmar.
       DICOSA manda en nombre, teléfono, dirección y sus datos (código, contacto, grupo, especialidad, zona, departamento,
-      municipio, ubicación y generador). Crédito, referencia y tipo no se tocan. Un cliente que deja de venir no se borra:
+      municipio, ubicación y generador). Crédito, referencia, tipo y lista de precios no se tocan (un cliente nuevo entra sin
+      lista de precios). Un cliente que deja de venir no se borra:
       se marca. Los pedidos ya hechos conservan sus datos.</p>
     <div class="fila"><div><label>Archivo de Clientes</label><input id="cliArchivo" type="file" accept=".xlsx"></div></div>
     <div id="cliPrevia"></div>
@@ -348,11 +387,24 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
   <div class="card" id="cdkCard" data-importa="catalogo">
     <h3>Importar Catálogo DICOSA</h3>
     <p class="mini">Archivo del Catálogo (.xlsx, primera hoja). Primero se ve una vista previa; nada cambia hasta confirmar.
-      Solo se cambian los datos que vienen de DICOSA (nombre, códigos, categoría, mínimos de pedido, precio en $ sin IVA e IVA).
-      Peso, precio de venta, mínimo de existencia, oferta y restricción no se tocan. Un código nuevo entra con existencia 0.</p>
+      Formato del Catálogo nuevo de DICOSA: costo en lempiras sin IVA, IVA y tres listas de precios por inner (cliente particular,
+      cadenas y sub-distribuidor). DICOSA manda en nombre, códigos, categoría, costo y precios; el peso inner (kg) solo se toma
+      si el producto no tiene peso escrito. Existencia, mínimo de existencia, oferta y restricción no se tocan. Un código nuevo
+      entra con existencia 0. Un producto de la app que no venga en el archivo queda fuera de catálogo: no se borra y no se puede pedir.</p>
     <div class="fila"><div><label>Archivo del Catálogo</label><input id="cdkArchivo" type="file" accept=".xlsx"></div></div>
     <div id="cdkPrevia"></div>
     <div id="cdkMsg"></div>
+  </div>
+  <div class="card" id="fotCard" data-importa="fotos">
+    <h3>Importar fotos del catálogo</h3>
+    <p class="mini">Archivo «Catálogo de ventas» (.xlsx, primera hoja, encabezados en la fila 1) con las imágenes dentro de las
+      celdas de las columnas Imagen 1, Imagen 2 e Imagen 3. Primero se ve una vista previa; nada cambia hasta confirmar.
+      Cada foto se reduce a 1600 px como máximo y se guarda en el depósito privado de la base compartida; solo la ven los
+      usuarios del equipo. De este archivo solo se toman el código y las imágenes: la descripción, la categoría y los
+      precios los manda el Catálogo de DICOSA. Un producto que no venga en el archivo conserva sus fotos.</p>
+    <div class="fila"><div><label>Archivo del Catálogo de ventas</label><input id="fotArchivo" type="file" accept=".xlsx"></div></div>
+    <div id="fotPrevia"></div>
+    <div id="fotMsg"></div>
   </div>
 </section>
 
@@ -418,6 +470,33 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
   </div>
 </section>
 
+<!-- ==================================================== MOSTRAR CATALOGO (1g) -->
+<section class="panel" id="p-mostrar">
+  <h2>Mostrar catálogo</h2>
+  <p class="sub2">Para enseñar los productos a médicos y clientes. Precios de la lista particular, sin IVA. Esta pantalla solo muestra: no cambia nada.</p>
+  <div class="fila noprint">
+    <div><label>Buscar</label><input id="mosBuscar" placeholder="Descripción o código…" style="font-size:16px;padding:12px"></div>
+    <div class="auto"><button class="s grande" id="mosBajar" onclick="mosDescargarTodas()">Descargar fotos para usar sin conexión</button></div>
+  </div>
+  <div class="mini" id="mosBajarMsg" style="margin-top:6px"></div>
+  <div class="mos-tabs noprint" id="mosTabs"></div>
+  <div id="mosLista"></div>
+</section>
+
+<!-- ============================================================ MEDICOS (1g) -->
+<section class="panel" id="p-medicos">
+  <h2>Médicos</h2>
+  <p class="sub2">Registro de los médicos que visita el equipo comercial. Cada quien ve y edita los que registró.</p>
+  <div class="card">
+    <div class="fila noprint">
+      <div><label>Buscar</label><input id="filtroMed" placeholder="Institución, médico o especialidad…" style="font-size:16px;padding:12px"></div>
+      <div class="auto"><button class="b grande" id="medNuevo" onclick="abrirMedico()">+ Médico</button></div>
+      <div class="auto"><button class="s grande" id="medCsv" onclick="exportarMedicosCSV()">Exportar CSV</button></div>
+    </div>
+    <div id="tablaMedicos" style="margin-top:12px"></div>
+  </div>
+</section>
+
 <!-- ============================================================ AJUSTES -->
 <section class="panel" id="p-ajustes">
   <h2>Ajustes y respaldo</h2>
@@ -478,19 +557,10 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
 
   <div class="card" id="tcCard">
     <h3>Tipo de cambio</h3>
-    <p class="mini">Lempiras por dólar. El costo en lempiras de un producto con precio DICOSA en dólares es
-      precio en $ (sin IVA) × tipo de cambio vigente: el de fecha más reciente que no pase de hoy.
-      Sin tipo de cambio registrado, ese costo no está disponible (no cuenta como 0).
-      Los pedidos ya confirmados conservan el costo que guardaron. Los registros no se borran.</p>
-    <div class="grid g3" style="margin-top:10px">
-      <div><label>Fecha</label><input id="tcFecha" type="date"></div>
-      <div><label>L. por US$</label><input id="tcValor" type="number" min="0" step="0.0001"></div>
-      <div><label>Fuente (ej.: BCH, banco)</label><input id="tcFuente"></div>
-    </div>
-    <div class="fila" style="margin-top:12px">
-      <div class="auto"><button class="b" onclick="registrarTipoCambio()">Registrar tipo de cambio</button></div>
-    </div>
-    <div id="tcMsg"></div>
+    <p class="mini">Solo historial (desde el Catálogo nuevo de DICOSA, que trae el costo en lempiras, ya no se registran
+      tipos de cambio). Lempiras por dólar. Se conserva para los pedidos ya confirmados, que guardan el costo y el tipo de
+      cambio con que se hicieron, y para algún producto viejo que siga con precio DICOSA en dólares: su costo es
+      precio en $ (sin IVA) × el tipo de cambio de fecha más reciente que no pase de hoy.</p>
     <div id="tcHistorial" style="margin-top:10px"></div>
   </div>
 
@@ -557,6 +627,18 @@ hr{border:0;border-top:1px solid var(--borde);margin:14px 0}
 </main>
 
 <div class="modal" id="modal"><div class="box" id="modalBox"></div></div>
+
+<!-- Fase 1g: visor de fotos de «Mostrar catálogo». -->
+<div class="visor noprint" id="visor"><div class="visor-caja">
+  <button type="button" id="visorCerrar" aria-label="Cerrar" onclick="visorCerrar()">×</button>
+  <div class="visor-fila">
+    <button type="button" id="visorAnt" aria-label="Foto anterior" onclick="visorMover(-1)">‹</button>
+    <div id="visorMarco"><img id="visorImg" alt="" hidden><span id="visorSin">Sin foto</span></div>
+    <button type="button" id="visorSig" aria-label="Foto siguiente" onclick="visorMover(1)">›</button>
+  </div>
+  <div id="visorPos"></div>
+  <div id="visorTxt"></div>
+</div></div>
 
 <script>
 const CATALOGO_INICIAL = [
@@ -1421,6 +1503,9 @@ const PROVEEDORES = [
 
 let D = null;              // datos
 let P = {cliente:null, lineas:[], override:null};   // pedido en curso
+// Fase 1e: clientes marcados en Clientes para ponerles la lista de precios, y la lista elegida.
+const CLI_SEL = new Set();
+let CLI_LISTA = "particular";
 
 /* ------------------------------------------------------------ utilidades */
 const $  = s => document.querySelector(s);
@@ -1478,10 +1563,38 @@ function costoConIva(s){
           l: t ? r4(usd * t.valor) : null, l_iva: t ? r4(usd * (1 + iva) * t.valor) : null};
 }
 
+/* ------------------------------------------- listas de precios (fase 1e)
+   El Catálogo v2 de DICOSA trae tres listas de precios por producto, por inner
+   y sin IVA (dicosa.precios). Cada cliente tiene una lista (tipo_precio) que
+   asignan solo Admin y Coordinador; sin lista no se confirma un pedido. El
+   precio de la línea es el de la lista del cliente; la base lo vuelve a poner
+   al recibir el pedido (sql/catalogo-1e.sql) e ignora el del navegador. Un
+   producto sin listas se vende a su precio de ficha, para cualquier cliente.
+   La oferta no aplica a los productos con listas. */
+const LISTAS = {particular:"Cliente particular", cadena:"Cadena", subdistribuidor:"Sub-distribuidor"};
+function tieneListas(s){ return !!(s && s.dicosa && s.dicosa.precios && typeof s.dicosa.precios === "object"); }
+function listaCliente(c){ return c && LISTAS[c.tipo_precio] ? c.tipo_precio : ""; }
+// Precio de un producto para una lista. Sin lista se usa «particular», solo de referencia.
+function precioLista(s, lista){
+  if(!s) return 0;
+  if(tieneListas(s)){ const n = Number(s.dicosa.precios[lista || "particular"]); return n > 0 ? n : 0; }
+  return (s.oferta && s.precio_oferta) ? s.precio_oferta : (Number(s.precio) || 0);
+}
+// Lista del cliente del pedido que se está armando ("" si no hay cliente o no tiene lista).
+function listaPedido(){ return P && P.cliente ? listaCliente(P.cliente) : ""; }
+function precioPedido(s){ return precioLista(s, listaPedido()); }
+// Quién asigna la lista de precios de un cliente (1b): admin y coordinador.
+function puedeLista(){ return ["local","admin","coordinador"].includes(rolPantalla()); }
+// El factor de unidades por inner lo edita solo el Admin.
+function puedeFactor(){ return ["local","admin"].includes(rolPantalla()); }
+function factorInner(s){ const n = Number(s && s.unidades_inner); return Number.isInteger(n) && n >= 1 ? n : 1; }
+
 // Para pedirse, un producto necesita precio de venta y peso mayores que 0 (D2).
-function faltaParaVender(s){
+// Con lista (la del cliente), un producto con listas necesita precio en ESA lista.
+function faltaParaVender(s, lista){
   const f = [];
-  if(!(Number(s.precio) > 0)) f.push("precio de venta");
+  const precio = lista && tieneListas(s) ? precioLista(s, lista) : Number(s.precio);
+  if(!(precio > 0)) f.push("precio de venta");
   if(!(Number(s.peso) > 0))   f.push("peso");
   return f;
 }
@@ -1515,7 +1628,9 @@ function cargar(){
 function migrar(){
   D.params  = D.params  || {};
   Object.entries(PARAMS_DEF).forEach(([k,o])=>{ if(D.params[k]===undefined) D.params[k]=o.v; });
-  ["skus","clientes","pedidos","movimientos","avisos","bodegas","inv_detalle","tipo_cambio"].forEach(k => { if(!D[k]) D[k]=[]; });
+  ["skus","clientes","pedidos","movimientos","avisos","bodegas","inv_detalle","tipo_cambio","medicos"].forEach(k => { if(!D[k]) D[k]=[]; });
+  // Fase 1g: quién registró cada médico y cuándo, tal como lo manda la base (nunca se sube).
+  if(!D.medicos_quien || typeof D.medicos_quien !== "object" || Array.isArray(D.medicos_quien)) D.medicos_quien = {};
   // Campos agregados tras la segunda revisión con el cliente
   D.skus.forEach(s => {
     if(s.oferta === undefined) s.oferta = false;
@@ -1724,7 +1839,8 @@ function ir(p){
   window.scrollTo(0,0);
   ({inicio:pintarInicio, despacho:pintarDespacho, pedidos:pintarPedidos, clientes:pintarClientes,
     catalogo:pintarCatalogo, inventario:pintarInventario,
-    reposicion:pintarReposicion, ajustes:pintarAjustes}[p]||(()=>{}))();
+    reposicion:pintarReposicion, ajustes:pintarAjustes,
+    mostrar:pintarMostrar, medicos:pintarMedicos}[p]||(()=>{}))();
 }
 
 /* ============================================================================
@@ -1795,7 +1911,20 @@ function calcularPedido(){
           canal:m.canal, costoEnt:m.costo, motivo:m.motivo, total:sub+cargo};
 }
 
+// Fase 1e: el precio de cada línea es el de la lista del cliente, con los datos
+// de ahora. Se rehace en cada cálculo: al cambiar de cliente, al repetir un
+// pedido viejo o si cambió el Catálogo.
+function repreciar(){
+  P.lineas.forEach(l => {
+    const s = D.skus.find(x => x.codigo === l.codigo);
+    if(s) l.precio = precioPedido(s);
+  });
+}
+function sinListaPedido(){ return !!P.cliente && !listaPedido(); }
+function lineasSinPrecio(){ return P.lineas.filter(l => !(Number(l.precio) > 0)); }
+
 function recalc(){
+  repreciar();
   const c = calcularPedido();
   const ex = revisarExistencia(P.lineas);
   $("#canalSug").value = P.lineas.length ? c.canal : "—";
@@ -1812,18 +1941,25 @@ function recalc(){
 
   const bajoMinimo = c.nivel==="express" && c.sub < c.minimo;
   // Un rol que no ve costos no ve margen ni contribución, ni el aviso de
-  // pérdida, y por ahora no confirma pedidos (sin costos no hay compuerta).
+  // pérdida. B1: el rol pedidos sí confirma; el costo lo calcula la base
+  // (sql/costos-b1.sql) y, si pierde, el pedido queda por revisar allá.
   const conCostos = veCostos();
+  const fuerza = puedeForzarExistencia();
   const pierde = conCostos && esNum(c.contrib) && c.contrib < 0;
 
+  const sinLista = sinListaPedido(), sinPrecio = sinLista ? [] : lineasSinPrecio();
   $("#economia").innerHTML = `
+    ${sinLista ? `<div class="aviso a-mal" data-sin-lista><strong>Este cliente no tiene lista de precios.</strong>
+      No se puede confirmar el pedido: la lista la asigna el administrador o el coordinador en Clientes.
+      Los precios que ves son los de cliente particular, solo de referencia.</div>` : ""}
+    ${sinPrecio.length ? `<div class="aviso a-mal">${sinPrecio.map(l =>
+      `«${esc(l.nombre)}» no tiene precio de venta en la lista de este cliente: quítalo del pedido.`).join("<br>")}</div>` : ""}
     <div class="grid g4">
       ${kpi(L0(c.sub),"Subtotal")}
       ${kpi(KG(c.peso),"Peso del pedido")}
       ${conCostos ? kpi(L0o(c.margen),"Margen bruto") : ""}
       ${conCostos ? kpi(L0o(c.contrib), "Contribución", pierde?"mal":esNum(c.contrib)?"ok":"") : ""}
     </div>
-    ${!conCostos ? `<div class="aviso a-mal">${AVISO_SIN_COSTOS}</div>` : ""}
     ${conCostos && c.sinCosto.length ? `<div class="aviso a-med">${c.sinCosto.map(l=>
       `«${esc(l.nombre)}» no tiene costo registrado.`).join("<br>")}
       El margen y la contribución no se pueden calcular; el pedido se puede confirmar igual.</div>` : ""}
@@ -1835,7 +1971,8 @@ function recalc(){
       Sube el pedido, cámbialo a ventana programada, o autorízalo dejando constancia.</div>` : ""}
     ${ex.faltan.length ? `<div class="aviso a-mal"><strong>No alcanza la existencia.</strong><br>
       ${ex.faltan.map(f=>`${esc(f.nombre)}: pides ${f.pide}, disponible ${f.disp}, faltan ${f.falta}.`).join("<br>")}
-      <br>Ajusta las cantidades, registra el ingreso o confírmalo escribiendo el motivo y quién lo autoriza.</div>` : ""}
+      <br>${fuerza ? "Ajusta las cantidades, registra el ingreso o confírmalo escribiendo el motivo y quién lo autoriza."
+                   : "Ajusta las cantidades: con tu usuario no se confirma un pedido sin existencia suficiente."}</div>` : ""}
     ${ex.sinCatalogo.length ? `<div class="aviso a-mal">${ex.sinCatalogo.map(n=>
       `«${esc(n)}»: ese producto ya no está en el catálogo, quítalo del pedido.`).join("<br>")}</div>` : ""}
   `;
@@ -1852,7 +1989,7 @@ function recalc(){
       <input id="motivoOverride" placeholder="Ej: cliente estratégico, autoriza Daniel"
         value="${esc(prev1)}" oninput="habilitarConfirmar()">
     </div>` : "") +
-    (ex.faltan.length ? `<div style="flex:2">
+    (ex.faltan.length && fuerza ? `<div style="flex:2">
       <label>Para confirmarlo sin existencia suficiente, escribe el motivo y quién lo autoriza</label>
       <input id="motivoExistencia" placeholder="Ej: la compra llega hoy, autoriza Daniel"
         value="${esc(prev2)}" oninput="habilitarConfirmar()">
@@ -1862,10 +1999,14 @@ function recalc(){
 
 // El botón se habilita con cliente, productos que sigan en el catálogo y,
 // cuando se piden, los motivos escritos con al menos 8 caracteres cada uno.
+// B1: el rol pedidos no fuerza; si no alcanza la existencia, no confirma.
 function habilitarConfirmar(){
   const m1 = $("#motivoOverride"), m2 = $("#motivoExistencia");
-  $("#btnConfirmar").disabled = !veCostos() || !P.cliente || !P.lineas.length ||
-    revisarExistencia(P.lineas).sinCatalogo.length > 0 ||
+  const ex = revisarExistencia(P.lineas);
+  // Fase 1e: sin lista de precios del cliente, o con una línea sin precio, no se confirma.
+  $("#btnConfirmar").disabled = !P.cliente || !P.lineas.length ||
+    sinListaPedido() || lineasSinPrecio().length > 0 ||
+    ex.sinCatalogo.length > 0 || (ex.faltan.length > 0 && !puedeForzarExistencia()) ||
     (!!m1 && m1.value.trim().length < 8) || (!!m2 && m2.value.trim().length < 8);
 }
 
@@ -1877,7 +2018,7 @@ function kpi(v,l,est){
 function pintarLineas(){
   if(!P.lineas.length){ $("#lineas").innerHTML = `<div class="vacio">Aún no has agregado productos.</div>`; return; }
   $("#lineas").innerHTML = `<div class="tabla-wrap"><table>
-    <thead><tr><th>Producto</th><th class="num">Cant.</th><th class="num">Precio</th>
+    <thead><tr><th>Producto</th><th class="num" title="La unidad de venta es el inner">Inners</th><th class="num" title="Precio por inner, sin IVA">Precio</th>
     <th class="num">Peso</th><th class="num">Importe</th><th></th></tr></thead><tbody>
     ${P.lineas.map((l,i)=>`<tr>
       <td>${esc(l.nombre)}<br><span class="mini">${esc(l.codigo)}</span></td>
@@ -1942,14 +2083,18 @@ function agregarLinea(codigo){
   if(s.restringido){ alert("Ese producto tiene distribución restringida y no puede venderse."); return; }
   if(s.por_completar){ alert("«"+s.nombre+"» está por completar: entró con el Inventario DICOSA "+
     "y no se puede vender hasta ponerle peso y precio en Catálogo."); return; }
-  const fv = faltaParaVender(s);
+  // Fase 1e: lo que no vino en el último Catálogo DICOSA no se puede pedir.
+  if(s.fuera_catalogo){ alert("«"+s.nombre+"» está fuera de catálogo: no vino en la última importación "+
+    "del Catálogo DICOSA y no se puede pedir."); return; }
+  const fv = faltaParaVender(s, listaPedido());
   if(fv.length){ alert("«"+s.nombre+"» no se puede pedir: le falta "+fv.join(" y ")+
-    ". Complétalo en Catálogo."); return; }
+    (listaPedido() && tieneListas(s) ? " en la lista de este cliente." : ". Complétalo en Catálogo.")); return; }
   if(existencia(s) <= 0){
     alert("«"+s.nombre+"» está agotado.\n\nEl médico puede verlo en el catálogo pero no se puede "+
           "comprometer una entrega. Registra el ingreso en Inventario cuando llegue la compra."); return; }
   const cant = Math.max(1, parseInt($("#cant").value)||1);
-  const precio = (s.oferta && s.precio_oferta) ? s.precio_oferta : s.precio;
+  // Fase 1e: el precio es el de la lista del cliente (precioPedido); recalc lo rehace.
+  const precio = precioPedido(s);
   const ex = P.lineas.find(l=>l.codigo===codigo);
   if(ex) ex.cantidad += cant;
   else {
@@ -1999,9 +2144,11 @@ function subtab(t){
 
 function tarjeta(s){
   // Un producto por completar se ve como agotado: no se puede agregar.
-  const agotado = disponible(s) <= 0 || !!s.por_completar || faltaParaVender(s).length > 0;
+  const agotado = disponible(s) <= 0 || !!s.por_completar || !!s.fuera_catalogo ||
+    faltaParaVender(s, listaPedido()).length > 0;
   const oferta = !!s.oferta, nuevo = !!s.nuevo;
-  const precio = oferta && s.precio_oferta ? s.precio_oferta : s.precio;
+  // Fase 1e: precio de la lista del cliente del pedido; la oferta no aplica con listas.
+  const precio = precioPedido(s), rebaja = oferta && s.precio_oferta && !tieneListas(s);
   const tag = agotado ? '<span class="tag t-ag">AGOTADO</span>'
             : oferta  ? '<span class="tag t-of">OFERTA</span>'
             : nuevo   ? '<span class="tag t-nu">NUEVO</span>' : "";
@@ -2011,7 +2158,7 @@ function tarjeta(s){
     <div style="min-width:0">
       <div class="n">${esc(s.nombre)}</div>
       <div class="p">${L0(precio)}
-        ${oferta && s.precio_oferta ? `<span class="tachado">${L0(s.precio)}</span>`:""}</div>
+        ${rebaja ? `<span class="tachado">${L0(s.precio)}</span>`:""}</div>
       <div class="m">${esc(s.presentacion||"")}<br>
         ${agotado ? "Sin disponibilidad" : "Disponible: "+disponible(s)}</div>
     </div></div>`;
@@ -2020,7 +2167,7 @@ function tarjeta(s){
 function pintarCatalogoCompra(){
   const sel = $("#catCategoria");
   if(sel && !sel.options.length){
-    const cats = [...new Set(D.skus.filter(s=>!s.restringido && !s.por_completar && !faltaParaVender(s).length)
+    const cats = [...new Set(D.skus.filter(s=>!s.restringido && !s.por_completar && !s.fuera_catalogo && !faltaParaVender(s).length)
       .map(s=>s.categoria))].sort();
     sel.innerHTML = `<option value="">Todas las categorías</option>` +
       cats.map(c=>`<option>${esc(c)}</option>`).join("");
@@ -2028,7 +2175,7 @@ function pintarCatalogoCompra(){
   const cat = sel ? sel.value : "";
   const f = $("#catFiltro") ? $("#catFiltro").value : "";
   // Sin precio de venta o sin peso no se ofrece al médico (D2).
-  let r = D.skus.filter(s=>!s.restringido && !s.por_completar && !faltaParaVender(s).length);
+  let r = D.skus.filter(s=>!s.restringido && !s.por_completar && !s.fuera_catalogo && !faltaParaVender(s).length);
   if(cat) r = r.filter(s=>s.categoria===cat);
   if(f==="oferta") r = r.filter(s=>s.oferta);
   if(f==="nuevo")  r = r.filter(s=>s.nuevo);
@@ -2084,7 +2231,7 @@ function repetirUltimo(id){
   const p = D.pedidos.find(x=>x.id===id); if(!p) return;
   P.lineas = p.lineas.filter(l=>{
     const s = D.skus.find(x=>x.codigo===l.codigo);
-    return s && !s.restringido && !s.por_completar && !faltaParaVender(s).length;
+    return s && !s.restringido && !s.por_completar && !s.fuera_catalogo && !faltaParaVender(s).length;
   }).map(l=>({...l}));
   const faltan = p.lineas.length - P.lineas.length;
   recalc();
@@ -2100,12 +2247,15 @@ function parteNumerica(n){
   return m ? Number(m[1]) : 0;
 }
 function confirmarPedido(){
-  if(!veCostos()){ alert(AVISO_SIN_COSTOS); return; }
   if(!P.cliente){ alert("Primero elige el cliente."); return; }
   if(!P.lineas.length){ alert("El pedido no tiene productos."); return; }
   const letra = letraDispositivo();
   if(!letra){ alert("Este dispositivo no tiene letra.\n\n"+
     "Ponla en Ajustes, en «Este dispositivo», antes de confirmar pedidos."); return; }
+  // Fase 1e: sin lista de precios del cliente no se confirma (la base tampoco lo acepta).
+  if(sinListaPedido()){ alert("Este cliente no tiene lista de precios.\n\n"+
+    "La asigna el administrador o el coordinador en Clientes; sin lista no se confirma un pedido."); recalc(); return; }
+  repreciar();
   // Se vuelve a comprobar al pulsar, con los datos que tenga el navegador ahora.
   const ex = revisarExistencia(P.lineas);
   if(ex.sinCatalogo.length){
@@ -2115,8 +2265,12 @@ function confirmarPedido(){
   if(pc.length){
     alert(pc.map(l=>"«"+l.nombre+"»: está por completar y no se puede vender, quítalo del pedido.").join("\n"));
     return; }
-  // Precio de venta y peso mayores que 0, con los datos de ahora (D2).
-  const sinVenta = P.lineas.map(l => ({l, f:faltaParaVender(D.skus.find(x=>x.codigo===l.codigo)||{})}))
+  const fc = P.lineas.filter(l => (D.skus.find(x=>x.codigo===l.codigo)||{}).fuera_catalogo);
+  if(fc.length){
+    alert(fc.map(l=>"«"+l.nombre+"»: está fuera de catálogo y no se puede pedir, quítalo del pedido.").join("\n"));
+    return; }
+  // Precio de venta (en la lista del cliente) y peso mayores que 0, con los datos de ahora (D2).
+  const sinVenta = P.lineas.map(l => ({l, f:faltaParaVender(D.skus.find(x=>x.codigo===l.codigo)||{}, listaPedido())}))
     .filter(x => x.f.length);
   if(sinVenta.length){
     alert(sinVenta.map(x=>"«"+x.l.nombre+"»: le falta "+x.f.join(" y ")+", quítalo del pedido.").join("\n"));
@@ -2124,11 +2278,19 @@ function confirmarPedido(){
   const c = calcularPedido();
   const ahora = new Date().toISOString();
   let motivo = null;
-  if(c.contrib < 0){
+  // La compuerta de pérdida es de quien ve costos; al rol pedidos se la pone la
+  // base: el pedido entra y queda por revisar (decisión 3 de B1).
+  if(veCostos() && c.contrib < 0){
     motivo = ($("#motivoOverride")||{}).value || "";
     if(motivo.trim().length < 8){ alert("Escribe el motivo de la autorización."); return; }
   }
   let motivoEx = null;
+  if(ex.faltan.length && !puedeForzarExistencia()){
+    alert("No alcanza la existencia:\n\n" +
+      ex.faltan.map(f=>f.nombre+": pides "+f.pide+", disponible "+f.disp+", faltan "+f.falta).join("\n") +
+      "\n\nAjusta las cantidades: con tu usuario no se confirma un pedido sin existencia suficiente.");
+    recalc(); return;
+  }
   if(ex.faltan.length){
     motivoEx = ($("#motivoExistencia")||{}).value || "";
     if(motivoEx.trim().length < 8){
@@ -2139,7 +2301,7 @@ function confirmarPedido(){
     }
   }
   const sla = c.nivel==="express" ? par("sla_express_min") : par("sla_ventana_min");
-  const ped = {
+  let ped = {
     // Letra del dispositivo, guion y parte numérica. La parte numérica es la
     // mayor de todos los pedidos, con o sin letra, más 1 (mínimo 1001), para
     // que dos dispositivos sin conexión no produzcan el mismo número.
@@ -2166,6 +2328,8 @@ function confirmarPedido(){
   // El producto queda COMPROMETIDO, no descontado: sigue físicamente en bodega
   // hasta que se entrega. Así el inventario refleja lo que realmente hay. (Fase A,
   // 162: ya no se anota la «reserva» de cantidad 0; nada la usaba.)
+  // B1: un rol sin costos guarda el pedido sin ninguna clave de costo.
+  if(!veCostos() && typeof nubePedidoSinCosto === "function") ped = nubePedidoSinCosto(ped);
   D.pedidos.unshift(ped);
   guardar();
   limpiarPedido();
@@ -2189,7 +2353,10 @@ function pintarInicio(){
   const desde = new Date(Date.now()-30*86400000).toISOString();
   const mes = act.filter(p=>p.fecha>=desde);
 
-  const contrib = mes.reduce((a,p)=>a+(p.contribucion_real??p.contribucion_est),0);
+  // B1: un pedido sin contribución (sin costo, o que llegó sin costos) suma 0;
+  // sin esto, uno solo dejaba toda la suma sin número.
+  const contribDe = p => { const v = p.contribucion_real ?? p.contribucion_est; return esNum(v) ? v : 0; };
+  const contrib = mes.reduce((a,p)=>a+contribDe(p),0);
   const contribProm = mes.length ? contrib/mes.length : 0;
   const ticket = mes.length ? mes.reduce((a,p)=>a+p.total,0)/mes.length : 0;
   const conSla = ent.filter(p=>p.prometido);
@@ -2236,7 +2403,20 @@ function pintarInicio(){
   D.pedidos.filter(p=>p.estado!=="entregado" && p.estado!=="cancelado")
     .forEach(p => (porNum[String(p.numero)] = porNum[String(p.numero)] || []).push(p));
   const repetidos = Object.entries(porNum).filter(([n,ps]) => ps.length > 1);
+  // B1: pedidos abiertos que la base dejó por revisar (solo admin y coordinador)
+  // y filas de este dispositivo que la base rechazó (186, todos los roles).
+  const revisar = D.pedidos.filter(p => ABIERTOS.includes(p.estado) && pedidoPorRevisar(p));
+  const sinSubir = typeof nubeAvisoSinSubir === "function" ? nubeAvisoSinSubir() : "";
+  // Fase 1e (3a): clientes sin lista de precios, para quien puede asignarla.
+  const sinListaCli = puedeLista() ? D.clientes.filter(c => !listaCliente(c)).length : 0;
   $("#pendientes").innerHTML = `
+    ${sinSubir}
+    ${sinListaCli ? `<div class="aviso a-med" data-sin-lista><strong>${sinListaCli} cliente(s) sin lista de precios.</strong>
+      No se les puede confirmar un pedido hasta asignársela.
+      <button class="s" onclick="ir('clientes')">Asignar en Clientes</button></div>` : ""}
+    ${revisar.length ? `<div class="aviso a-mal"><strong>${revisar.length} pedido(s) por revisar.</strong><br>
+      ${revisar.map(p=>`#${esc(p.numero)} ${esc(p.cliente)}: ${esc(textoPedidoPorRevisar(p))}.`).join("<br>")}
+      <button class="s" onclick="ir('pedidos')">Ver</button></div>`:""}
     ${repetidos.length ? `<div class="aviso a-mal">Hay pedidos activos con el mismo número:<br>
       ${repetidos.map(([n,ps])=>`#${esc(n)}: ${ps.map(p=>esc(p.cliente)).join(", ")}`).join("<br>")}
       <br>Revisa que cada dispositivo tenga una letra distinta en Ajustes.</div>`:""}
@@ -2250,7 +2430,8 @@ function pintarInicio(){
       <button class="s" onclick="ir('inventario')">Ver</button></div>`:""}
     ${repo.length ? `<div class="aviso a-info">${repo.length} cliente(s) por quedarse sin producto.
       <button class="s" onclick="ir('reposicion')">Ver avisos</button></div>`:""}
-    ${(!tarde.length && !sinStock.length && !repetidos.length && !repo.length && !negativos.length)
+    ${(!tarde.length && !sinStock.length && !repetidos.length && !repo.length && !negativos.length &&
+       !revisar.length && !sinSubir)
       ? `<div class="vacio">Todo en orden. Nada pendiente.</div>`:""}`;
 
   // serie de 14 días
@@ -2258,7 +2439,7 @@ function pintarInicio(){
   for(let i=13;i>=0;i--){
     const f = new Date(Date.now()-i*86400000).toISOString().slice(0,10);
     const ps = act.filter(p=>p.fecha.slice(0,10)===f);
-    dd.push({f, n:ps.length, c:ps.reduce((a,p)=>a+(p.contribucion_real??p.contribucion_est),0)});
+    dd.push({f, n:ps.length, c:ps.reduce((a,p)=>a+contribDe(p),0)});
   }
   const max = Math.max(1, ...dd.map(x=>x.n));
   $("#serie").innerHTML = D.pedidos.length ? `<table>
@@ -2314,7 +2495,7 @@ function pintarPedidos(){
       ${conCostos?'<th class="num">Contrib. est.</th><th class="num">Contrib. real</th>':''}
       <th>Estado</th><th>Pago</th><th class="noprint"></th></tr></thead><tbody>
     ${r.map(p=>`<tr>
-      <td><strong>${p.numero}</strong>${p.ejemplo?' <span class="pill p-gris">ejemplo</span>':''}${(p.override||p.override_existencia)?' <span class="pill p-mal" title="'+esc(textoForzado(p))+'">forzado</span>':''}</td>
+      <td><strong>${p.numero}</strong>${p.ejemplo?' <span class="pill p-gris">ejemplo</span>':''}${(p.override||p.override_existencia)?' <span class="pill p-mal" title="'+esc(textoForzado(p))+'">forzado</span>':''}${pedidoPorRevisar(p)?' <span class="pill p-mal" title="'+esc(textoPedidoPorRevisar(p))+'">por revisar</span>':''}${(typeof nubeMarcada==="function"&&nubeMarcada("pedidos",p.id))?' <span class="pill p-mal" title="La base no aceptó este pedido; sigue guardado en este navegador">sin subir</span>':''}</td>
       <td>${fecha(p.fecha)}</td>
       <td>${esc(p.cliente)}<br><span class="mini">${esc(p.telefono)}</span></td>
       <td>${esc(p.canal)}<br><span class="mini">${p.nivel}${p.hecho_por?" · "+esc(p.hecho_por):""}</span></td>
@@ -2375,6 +2556,8 @@ function confirmarEntrega(id){
   guardar(); cerrarModal(); pintarPedidos(); pintarInventario(); pintarDespacho();
 }
 function cancelarPedido(id){
+  // B1: quien tiene Pedidos en solo lectura (rol pedidos) no cancela.
+  if(panelSoloLectura("pedidos")) return;
   if(!confirm("¿Cancelar este pedido?\n\nEl producto comprometido vuelve a quedar disponible.")) return;
   const p = D.pedidos.find(x=>x.id===id);
   p.estado="cancelado"; guardar(); pintarPedidos(); pintarInventario(); pintarDespacho();
@@ -2663,16 +2846,34 @@ function pintarClientes(){
     ? `<div class="aviso a-med" id="cliRechazados">La base no aceptó el responsable de ${noLista.length} cliente(s); siguen con el que tenían.
        Revisa que sea un usuario del equipo:<br>${noLista.map(([c, u]) =>
          `${esc(c.nombre)}: ${esc(nombreEquipo(u) || u)}`).join("<br>")}</div>` : "";
-  $("#tablaClientes").innerHTML = avisoNo + (r.length ? `<div class="tabla-wrap"><table>
-    <thead><tr><th>Código</th><th>Nombre</th><th>Tipo</th><th>Teléfono</th><th>Dirección</th>
+  // Fase 1e: lista de precios. Quien puede asignarla marca varios clientes (los que
+  // se ven con el buscador) y les pone la misma lista de una vez.
+  const conLista = puedeLista();
+  const visibles = new Set(r.map(c => c.id));
+  CLI_SEL.forEach(id => { if(!visibles.has(id)) CLI_SEL.delete(id); });
+  const sinLista = D.clientes.filter(c => !listaCliente(c)).length;
+  const barra = conLista && r.length ? `<div class="fila noprint" id="cliListaBarra" style="align-items:flex-end;margin-bottom:10px">
+      <div class="auto"><label>Lista de precios para los marcados</label><select id="cliListaVarios">
+        ${Object.entries(LISTAS).map(([k, t]) => `<option value="${k}"${CLI_LISTA===k?" selected":""}>${t}</option>`).join("")}
+        <option value=""${CLI_LISTA===""?" selected":""}>Sin lista</option></select></div>
+      <div class="auto"><button class="b" id="cliListaAplicar" onclick="aplicarListaVarios()"${CLI_SEL.size?"":" disabled"}>Poner lista a ${CLI_SEL.size} marcado(s)</button></div>
+      <div class="auto mini" style="padding-bottom:8px">${sinLista ? `<strong>${sinLista}</strong> cliente(s) sin lista de precios: no se les puede confirmar un pedido.`
+        : "Todos los clientes tienen lista de precios."}</div></div>` : "";
+  $("#tablaClientes").innerHTML = avisoNo + barra + (r.length ? `<div class="tabla-wrap"><table>
+    <thead><tr>${conLista?`<th class="noprint"><input type="checkbox" id="cliSelTodos" style="width:auto" title="Marcar los que se ven"
+        ${r.every(c => CLI_SEL.has(c.id))?"checked":""} onchange="marcarClientesVisibles(this.checked)"></th>`:''}
+      <th>Código</th><th>Nombre</th><th>Tipo</th><th>Lista de precios</th><th>Teléfono</th><th>Dirección</th>
       <th>Especialidad</th><th>Municipio</th><th>Generador</th>${conResp?'<th>Responsable</th>':''}
       <th class="num">Pedidos</th><th class="num">Ticket prom.</th><th>Cobro</th><th class="noprint"></th></tr></thead><tbody>
     ${r.map(c=>{
       const ps = D.pedidos.filter(p=>p.cliente_id===c.id&&p.estado!=="cancelado");
       const tp = ps.length? ps.reduce((a,p)=>a+p.total,0)/ps.length : 0;
       const dk = c.dicosa || {};
-      return `<tr><td>${esc(dk.codigo||"—")}</td><td><strong>${esc(c.nombre)}</strong>
+      return `<tr>${conLista?`<td class="noprint"><input type="checkbox" class="cliSel" data-id="${esc(c.id)}" style="width:auto"
+          ${CLI_SEL.has(c.id)?"checked":""} onchange="marcarCliente(this.dataset.id, this.checked)"></td>`:''}
+        <td>${esc(dk.codigo||"—")}</td><td><strong>${esc(c.nombre)}</strong>
         ${dk.no_vino?'<br><span class="pill p-med">no vino en la última importación</span>':''}</td><td>${esc(c.tipo)}</td>
+        <td>${listaCliente(c) ? `<span class="pill p-ok">${LISTAS[listaCliente(c)]}</span>` : '<span class="pill p-mal">sin lista</span>'}</td>
         <td>${esc(c.telefono)}</td><td>${esc(c.direccion||"—")}<br>
         <span class="mini">${esc(c.referencia||"")}</span></td>
         <td>${esc(dk.especialidad||"—")}</td><td>${esc(dk.municipio||"—")}</td><td>${esc(dk.generador||"—")}</td>
@@ -2686,6 +2887,34 @@ function pintarClientes(){
     : `<div class="vacio">Todavía no hay clientes registrados.</div>`);
 }
 $("#filtroCli").oninput = pintarClientes;
+
+// Fase 1e: asignación de la lista de precios a varios clientes a la vez (C1a).
+// Las marcas (CLI_SEL, declarada junto a P) viven en memoria y se limitan a los clientes que se ven.
+function marcarCliente(id, si){
+  if(si) CLI_SEL.add(id); else CLI_SEL.delete(id);
+  CLI_LISTA = ($("#cliListaVarios")||{}).value ?? CLI_LISTA;
+  pintarClientes();
+}
+function marcarClientesVisibles(si){
+  CLI_LISTA = ($("#cliListaVarios")||{}).value ?? CLI_LISTA;
+  document.querySelectorAll("#tablaClientes input.cliSel").forEach(x => { if(si) CLI_SEL.add(x.dataset.id); else CLI_SEL.delete(x.dataset.id); });
+  pintarClientes();
+}
+function aplicarListaVarios(){
+  if(!puedeLista() || !CLI_SEL.size) return;
+  const lista = $("#cliListaVarios").value, n = CLI_SEL.size;
+  CLI_LISTA = lista;
+  if(!confirm((LISTAS[lista] ? "Poner la lista «"+LISTAS[lista]+"» a " : "Quitar la lista de precios a ") + n + " cliente(s).\n\n" +
+    "Decide el precio de sus pedidos nuevos; los pedidos ya hechos no cambian.\n\n¿Continuar?")) return;
+  D.clientes.forEach(c => {
+    if(!CLI_SEL.has(c.id) || listaCliente(c) === lista) return;
+    if(LISTAS[lista]) c.tipo_precio = lista; else delete c.tipo_precio;
+  });
+  CLI_SEL.clear();
+  guardar();
+  pintarClientes();
+  if(typeof recalc === "function") recalc();
+}
 
 // B3: responsable en la ficha del cliente, solo para admin y coordinador. La lista
 // es la de equipo_lista() (en memoria), con el nombre cuando lo hay. El valor actual
@@ -2743,6 +2972,14 @@ function abrirNuevoCliente(id){
       Crédito autorizado — sus pedidos salen sin esperar depósito</label>
     <p class="mini" style="margin-top:5px">Úsalo solo con clientes de confianza probada.
       Sin esta marca, cada pedido necesita depósito verificado antes de salir.</p>` : ""}
+    <hr>
+    ${puedeLista() ? `<div><label>Lista de precios</label><select id="cLista">
+        <option value="">Sin lista (no se le puede confirmar un pedido)</option>
+        ${Object.entries(LISTAS).map(([k, t]) => `<option value="${k}"${listaCliente(c)===k?" selected":""}>${t}</option>`).join("")}
+      </select></div>
+      <p class="mini" style="margin-top:5px">Decide el precio de cada producto en sus pedidos. La importación de Clientes no la toca.</p>`
+    : `<p class="mini" id="cListaTxt" style="margin:0">Lista de precios: <strong>${listaCliente(c) ? LISTAS[listaCliente(c)]
+        : "sin lista"}</strong>${listaCliente(c) ? "" : ". Sin lista no se le puede confirmar un pedido; la asigna el administrador o el coordinador."}</p>`}
     ${fichaResponsable(c)}
     <div id="cErr"></div><hr>
     <button class="b" onclick="guardarCliente('${id||""}')">Guardar</button>
@@ -2767,6 +3004,10 @@ function guardarCliente(id){
   const datos = {nombre:n, telefono:t, tipo:$("#cTipo").value, zona:$("#cZ").value.trim(),
                  direccion:d, referencia:$("#cR").value.trim(),
                  credito: puedeCredito() ? $("#cCred").checked : !!(actual && actual.credito)};
+  // Lista de precios (fase 1e): solo admin y coordinador la ponen; los demás conservan
+  // la que tenía el cliente (uno nuevo, sin lista). La base hace lo mismo.
+  const lista = puedeLista() && $("#cLista") ? $("#cLista").value : listaCliente(actual);
+  const ponerListaEn = cl => { if(LISTAS[lista]) cl.tipo_precio = lista; else delete cl.tipo_precio; };
   // B3: responsable elegido en la ficha (solo admin y coordinador). Cambiarlo marca
   // al cliente como asignado a mano y lo apunta para el envío de siempre
   // (nubeSubirAsignar); la casilla quita la marca sin cambiar el responsable.
@@ -2783,8 +3024,9 @@ function guardarCliente(id){
       if(D.rechazado) delete D.rechazado[cl.id];
     }else if(quitaMarca) delete cl.resp_manual;
   };
-  if(id){ const cl = D.clientes.find(c=>c.id===id); Object.assign(cl, datos); responsable(cl); }
+  if(id){ const cl = D.clientes.find(c=>c.id===id); Object.assign(cl, datos); ponerListaEn(cl); responsable(cl); }
   else { const nc = {id:uid(), ...datos, alta:new Date().toISOString()};
+         ponerListaEn(nc);
          responsable(nc);
          D.clientes.push(nc); guardar(); cerrarModal(); elegirCliente(nc.id); pintarClientes(); return; }
   guardar(); cerrarModal(); pintarClientes();
@@ -2797,9 +3039,11 @@ function pintarCatalogo(){
   const r = D.skus.filter(s =>
     (!q || s.nombre.toLowerCase().includes(q) || s.codigo.toLowerCase().includes(q)) && (!cn || canalDe(s)===cn));
   const conCostos = veCostos(), lectura = panelSoloLectura("catalogo");
-  const tc = tcVigente();
-  $("#tablaCatalogo").innerHTML = `<p class="mini">${r.length} de ${D.skus.length} productos</p>
-   ${conCostos ? `<p class="mini" id="catTc">${tc ? `Tipo de cambio vigente: L. ${esc(String(tc.valor))} por US$ (${esc(tc.fecha)}${tc.fuente?", "+esc(tc.fuente):""}).`
+  // Fase 1e: el tipo de cambio solo cuenta para productos viejos con costo en dólares.
+  const tc = tcVigente(), hayUsd = D.skus.some(s => hayCosto(s.costo_usd));
+  $("#tablaCatalogo").innerHTML = `<p class="mini">${r.length} de ${D.skus.length} productos.
+     La unidad de venta es el inner: peso, precio y disponible son por inner. El precio es el de cliente particular.</p>
+   ${conCostos && hayUsd ? `<p class="mini" id="catTc">${tc ? `Tipo de cambio vigente: L. ${esc(String(tc.valor))} por US$ (${esc(tc.fecha)}${tc.fuente?", "+esc(tc.fuente):""}).`
      : "Sin tipo de cambio registrado: los productos con precio DICOSA en dólares quedan sin costo."}</p>` : ""}
    <div class="tabla-wrap"><table>
     <thead><tr><th>Código</th><th>Producto</th><th>Unidad</th><th>Contenido</th><th class="num">Peso</th>
@@ -2820,7 +3064,8 @@ function pintarCatalogo(){
         <td class="num">${Math.round(dv)}</td>
         <td><span class="pill ${pc}">${cn}</span></td>
         <td class="num">${disponible(s)>0?disponible(s):'<span class="pill p-gris">sin disp.</span>'}</td>
-        <td>${s.oferta?'<span class="pill p-mal">oferta</span> ':''}${s.nuevo?'<span class="pill p-ok">nuevo</span>':''}${s.por_completar?'<span class="pill p-med">por completar</span>':''}</td></tr>`;
+        <td>${s.oferta?'<span class="pill p-mal">oferta</span> ':''}${s.nuevo?'<span class="pill p-ok">nuevo</span>':''}${s.por_completar?'<span class="pill p-med">por completar</span>':''}${
+          s.fuera_catalogo?' <span class="pill p-gris" title="No vino en la importación del Catálogo del '+esc(String(s.fuera_catalogo))+'; no se puede pedir">fuera de catálogo</span>':''}</td></tr>`;
     }).join("")}</tbody></table></div>`;
 }
 function canalDe(s){
@@ -2836,6 +3081,30 @@ $("#filtroCanal").onchange = pintarCatalogo;
 function fichaDicosa(s){
   if(!s || (!s.dicosa && !hayCosto(s.costo_usd))) return "";
   const d = s.dicosa || {}, v = x => (x === null || x === undefined || x === "") ? "—" : esc(String(x));
+  // Fase 1e (Catálogo v2): costo en lempiras y tres listas de precios, de solo lectura.
+  // De las columnas nuevas solo se muestran categoría y subcategoría (C5a).
+  if(tieneListas(s)){
+    const iva = Number(d.iva) || 0, co = hayCosto(s.costo) ? Number(s.costo) : null, pr = d.precios;
+    return `<hr><p class="mini" style="margin:0 0 8px"><strong>Datos del Catálogo DICOSA</strong>
+        (importado el ${v(d.importado)}; no se editan aquí)</p>
+      ${s.fuera_catalogo ? `<div class="aviso a-med">Fuera de catálogo: no vino en la importación del ${esc(String(s.fuera_catalogo))}.
+        No se puede pedir. Vuelve solo si viene en un Catálogo posterior.</div>` : ""}
+      <div class="grid g3 mini">
+        <div>Código de barras: ${v(d.barras)}</div><div>Código interno DKT: ${v(d.dkt)}</div>
+        <div>IVA: ${d.iva === undefined ? "—" : r4(iva*100)+"%"}</div>
+        <div>Categoría DICOSA: ${v(d.categoria)}</div><div>Subcategoría: ${v(d.subcategoria)}</div>
+      </div>
+      <div class="aviso a-info" id="sPrecios" data-particular="${pr.particular ?? ""}" data-cadena="${pr.cadena ?? ""}"
+           data-subdistribuidor="${pr.subdistribuidor ?? ""}">
+        <strong>Precio de venta por inner, sin IVA (lo manda DICOSA):</strong><br>
+        ${Object.entries(LISTAS).map(([k, t]) => `${t}: ${Number(pr[k]) > 0 ? L(pr[k]) : "sin precio"}`).join(" · ")}
+        <br><span class="mini">Cada pedido usa la lista de su cliente. La oferta no cambia estos precios.</span></div>
+      ${!veCostos() ? "" : co !== null
+        ? `<div class="aviso a-info" id="sDicosaCosto" data-l="${co}" data-iva="${iva}" data-l-iva="${r4(co * (1 + iva))}">
+             <strong>Costo DICOSA por inner:</strong> ${L(co)} sin IVA · IVA ${r4(iva*100)}% · con IVA ${L(r4(co * (1 + iva)))}
+             <br><span class="mini">El costo con IVA es informativo: el costo y el margen usan el costo sin IVA.</span></div>`
+        : `<div class="aviso a-med" id="sDicosaCosto">El Catálogo DICOSA no trae costo para este producto: queda sin costo.</div>`}`;
+  }
   const ci = veCostos() ? costoConIva(s) : null;
   const costo = !veCostos() ? "" : ci
     ? `<div class="aviso a-info" id="sDicosaCosto" data-usd="${ci.usd}" data-iva="${ci.iva}" data-usd-iva="${ci.usd_iva}"
@@ -2858,7 +3127,10 @@ function fichaDicosa(s){
 }
 function abrirNuevoSku(cod){
   const s = cod ? D.skus.find(x=>x.codigo===cod) : null;
+  // Fase 1e: con listas de DICOSA, precio y costo no se escriben aquí.
+  const conListas = tieneListas(s);
   modal(`<h3 style="margin-top:0">${s?"Editar producto":"Producto nuevo"}</h3>
+    <p class="mini" style="margin:0">La unidad de venta es el inner: peso, precio, costo y existencia son por inner.</p>
     <div class="grid g2" style="margin:14px 0">
       <div><label>Código *</label><input id="sC" value="${esc(s?.codigo||"")}" ${s?"readonly":""}></div>
       <div><label>Nombre *</label><input id="sN" value="${esc(s?.nombre||"")}"></div>
@@ -2867,10 +3139,13 @@ function abrirNuevoSku(cod){
         <input id="sU" value="${esc(s?.unidad||"")}" placeholder="Caja, Bolsa, Frasco, Rollo, Unidad…"></div>
       <div><label>Contenido de la unidad</label>
         <input id="sCn" value="${esc(s?.contenido||"")}" placeholder="100 unidades, 500 g, 1 L…"></div>
-      <div><label>Peso en kg *</label><input id="sW" type="number" step="0.001" value="${s?.peso||""}"></div>
-      ${veCostos() && !hayCosto(s?.costo_usd) ? `<div><label>Costo (L.)</label><input id="sCo" type="number" step="0.01"
+      <div><label>Peso del inner en kg *</label><input id="sW" type="number" step="0.001" value="${s?.peso||""}"></div>
+      ${veCostos() && !hayCosto(s?.costo_usd) && !conListas ? `<div><label>Costo por inner (L.)</label><input id="sCo" type="number" step="0.01"
         value="${hayCosto(s?.costo) ? esc(String(s.costo)) : ""}" placeholder="Sin costo"></div>` : ''}
-      <div><label>Precio de venta (L.)</label><input id="sPr" type="number" step="0.01" value="${s?.precio||0}"></div>
+      ${conListas ? '' : `<div><label>Precio de venta por inner (L.)</label><input id="sPr" type="number" step="0.01" value="${s?.precio||0}"></div>`}
+      ${puedeFactor() ? `<div><label>Unidades por inner (para el Inventario DICOSA)</label>
+        <input id="sFac" type="number" min="1" step="1" value="${factorInner(s)}"
+          title="Si la Cantidad del Inventario DICOSA viene en unidades, cuántas hacen un inner. Con 1 no se convierte nada."></div>` : ''}
       <div><label>Existencia</label><input id="sE" type="number" value="${s?existencia(s):0}"
         ${s&&corteInv()?'readonly title="Se corrige con «Ajuste» en Inventario"':''}></div>
       <div><label>Mínimo</label><input id="sMin" type="number" value="${s?.minimo||0}"></div>
@@ -2901,6 +3176,11 @@ function guardarSku(cod){
   const r = $("#sR").checked, mot = $("#sMot").value.trim();
   if(r && !mot){ $("#sErr").innerHTML =
     `<div class="aviso a-mal">Si el producto está restringido, escribe por qué.</div>`; return; }
+  // Fase 1e: unidades por inner, solo si el campo está (lo ve el Admin): entero de 1 o más.
+  const facTxt = $("#sFac") ? $("#sFac").value.trim() : null, fac = Number(facTxt);
+  if(facTxt !== null && !(Number.isInteger(fac) && fac >= 1)){ $("#sErr").innerHTML =
+    `<div class="aviso a-mal">Las unidades por inner deben ser un número entero de 1 o más.</div>`; return; }
+  const previo = cod ? D.skus.find(x=>x.codigo===cod) : null;
   // Pendiente 156: un costo vacío queda sin costo (null), no 0. Un 0 escrito sí es 0.
   const coTxt = $("#sCo") ? $("#sCo").value.trim() : null, coNum = parseFloat(coTxt);
   // La ficha ya no tiene marca; la que tenga el producto se queda como está.
@@ -2910,7 +3190,11 @@ function guardarSku(cod){
     // Quien no ve costos no los toca: la ficha guarda sin la clave costo. Un
     // producto con precio DICOSA en dólares no tiene campo de costo en lempiras.
     ...(veCostos() && coTxt !== null ? {costo: isFinite(coNum) ? coNum : null} : {}),
-    precio:parseFloat($("#sPr").value)||0, existencia:parseInt($("#sE").value)||0,
+    // Con listas de DICOSA la ficha no tiene campo de precio: se conserva (es el particular).
+    precio: $("#sPr") ? (parseFloat($("#sPr").value)||0) : (previo ? previo.precio : 0),
+    // El factor 1 (sin efecto) no se escribe en un producto que no lo tenía.
+    ...(facTxt !== null && (fac !== 1 || (previo && previo.unidades_inner !== undefined)) ? {unidades_inner: fac} : {}),
+    existencia:parseInt($("#sE").value)||0,
     minimo:parseInt($("#sMin").value)||0, restringido:r, motivo_restriccion:mot,
     oferta:$("#sOf").checked, nuevo:$("#sNu").checked,
     precio_oferta:parseFloat($("#sPo").value)||null,
@@ -3141,7 +3425,8 @@ function xlsxZip(b){
   }
   return out;
 }
-async function xlsxTexto(zip, nombre){
+// Bytes de una entrada del ZIP, ya descomprimidos (fase 1g: también sirve para las imágenes).
+async function xlsxBytes(zip, nombre){
   const f = zip[nombre];
   if(!f) return null;
   let datos = f.datos;
@@ -3149,7 +3434,11 @@ async function xlsxTexto(zip, nombre){
     const s = new Blob([datos]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
     datos = new Uint8Array(await new Response(s).arrayBuffer());
   } else if(f.metodo !== 0) throw new Error(XLSX_MALO);
-  return new TextDecoder().decode(datos);
+  return datos;
+}
+async function xlsxTexto(zip, nombre){
+  const datos = await xlsxBytes(zip, nombre);
+  return datos === null ? null : new TextDecoder().decode(datos);
 }
 function xlsxXml(t){
   if(t === null) throw new Error(XLSX_MALO);
@@ -3246,7 +3535,9 @@ function selloImportacion(){
 function puedeImportar(t){
   // El Catálogo DICOSA (fase 1b, D4) y los Clientes DICOSA (fase 1c, decisión 5)
   // los importan solo admin y coordinador.
-  if(t === "catalogo" || t === "clientes") return ["local","admin","coordinador"].includes(rolPantalla());
+  // Las fotos del catálogo (fase 1g, K3a), igual: solo admin y coordinador. En modo
+  // local la tarjeta se ve, pero avisa que hace falta la base compartida.
+  if(t === "catalogo" || t === "clientes" || t === "fotos") return ["local","admin","coordinador"].includes(rolPantalla());
   return rolPantalla() === "local" || (typeof nubeEscribe === "function" && nubeEscribe(t));
 }
 // Del detalle, pedidos ve solo las bodegas VENTA; despacho, nada.
@@ -3324,16 +3615,25 @@ function analizarInv(filas){
   const u = ubicarColumnas(filas, INV_COLS);
   if(u.error) return {error: u.error};
   const bod = Object.fromEntries(D.bodegas.map(b => [b.cod_unico, b]));
-  const desconocidas = [], malas = [], detalle = {}, vendible = {}, nombres = {}, tipos = {};
+  const desconocidas = [], malas = [], detalle = {}, vendible = {}, nombres = {}, tipos = {}, noMultiplo = [];
   u.datos.forEach(f => {
     const v = k => String(f.celdas[u.idx[k]] ?? "").trim();
     const codigo = codigoMaterial(v("codigo"));
     const bodega = (v("centro") + v("almacen")).toUpperCase();
     const b = bod[bodega];
     if(!b){ desconocidas.push({n:f.n, bodega, codigo}); return; }
-    const cant = Number(v("cantidad").replace(",", "."));
+    let cant = Number(v("cantidad").replace(",", "."));
     if(!codigo || v("cantidad") === "" || !isFinite(cant)){
       malas.push({n:f.n, codigo, txt: !codigo ? "sin Número de Material" : "Cantidad. no es un número"}); return; }
+    // Fase 1e: la app cuenta en inners. Si el producto tiene un factor de unidades por
+    // inner distinto de 1, la Cantidad del archivo se pasa a inners, hacia abajo; lo que
+    // no es múltiplo se avisa en la vista previa. Con factor 1 no cambia nada.
+    const fac = factorInner(D.skus.find(x => x.codigo === codigo));
+    if(fac !== 1){
+      const inners = Math.floor(cant / fac);
+      if(cant % fac !== 0) noMultiplo.push({n:f.n, codigo, bodega, cantidad:cant, factor:fac, inners});
+      cant = inners;
+    }
     tipos[b.tipo] = (tipos[b.tipo]||0) + 1;
     if(!nombres[codigo]) nombres[codigo] = v("descripcion");
     if(!(codigo in vendible)) vendible[codigo] = 0;
@@ -3344,7 +3644,7 @@ function analizarInv(filas){
     d.cantidad = redondear(d.cantidad + cant);
   });
   return {filas:u.datos.length, materiales:Object.keys(vendible).length, vendible, nombres, tipos,
-          detalle:Object.values(detalle), desconocidas, malas};
+          detalle:Object.values(detalle), desconocidas, malas, noMultiplo};
 }
 // Diferencia de cada producto del archivo contra la existencia de hoy. Los
 // productos de la app que no vienen en el archivo pasan a 0 (aCero), si no lo están ya.
@@ -3403,6 +3703,12 @@ function pintarPreviaInv(){
     · no vienen en el archivo y pasan a 0 <strong id="impACero">${nCero}</strong>
     <br>Filas por tipo de bodega: <span id="impTipos">${Object.entries(a.tipos).map(([t,n]) =>
       `<span data-tipo="${esc(t)}" data-n="${n}">${esc(t||"(sin tipo)")}: ${n}</span>`).join(" · ")}</span></div>
+    ${a.noMultiplo.length ? `<div class="aviso a-med"><strong><span id="impNoMultiplo">${a.noMultiplo.length}</span> fila(s)
+      traen una cantidad que no es múltiplo de las unidades por inner del producto.</strong> Se pasa a inners hacia abajo
+      y el resto no se cuenta:
+      <ul>${a.noMultiplo.map(x => `<li>Fila ${x.n}: ${esc(x.codigo)} en ${esc(x.bodega)}, ${x.cantidad} unidades entre ${x.factor}
+        = ${x.inners} inner(s), sobran ${redondear(x.cantidad - x.inners * x.factor)}</li>`).join("")}</ul>
+      Si la Cantidad de DICOSA ya viene en inners, pon 1 en «Unidades por inner» en la ficha del producto.</div>` : ""}
     ${cambian.length ? `<div class="tabla-wrap"><table><thead><tr><th>Código</th><th>Producto</th>
       <th class="num">Existencia ahora</th><th class="num">Vendible DICOSA</th><th class="num">Ajuste</th></tr></thead><tbody>
       ${cambian.map(x => `<tr><td>${esc(x.codigo)}</td><td>${esc(x.nombre)}${x.nuevo?' <span class="pill p-med">nuevo, por completar</span>':''}${x.aCero?' <span class="pill p-mal">no viene en el archivo, pasa a 0</span>':''}</td>
@@ -3466,15 +3772,36 @@ async function confirmarImportacion(){
    existencia, rotación, oferta ni restricción. Un código nuevo entra con
    existencia 0 y sin movimiento. Un error en cualquier fila detiene todo.
    ============================================================================ */
-const CAT_COLS = {codigo:["codigointernodicosa"], nombre:["descripciondematerial"],
-  barras:["codigodebarras:"], dkt:["codigointernodkt:"], categoria:["categoria:"], subcategoria:["subcategoria:"],
-  min_unidades:["cantidadminimadepedidoenunidades"], precio:["precioen$(siniva)"], iva:["aplicaiva(siono)"]};
-const CAT_OPCIONALES = {min_cajas:["cantidadminimadepedidoencajas"]};
-const CAT_NOMBRES = {codigo:"Código Interno Dicosa", nombre:"Descripción de Material", barras:"Código de Barras:",
-  dkt:"Código Interno DKT:", categoria:"Categoría:", subcategoria:"Subcategoría:",
-  min_unidades:"Cantidad Minima de Pedido en Unidades", min_cajas:"Cantidad Minima de Pedido en Cajas",
-  precio:"Precio en $ (Sin IVA)", iva:"Aplica IVA (SI O NO)"};
-const CAT_IVAS = [0, 0.15];
+// Fase 1e (2026-11-12), Catálogo v2: 18 columnas, encabezado en la fila 2. Trae el
+// costo en lempiras sin IVA (reemplaza al precio en dólares de la 1b; el tipo de
+// cambio queda solo como historial), tres listas de precios por inner sin IVA,
+// peso inner en kg y datos nuevos (registro sanitario, medidas, CYP), que se
+// guardan en dicosa. El costo NO va en dicosa (lo leen todos los roles): va en
+// «costo», que la base pasa a la tabla costos. DICOSA manda en nombre, costo y
+// precios; el peso solo se toma si el producto no tiene uno escrito (6a). Los
+// productos de la app que no vienen en el archivo quedan fuera de catálogo
+// (fuera_catalogo, con fecha): no se borran y no se pueden pedir (C4a).
+const CAT_COLS = {codigo:["codigointernodicosa"], dkt:["codigointernodkt","codigointernodkt:"],
+  barras:["codigodebarras(inner)"], categoria:["categoria:","categoria"], subcategoria:["subcategoria:","subcategoria"],
+  registro:["reg.sanitario"], peso:["pesoinner"], largo:["largocaja(inner)"], ancho:["anchocaja(inner)"],
+  alto:["altocaja(inner)"], volumen:["volumen(inner)"], cyp:["cyp"], nombre:["descripciondematerial"], iva:["iva"],
+  costo:["costohnldicosasiniva"], particular:["listadepreciosdicosa>clienteparticularsiniva"],
+  cadena:["listadepreciosdicosa>cadenassiniva"], subdistribuidor:["listadepreciosdicosa>sub-distribuidorsiniva"]};
+const CAT_OPCIONALES = {};
+const CAT_NOMBRES = {codigo:"Código Interno Dicosa", dkt:"Código Interno DKT", barras:"Codigo de Barras (INNER)",
+  categoria:"Categoría:", subcategoria:"Subcategoría:", registro:"Reg. Sanitario", peso:"Peso inner",
+  largo:"Largo Caja (inner)", ancho:"Ancho Caja (inner)", alto:"Alto Caja (inner)", volumen:"Volumen (inner)", cyp:"CYP",
+  nombre:"Descripción de Material", iva:"IVA", costo:"Costo HNL Dicosa Sin IVA",
+  particular:"Lista de Precios Dicosa > Cliente Particular Sin IVA", cadena:"Lista de Precios Dicosa > Cadenas Sin IVA",
+  subdistribuidor:"Lista de Precios Dicosa > Sub-Distribuidor Sin IVA"};
+const CAT_NUMEROS = ["peso","largo","ancho","alto","volumen","cyp","costo","particular","cadena","subdistribuidor"];
+// Encabezado que solo tiene el formato anterior (1b): ese archivo ya no se acepta (8a).
+const CAT_VIEJO = "precioen$(siniva)";
+// El IVA puede venir como 15 o como 0.15: los dos son 0.15. Otro valor no vale.
+function ivaCatalogo(n){
+  const es = x => Math.abs(n - x) < 1e-9;
+  return es(0) ? 0 : (es(0.15) || es(15)) ? 0.15 : undefined;
+}
 // Celda numérica: {vacio} si no trae nada, {malo} si no es número, {n} si lo es.
 function numeroCelda(t){
   const s = String(t ?? "").trim().replace(",", ".");
@@ -3484,35 +3811,48 @@ function numeroCelda(t){
 }
 // Lee las filas del Catálogo. No cambia nada.
 function analizarCatalogo(filas){
+  if(filas.some(f => f.celdas.some(c => normalizarEncabezado(c) === CAT_VIEJO)))
+    return {error: "Este archivo tiene el formato anterior del Catálogo (precio en dólares). "+
+      "Usa el Catálogo nuevo de DICOSA, con costo en lempiras y las tres listas de precios."};
   const u = ubicarColumnas(filas, CAT_COLS, CAT_NOMBRES, CAT_OPCIONALES);
   if(u.error) return {error: u.error};
   const prod = {}, malas = [], iva = {};
-  let sinCodigo = 0, sinPrecio = 0, precioCero = 0;
+  let sinCodigo = 0, sinCosto = 0, sinPrecio = 0;
   u.datos.forEach(f => {
     const v = k => u.idx[k] === undefined ? "" : String(f.celdas[u.idx[k]] ?? "").trim();
     const codigo = codigoMaterial(v("codigo"));
     if(!codigo){ sinCodigo++; return; }
     const mal = txt => malas.push({n:f.n, codigo, txt});
     if(prod[codigo]) return mal("código repetido en el archivo");
-    const pr = numeroCelda(v("precio")), iv = numeroCelda(v("iva"));
-    const mu = numeroCelda(v("min_unidades")), mc = numeroCelda(v("min_cajas"));
-    if(pr.malo || pr.n < 0) return mal("«"+CAT_NOMBRES.precio+"» no es un número válido");
-    const tasa = iv.n === undefined ? undefined : CAT_IVAS.find(x => Math.abs(x - iv.n) < 1e-9);
-    if(tasa === undefined) return mal("«"+CAT_NOMBRES.iva+"» debe ser 0 o 0.15 (IVA)");
-    if(mu.malo || mc.malo || mu.n < 0 || mc.n < 0) return mal("la cantidad mínima de pedido no es un número válido");
-    if(pr.vacio) sinPrecio++; else if(pr.n === 0) precioCero++;
+    const x = {};
+    for(const k of CAT_NUMEROS){
+      x[k] = numeroCelda(v(k));
+      if(x[k].malo || x[k].n < 0) return mal("«"+CAT_NOMBRES[k]+"» no es un número válido");
+    }
+    const iv = numeroCelda(v("iva"));
+    const tasa = iv.n === undefined ? undefined : ivaCatalogo(iv.n);
+    if(tasa === undefined) return mal("«"+CAT_NOMBRES.iva+"» debe ser 0, 0.15 o 15");
+    // Costo o precio vacío o 0: sin costo o sin precio (null), nunca 0. Lo demás, tal cual.
+    const pos = k => x[k].vacio || x[k].n === 0 ? null : x[k].n, val = k => x[k].vacio ? null : x[k].n;
+    const precios = {particular: pos("particular"), cadena: pos("cadena"), subdistribuidor: pos("subdistribuidor")};
+    if(pos("costo") === null) sinCosto++;
+    if(Object.values(precios).some(p => p === null)) sinPrecio++;
     iva[tasa] = (iva[tasa] || 0) + 1;
-    // Precio vacío o 0: sin costo DICOSA (D1a), nunca un costo 0.
-    prod[codigo] = {nombre: v("nombre"), costo_usd: pr.vacio || pr.n === 0 ? null : pr.n,
-      dicosa: {barras: codigoMaterial(v("barras")), dkt: codigoMaterial(v("dkt")),
-        categoria: v("categoria"), subcategoria: v("subcategoria"),
-        min_unidades: mu.vacio ? null : mu.n, min_cajas: mc.vacio ? null : mc.n, iva: tasa}};
+    prod[codigo] = {nombre: v("nombre"), costo: pos("costo"),
+      dicosa: {dkt: codigoMaterial(v("dkt")), barras: codigoMaterial(v("barras")),
+        categoria: v("categoria"), subcategoria: v("subcategoria"), registro: v("registro"),
+        peso_inner: val("peso"), largo: val("largo"), ancho: val("ancho"), alto: val("alto"), volumen: val("volumen"),
+        cyp: val("cyp"), iva: tasa, precios}};
   });
-  return {filas: u.datos.length, sinCodigo, sinPrecio, precioCero, iva, prod, malas};
+  return {filas: u.datos.length, sinCodigo, sinCosto, sinPrecio, iva, prod, malas};
 }
 // Los campos del Catálogo que tendría el producto después de importar.
 function camposCatalogo(s, p){
-  const n = {nombre: p.nombre || (s ? s.nombre : ""), costo_usd: p.costo_usd, dicosa: p.dicosa};
+  const n = {nombre: p.nombre || (s ? s.nombre : ""), costo: p.costo, costo_usd: null, dicosa: p.dicosa};
+  // El precio de venta del producto es el de cliente particular (5a); cada pedido usa su lista.
+  n.precio = p.dicosa.precios.particular || 0;
+  // 6a: el peso inner pasa a ser el peso solo si el producto no tiene uno escrito.
+  n.peso = s && Number(s.peso) > 0 ? s.peso : (p.dicosa.peso_inner || 0);
   // D2a: la categoría de la app se toma de DICOSA solo si está vacía o «Por completar».
   const cat = s ? s.categoria : "";
   n.categoria = (!cat || cat === "Por completar") && p.dicosa.categoria ? p.dicosa.categoria : cat;
@@ -3524,18 +3864,24 @@ function diferenciasCatalogo(a){
   return Object.keys(a.prod).sort().map(c => {
     const s = D.skus.find(x => x.codigo === c), n = camposCatalogo(s, a.prod[c]);
     if(!s) return {codigo:c, nombre:n.nombre, nuevo:true, cambia:true};
-    const antes = nubeFirma({nombre:s.nombre, costo_usd:s.costo_usd ?? null, categoria:s.categoria,
-                             dicosa:sinFechaImportado(s.dicosa)});
-    const despues = nubeFirma({nombre:n.nombre, costo_usd:n.costo_usd, categoria:n.categoria, dicosa:n.dicosa});
+    const antes = nubeFirma({nombre:s.nombre, costo:s.costo ?? null, costo_usd:s.costo_usd ?? null, categoria:s.categoria,
+                             precio:s.precio, peso:s.peso, dicosa:sinFechaImportado(s.dicosa), fuera:!!s.fuera_catalogo});
+    const despues = nubeFirma({nombre:n.nombre, costo:n.costo, costo_usd:null, categoria:n.categoria,
+                               precio:n.precio, peso:n.peso, dicosa:n.dicosa, fuera:false});
     return {codigo:c, nombre:n.nombre, nuevo:false, cambia: antes !== despues};
   });
+}
+// C4a: productos de la app que no vienen en el archivo y todavía no están fuera de catálogo.
+function salenCatalogo(a){
+  return D.skus.filter(s => !a.prod[s.codigo] && !s.fuera_catalogo)
+    .map(s => ({codigo:s.codigo, nombre:s.nombre})).sort((x, y) => x.codigo.localeCompare(y.codigo));
 }
 function productoDelCatalogo(c, p, fecha){
   const n = camposCatalogo(null, p);
   return {codigo:c, nombre: n.nombre || "Material "+c, categoria: n.categoria || "",
-    unidad:"Unidad", contenido:"—", presentacion:"", peso:0, precio:0, existencia:0, minimo:0,
+    unidad:"Inner", contenido:"—", presentacion:"", peso:n.peso, precio:n.precio, existencia:0, minimo:0,
     restringido:false, motivo_restriccion:"", oferta:false, nuevo:false, precio_oferta:null, rotacion:"C",
-    costo_usd: p.costo_usd, dicosa: {...p.dicosa, importado: fecha}};
+    costo: p.costo, costo_usd: null, dicosa: {...p.dicosa, importado: fecha}};
 }
 // Lo que tiene que estar listo antes de calcular. Con base compartida se
 // sincroniza primero, como en el Inv. Devuelve el texto del problema o "".
@@ -3572,44 +3918,56 @@ $("#cdkArchivo").onchange = async function(){
   CDK = {a, archivo:f.name};
   pintarPreviaCatalogo();
 };
+// El botón de confirmar se enciende con todas las casillas de la vista previa marcadas.
+function cdkCasillas(){
+  const c = [$("#cdkCasilla"), $("#cdkCasillaSalen")].filter(Boolean);
+  if($("#cdkConfirmar")) $("#cdkConfirmar").disabled = !c.length || c.some(x => !x.checked);
+}
 function pintarPreviaCatalogo(){
-  const {a, archivo} = CDK, dif = diferenciasCatalogo(a);
+  const {a, archivo} = CDK, dif = diferenciasCatalogo(a), salen = salenCatalogo(a);
   const nuevos = dif.filter(x => x.nuevo), cambian = dif.filter(x => x.cambia && !x.nuevo);
-  CDK.n = {nuevos:nuevos.length, cambian:cambian.length};
-  CDK.firma = nubeFirma(dif);   // 164 (fase A): la lista completa
+  CDK.n = {nuevos:nuevos.length, cambian:cambian.length, salen:salen.length};
+  CDK.firma = nubeFirma({dif, salen});   // 164 (fase A): las listas completas
   $("#cdkPrevia").innerHTML = `<div class="aviso a-info"><strong>Vista previa: todavía no cambió nada.</strong>
     <br>Archivo ${esc(archivo)} · filas <strong id="cdkFilas">${a.filas}</strong>
     · sin código (se saltan) <strong id="cdkSinCodigo">${a.sinCodigo}</strong>
     · se actualizan <strong id="cdkActualizan">${cambian.length}</strong>
     · nuevos con existencia 0 <strong id="cdkNuevos">${nuevos.length}</strong>
     · sin cambios <strong id="cdkSinCambio">${dif.length - nuevos.length - cambian.length}</strong>
-    <br>Sin precio en $ <strong id="cdkSinPrecio">${a.sinPrecio}</strong>
-    · con precio 0 <strong id="cdkPrecioCero">${a.precioCero}</strong> (los dos quedan sin costo)
+    · no vienen y salen de catálogo <strong id="cdkSalen">${salen.length}</strong>
+    <br>Sin costo <strong id="cdkSinCosto">${a.sinCosto}</strong>
+    · sin precio en alguna lista <strong id="cdkSinPrecio">${a.sinPrecio}</strong> (no se pueden pedir con esa lista)
     · IVA: ${Object.entries(a.iva).map(([t, n]) =>
       `<span data-iva="${esc(t)}" data-n="${n}">${r4(Number(t)*100)}%: ${n}</span>`).join(" · ")}</div>
-    ${nuevos.length || cambian.length ? `<div class="tabla-wrap"><table><thead><tr><th>Código</th><th>Producto</th><th></th></tr></thead><tbody>
+    ${nuevos.length || cambian.length || salen.length ? `<div class="tabla-wrap"><table><thead><tr><th>Código</th><th>Producto</th><th></th></tr></thead><tbody>
       ${nuevos.concat(cambian).map(x => `<tr><td>${esc(x.codigo)}</td><td>${esc(x.nombre)}</td>
         <td>${x.nuevo ? '<span class="pill p-med">nuevo, existencia 0</span>' : '<span class="pill p-ok">se actualiza</span>'}</td></tr>`).join("")}
+      ${salen.map(x => `<tr><td>${esc(x.codigo)}</td><td>${esc(x.nombre)}</td>
+        <td><span class="pill p-mal">no viene: sale de catálogo</span></td></tr>`).join("")}
       </tbody></table></div>` : `<p class="mini">Ningún producto cambia.</p>`}
-    <p class="mini">No se tocan peso, precio de venta, mínimo de existencia, rotación, oferta ni restricción.
-      Un producto nuevo no se puede pedir hasta ponerle precio de venta y peso en su ficha.</p>
+    <p class="mini">DICOSA manda en nombre, costo, listas de precios y sus datos. El peso inner solo se toma si el producto
+      no tiene peso escrito. No se tocan existencia, mínimo de existencia, rotación, oferta ni restricción.
+      Un producto que sale de catálogo no se borra: conserva su existencia y sus pedidos, y no se puede pedir.</p>
     <p><label><input type="checkbox" id="cdkCasilla" style="width:auto"
-      onchange="$('#cdkConfirmar').disabled=!this.checked"> Revisé la vista previa: se actualizan ${cambian.length}
+      onchange="cdkCasillas()"> Revisé la vista previa: se actualizan ${cambian.length}
       y se crean ${nuevos.length} producto(s)</label></p>
+    ${salen.length ? `<p><label><input type="checkbox" id="cdkCasillaSalen" style="width:auto"
+      onchange="cdkCasillas()"> Entiendo que ${salen.length} producto(s) salen de catálogo y no se podrán pedir</label></p>` : ""}
     <button class="b" id="cdkConfirmar" onclick="confirmarCatalogo()" disabled>Confirmar importación del Catálogo</button>
     <button class="s" onclick="CDK=null;$('#cdkPrevia').innerHTML=''">Cancelar</button>`;
 }
 async function confirmarCatalogo(){
   if(!CDK) return;
-  const casilla = $("#cdkCasilla");
+  const casilla = $("#cdkCasilla"), casillaSalen = $("#cdkCasillaSalen");
   if(!casilla || !casilla.checked) return;
+  if(casillaSalen && !casillaSalen.checked) return;
   const pre = await catListo();
   if(pre){ $("#cdkMsg").innerHTML = `<div class="aviso a-mal">${esc(pre)}</div>`; return; }
   const {a} = CDK;
   // Se recalcula con lo que hay ahora (la sincronización pudo traer productos).
-  const dif = diferenciasCatalogo(a);
+  const dif = diferenciasCatalogo(a), salen = salenCatalogo(a);
   const nuevos = dif.filter(x => x.nuevo).length, cambian = dif.filter(x => x.cambia && !x.nuevo).length;
-  if(nubeFirma(dif) !== CDK.firma){
+  if(nubeFirma({dif, salen}) !== CDK.firma){
     pintarPreviaCatalogo();
     $("#cdkMsg").innerHTML = `<div class="aviso a-mal">Los datos cambiaron al sincronizar.
       Revisa la vista previa y confirma de nuevo.</div>`;
@@ -3623,14 +3981,21 @@ async function confirmarCatalogo(){
     if(!x.cambia) return;
     const s = D.skus.find(y => y.codigo === x.codigo), n = camposCatalogo(s, p);
     s.nombre = n.nombre; s.categoria = n.categoria;
-    s.costo_usd = n.costo_usd; s.dicosa = {...n.dicosa, importado: fecha};
+    s.costo = n.costo; s.costo_usd = null; s.precio = n.precio; s.peso = n.peso;
+    s.dicosa = {...n.dicosa, importado: fecha};
+    delete s.fuera_catalogo;                       // volvió a venir
+    // Un «por completar» del Inventario queda completo si ya tiene precio y peso.
+    if(s.por_completar && n.precio > 0 && n.peso > 0) delete s.por_completar;
   });
+  salen.forEach(x => { D.skus.find(y => y.codigo === x.codigo).fuera_catalogo = fecha; });
   guardar();
   $("#cdkPrevia").innerHTML = "";
   $("#cdkMsg").innerHTML = `<div class="aviso a-ok"><strong>Catálogo importado (${esc(fecha)}).</strong>
-    ${cambian} producto(s) actualizado(s), ${nuevos} nuevo(s) con existencia 0, ${dif.length - nuevos - cambian} sin cambios.
+    ${cambian} producto(s) actualizado(s), ${nuevos} nuevo(s) con existencia 0, ${dif.length - nuevos - cambian} sin cambios,
+    ${salen.length} fuera de catálogo por no venir en el archivo.
     ${a.sinCodigo ? a.sinCodigo+" fila(s) sin código no se tomaron en cuenta." : ""}</div>`;
   pintarCatalogo();
+  if(typeof recalc === "function") recalc();
 }
 
 /* ============================================================================
@@ -3999,6 +4364,7 @@ function armarPedidoSugerido(i){
   const x = window._repo[i];
   const s = D.skus.find(y=>y.codigo===x.codigo);
   if(!s){ alert("Ese producto ya no está en el catálogo."); return; }
+  if(s.fuera_catalogo){ alert("«"+s.nombre+"» está fuera de catálogo y no se puede pedir."); return; }
   if(existencia(s) <= 0){ alert("«"+s.nombre+"» está agotado. Registra el ingreso antes de ofrecerlo."); return; }
   const fv = faltaParaVender(s);
   if(fv.length){ alert("«"+s.nombre+"» no se puede pedir: le falta "+fv.join(" y ")+". Complétalo en Catálogo."); return; }
@@ -4099,11 +4465,11 @@ async function pedirPersistencia(){
   pintarPersistencia();
 }
 
-// Tipo de cambio (fase 1b, D3 y D5a): lo registra el admin, con fecha; queda
-// historial. Viaja a la base como la fila «tipo_cambio» de config.
+// Tipo de cambio (fase 1b, D3 y D5a): lo registraba el admin, con fecha. Desde la
+// fase 1e (7a) queda solo el historial, sin formulario: el Catálogo v2 trae el costo
+// en lempiras. Sigue viajando a la base como la fila «tipo_cambio» de config.
 function pintarTipoCambio(){
   if(!$("#tcHistorial")) return;
-  if(!$("#tcFecha").value) $("#tcFecha").value = fechaLocal();
   const v = tcVigente();
   const l = (D.tipo_cambio || []).slice().sort((a, b) => a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 :
     String(a.registrado||"") < String(b.registrado||"") ? 1 : -1);
@@ -4113,29 +4479,25 @@ function pintarTipoCambio(){
       <td class="mini">${fecha(t.registrado)}${t.letra?" · "+esc(t.letra):""}</td>
       <td>${v && t.id === v.id ? '<span class="pill p-ok">vigente</span>' : t.fecha > fechaLocal() ? '<span class="pill p-gris">desde esa fecha</span>' : ''}</td></tr>`).join("")}
     </tbody></table></div>`
-    : `<div class="aviso a-med">Sin tipo de cambio registrado: los productos con precio DICOSA en dólares quedan sin costo.</div>`;
-}
-function registrarTipoCambio(){
-  const f = ($("#tcFecha").value || "").trim(), v = parseFloat($("#tcValor").value), fu = ($("#tcFuente").value || "").trim();
-  const mal = t => { $("#tcMsg").innerHTML = `<div class="aviso a-mal">${t}</div>`; };
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(f)) return mal("Escribe la fecha del tipo de cambio.");
-  if(!(v > 0)) return mal("El tipo de cambio debe ser un número mayor que cero.");
-  D.tipo_cambio = D.tipo_cambio || [];
-  D.tipo_cambio.push({id: uid(), fecha: f, valor: v, fuente: fu, registrado: new Date().toISOString(), letra: letraDispositivo()});
-  guardar();
-  const vig = tcVigente();
-  $("#tcMsg").innerHTML = `<div class="aviso a-ok">Registrado: L. ${esc(String(v))} por US$ del ${esc(f)}.
-    ${f > fechaLocal() ? "Aplica desde esa fecha. " : ""}Vigente hoy: ${vig ? "L. "+esc(String(vig.valor))+" ("+esc(vig.fecha)+")" : "ninguno"}.</div>`;
-  $("#tcValor").value = "";
-  pintarTipoCambio();
-  if(typeof recalc === "function") recalc();
+    : `<div class="aviso a-med">Sin tipo de cambio registrado.</div>`;
 }
 
 // Rol con que se dibuja la pantalla; lo lleva la parte de la base compartida
 // (nubeRolPantalla). Sin usuario es "local" y todo se ve como siempre.
-const AVISO_SIN_COSTOS = "Falta definir los costos para este rol; pide al administrador.";
 function rolPantalla(){ return typeof nubeRolPantalla === "function" ? nubeRolPantalla() : "local"; }
 function veCostos(){ return ["local","admin","coordinador"].includes(rolPantalla()); }
+// B1 (decisión 4): el rol pedidos no confirma sin existencia suficiente.
+function puedeForzarExistencia(){ return rolPantalla() !== "pedidos"; }
+// B1 (decisión 3): motivo por el que la base dejó el pedido por revisar
+// ("perdida" o "sin_costo"), o null. Llega con pedidos_costos, que solo leen
+// admin y coordinador.
+// (porRevisar(), sin "pedido", es otra cosa: los movimientos de Inventario.)
+function pedidoPorRevisar(p){ return veCostos() && p && p.por_revisar ? String(p.por_revisar) : null; }
+function textoPedidoPorRevisar(p){
+  return pedidoPorRevisar(p) === "perdida"
+    ? "pierde " + L0(Math.abs(Number(p.contribucion_est) || 0)) + " según el costo que calculó la base"
+    : "sin costo: la base no pudo calcular el margen";
+}
 function panelSoloLectura(p){ return typeof nubePanelModo === "function" && nubePanelModo(p) === "l"; }
 
 // Corte de inventario (D1, D3, N2). Con base compartida: solo la letra A, con
@@ -4189,13 +4551,13 @@ function cargarEjemplo(){
   const cs = [
     {id:"ej1", nombre:"Dr. Ramírez — Odontología", telefono:"+504-9988-7766",
      tipo:"Odontólogo", zona:"Torre Médica 1", direccion:"Torre Médica 1, local 302",
-     referencia:"Frente al ascensor", credito:false, ejemplo:true, alta:new Date().toISOString()},
+     referencia:"Frente al ascensor", credito:false, tipo_precio:"particular", ejemplo:true, alta:new Date().toISOString()},
     {id:"ej2", nombre:"Clínica Santa Rosa", telefono:"+504-2233-4455",
      tipo:"Clínica", zona:"Bulevar Morazán", direccion:"Bulevar Morazán, edificio Plaza, 2.º nivel",
-     referencia:"Contiguo a la farmacia", credito:true, ejemplo:true, alta:new Date().toISOString()},
+     referencia:"Contiguo a la farmacia", credito:true, tipo_precio:"particular", ejemplo:true, alta:new Date().toISOString()},
     {id:"ej3", nombre:"Dra. Fonseca — Pediatría", telefono:"+504-3344-5566",
      tipo:"Médico especialista", zona:"Col. Palmira", direccion:"Col. Palmira, casa 45",
-     referencia:"Portón verde", credito:false, ejemplo:true, alta:new Date().toISOString()}
+     referencia:"Portón verde", credito:false, tipo_precio:"particular", ejemplo:true, alta:new Date().toISOString()}
   ];
   cs.forEach(c=>{ if(!D.clientes.some(x=>x.telefono===c.telefono)) D.clientes.push(c); });
 
@@ -4281,6 +4643,661 @@ function borrarEjemplo(){
   pintarDespacho(); pintarInicio(); pintarClientes(); pintarPedidos();
 }
 
+/* ============================================================================
+   FASE 1g (2026-11-12): FOTOS DEL CATÁLOGO, MOSTRAR CATÁLOGO Y MÉDICOS
+   Decisiones K1a a K4a de Daniel.
+   - Cada producto puede tener hasta 3 fotos: s.fotos = [{n, ruta, h}] (n: 1 a 3;
+     ruta dentro del depósito privado catalogo-fotos; h: huella de la imagen
+     original). Van en el nivel del producto, no en dicosa, porque el importador
+     del Catálogo reemplaza dicosa entero.
+   - Las fotos se piden a la base con el token del usuario (el depósito es
+     privado) y se guardan en la caché del navegador (Cache API): la segunda vez
+     no gastan red y se ven sin señal.
+   ============================================================================ */
+const FOTOS_CACHE = "sw-medico-fotos";
+const sinTildes = s => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+function fotosDe(s){
+  return Array.isArray(s && s.fotos) ? s.fotos.filter(f => f && f.ruta && f.n).slice().sort((a, b) => a.n - b.n) : [];
+}
+// Imagen de una foto: primero la caché de este navegador; si no está y hay sesión, la base.
+async function fotoBlob(f){
+  const llave = "/sw-fotos/" + f.ruta + "?h=" + (f.h || "");
+  let cache = null;
+  try{
+    cache = await caches.open(FOTOS_CACHE);
+    const r = await cache.match(llave);
+    if(r) return await r.blob();
+  }catch(e){ cache = null; }
+  if(typeof nubeActiva !== "function" || !nubeActiva()) return null;
+  const b = await nubeStorage("GET", f.ruta);
+  try{ if(cache) await cache.put(llave, new Response(b, {headers:{"Content-Type": b.type || "image/jpeg"}})); }catch(e){}
+  return b;
+}
+// Dirección blob: de una foto (o null si no se pudo traer). Una sola petición por foto.
+const FOTO_URLS = {};
+function fotoUrl(f){
+  const k = f.ruta + "?h=" + (f.h || "");
+  if(!FOTO_URLS[k]) FOTO_URLS[k] = fotoBlob(f).then(b => b ? URL.createObjectURL(b) : null, () => null)
+    .then(u => { if(!u) delete FOTO_URLS[k]; return u; });
+  return FOTO_URLS[k];
+}
+
+/* ------------------------------------------------- MOSTRAR CATÁLOGO (K1a, K2a)
+   Solo lectura, para enseñar en la tablet. Pestañas por la Categoría de DICOSA y
+   secciones por la Subcategoría, sacadas de los datos (dicosa.categoria y
+   dicosa.subcategoria): aquí no hay ningún nombre de categoría escrito. Precio
+   de la lista particular, sin IVA. No muestra lo que el producto le cuesta a la
+   empresa ni cuánto hay en bodega. Los productos fuera de catálogo, los
+   restringidos y los que están por completar no salen. */
+const MOS = {cat: null};
+const VISOR = {codigo: null, i: 0};
+function mosProductos(){ return D.skus.filter(s => !s.fuera_catalogo && !s.restringido && !s.por_completar); }
+const mosCat = s => String((s.dicosa || {}).categoria || "").trim();
+const mosSub = s => String((s.dicosa || {}).subcategoria || "").trim();
+function mosPrecio(s){
+  const n = tieneListas(s) ? Number(s.dicosa.precios.particular) : NaN;
+  return n > 0 ? `${L(n)} <small>sin IVA</small>` : `<span class="mos-sinp">Precio: consultar</span>`;
+}
+function mosTarjeta(s){
+  const f = fotosDe(s)[0];
+  return `<button type="button" class="mos-tar" data-codigo="${esc(s.codigo)}" onclick="mosAbrir(this.dataset.codigo)">
+    <span class="mos-foto">${f ? `<img alt="" hidden data-ruta="${esc(f.ruta)}" data-h="${esc(f.h || "")}"><span>Cargando foto…</span>`
+      : "<span>Sin foto</span>"}</span>
+    <span class="mos-n">${esc(s.nombre)}</span>
+    <span class="mos-c">Código DICOSA: ${esc(s.codigo)}</span>
+    <span class="mos-p">${mosPrecio(s)}</span></button>`;
+}
+function mosElegir(cat){ MOS.cat = cat; pintarMostrar(); }
+function pintarMostrar(){
+  const todos = mosProductos();
+  const q = sinTildes(($("#mosBuscar").value || "").trim());
+  // La pestaña de los productos sin categoría de DICOSA va al final.
+  const cats = [...new Set(todos.map(mosCat))].sort((a, b) => !a ? 1 : !b ? -1 : a.localeCompare(b, "es"));
+  if(!cats.includes(MOS.cat)) MOS.cat = cats.length ? cats[0] : null;
+  const nombreCat = c => c || "Sin categoría", nombreSub = x => x || "Sin subcategoría";
+  $("#mosTabs").style.display = q ? "none" : "";
+  $("#mosTabs").innerHTML = cats.map(c => `<button type="button" data-cat="${esc(c)}" class="${c === MOS.cat ? "on" : ""}"
+    onclick="mosElegir(this.dataset.cat)">${esc(nombreCat(c))}</button>`).join("");
+  // Con búsqueda se mira en todas las categorías a la vez; sin ella, la pestaña elegida.
+  const lista = q ? todos.filter(s => sinTildes(s.nombre).includes(q) || sinTildes(s.codigo).includes(q))
+                  : todos.filter(s => mosCat(s) === MOS.cat);
+  const grupos = new Map();
+  lista.slice().sort((a, b) => mosCat(a).localeCompare(mosCat(b), "es") || mosSub(a).localeCompare(mosSub(b), "es") ||
+      String(a.nombre).localeCompare(String(b.nombre), "es"))
+    .forEach(s => {
+      const k = q ? nombreCat(mosCat(s)) + " · " + nombreSub(mosSub(s)) : nombreSub(mosSub(s));
+      if(!grupos.has(k)) grupos.set(k, []);
+      grupos.get(k).push(s);
+    });
+  $("#mosLista").innerHTML = lista.length
+    ? [...grupos].map(([k, l]) => `<section class="mos-sec"><h3>${esc(k)}</h3>
+        <div class="mos-rejilla">${l.map(mosTarjeta).join("")}</div></section>`).join("")
+    : `<div class="vacio">${q ? "Ningún producto coincide con la búsqueda." : "Ningún producto para mostrar todavía."}</div>`;
+  $$("#mosLista img[data-ruta]").forEach(img => {
+    fotoUrl({ruta: img.dataset.ruta, h: img.dataset.h}).then(u => {
+      if(!img.isConnected) return;
+      const aviso = img.nextElementSibling;
+      if(u){ img.src = u; img.hidden = false; if(aviso) aviso.remove(); }
+      else if(aviso) aviso.textContent = "Sin foto";
+    });
+  });
+}
+$("#mosBuscar").oninput = pintarMostrar;
+// Baja todas las fotos del catálogo a este dispositivo, para usarlas sin señal.
+async function mosDescargarTodas(){
+  const msg = $("#mosBajarMsg"), b = $("#mosBajar");
+  const fs = mosProductos().flatMap(fotosDe);
+  if(!fs.length){ msg.textContent = "Todavía no hay fotos en el catálogo."; return; }
+  b.disabled = true;
+  let ok = 0, mal = 0;
+  for(const f of fs){
+    (await fotoUrl(f)) ? ok++ : mal++;
+    msg.textContent = "Bajando fotos: " + (ok + mal) + " de " + fs.length + "…";
+  }
+  b.disabled = false;
+  msg.textContent = mal
+    ? ok + " de " + fs.length + " fotos guardadas en este dispositivo; " + mal + " no se pudieron bajar. Revisa la conexión e intenta de nuevo."
+    : "Las " + fs.length + " fotos están guardadas en este dispositivo: se ven aunque no haya señal.";
+}
+// Visor: foto grande y paso entre las fotos del producto (hasta 3).
+function mosAbrir(codigo){
+  if(!D.skus.some(s => s.codigo === codigo)) return;
+  VISOR.codigo = codigo; VISOR.i = 0;
+  $("#visor").classList.add("on");
+  visorPintar();
+}
+function visorPintar(){
+  const s = D.skus.find(x => x.codigo === VISOR.codigo);
+  if(!s) return visorCerrar();
+  const fs = fotosDe(s), n = fs.length;
+  const i = VISOR.i = Math.min(Math.max(VISOR.i, 0), Math.max(n - 1, 0));
+  $("#visorTxt").innerHTML = `<strong>${esc(s.nombre)}</strong><br>Código DICOSA: ${esc(s.codigo)}<br>
+    <span class="mos-p">${mosPrecio(s)}</span>`;
+  $("#visorPos").textContent = n ? (i + 1) + " de " + n : "";
+  $("#visorAnt").disabled = i <= 0;
+  $("#visorSig").disabled = i >= n - 1;
+  const img = $("#visorImg"), sin = $("#visorSin");
+  img.hidden = true; img.removeAttribute("src");
+  sin.hidden = false; sin.textContent = n ? "Cargando foto…" : "Sin foto";
+  if(n) fotoUrl(fs[i]).then(u => {
+    if(VISOR.codigo !== s.codigo || VISOR.i !== i) return;
+    if(u){ img.src = u; img.hidden = false; sin.hidden = true; }
+    else sin.textContent = "Sin foto";
+  });
+}
+function visorMover(d){
+  if(!VISOR.codigo) return;
+  const s = D.skus.find(x => x.codigo === VISOR.codigo), n = s ? fotosDe(s).length : 0;
+  const i = VISOR.i + d;
+  if(i < 0 || i >= n) return;
+  VISOR.i = i;
+  visorPintar();
+}
+function visorCerrar(){ $("#visor").classList.remove("on"); VISOR.codigo = null; }
+$("#visor").onclick = e => { if(e.target.id === "visor") visorCerrar(); };
+document.addEventListener("keydown", e => {
+  if(!VISOR.codigo) return;
+  if(e.key === "Escape") visorCerrar();
+  else if(e.key === "ArrowRight") visorMover(1);
+  else if(e.key === "ArrowLeft") visorMover(-1);
+});
+// Deslizar con el dedo sobre la foto.
+(() => {
+  let x0 = null;
+  const m = $("#visorMarco");
+  m.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; }, {passive: true});
+  m.addEventListener("touchend", e => {
+    if(x0 === null) return;
+    const dx = e.changedTouches[0].clientX - x0;
+    x0 = null;
+    if(Math.abs(dx) > 40) visorMover(dx < 0 ? 1 : -1);
+  }, {passive: true});
+})();
+
+/* ---------------------------------------------- IMPORTADOR DE FOTOS (K3a)
+   Archivo «Catálogo de ventas»: primera hoja, encabezados en la fila 1, columnas
+   A «Código Interno Dicosa» … J «PRECIO». Las imágenes están DENTRO de las celdas
+   de Imagen 1, 2 y 3. De una celda a su imagen se llega por esta cadena, y cada
+   salto se valida:
+     celda vm="N" (desde 1)
+       -> xl/metadata.xml, valueMetadata, bloque N: rc t (tipo, debe ser
+          XLRICHVALUE) y v (bloque de futureMetadata, desde 0)
+       -> futureMetadata XLRICHVALUE, ese bloque: rvb i (valor, desde 0)
+       -> xl/richData/rdrichvalue.xml, ese rv: su estructura (s) dice en qué
+          posición está _rvRel:LocalImageIdentifier (rdrichvaluestructure.xml)
+       -> xl/richData/richValueRel.xml, esa posición: r:id
+       -> xl/richData/_rels/richValueRel.xml.rels, la relación con ese Id (están
+          en desorden: se enlaza por Id, nunca por posición): Target
+       -> xl/media/imagenN.
+   Varias celdas pueden compartir la misma imagen: se convierte una sola vez.
+   Solo se usan el código y las imágenes; lo demás lo manda el Catálogo DICOSA.
+   Mismo flujo que los otros importadores: leer, vista previa sin cambios,
+   casilla y confirmar. Un producto que viene queda con las fotos del archivo
+   (una celda vacía quita esa foto, con casilla propia); uno que no viene no se
+   toca. Si la subida se corta, lo subido queda y al repetir solo sube lo que
+   falta (se compara la huella de la imagen original). */
+const FOT_COLS = {codigo:["codigointernodicosa"], barras:["codigodebarras(inner)"], categoria:["categoria:","categoria"],
+  subcategoria:["subcategoria:","subcategoria"], img1:["imagen1"], img2:["imagen2"], img3:["imagen3"],
+  nombre:["descripciondematerial"], isv:["isv"], precio:["precio"]};
+const FOT_NOMBRES = {codigo:"Código Interno Dicosa", barras:"Codigo de Barras (INNER)", categoria:"Categoría:",
+  subcategoria:"Subcategoría:", img1:"Imagen 1", img2:"Imagen 2", img3:"Imagen 3", nombre:"Descripción de Material",
+  isv:"ISV", precio:"PRECIO"};
+const FOT_LADO = 1600, FOT_CALIDAD = 0.85;
+// Solo estos caracteres en el código, porque va dentro de la ruta del depósito.
+const FOT_CODIGO = /^[A-Za-z0-9_-]+$/;
+const FOT_TIPOS = {png:"image/png", jpg:"image/jpeg", jpeg:"image/jpeg", gif:"image/gif", bmp:"image/bmp", webp:"image/webp"};
+// 1g-R1: la ruta lleva los primeros 12 caracteres de la huella SHA-256 de la imagen original.
+// El CDN de Storage puede servir hasta 60 s la versión vieja de un archivo sobrescrito o
+// borrado: por eso nunca se sobrescribe. Una foto cambiada va a una ruta nueva y la vieja
+// se borra después.
+const fotRuta = (codigo, n, h) => "productos/" + codigo + "/" + n + "-" + String(h).slice(0, 12) + ".jpg";
+
+// Filas de la primera hoja, como leerXlsx, más el vm de cada celda que lo trae.
+async function leerXlsxFotos(archivo){
+  try{
+    const zip = xlsxZip(new Uint8Array(await archivo.arrayBuffer()));
+    const hoja1 = xlsxTag(xlsxXml(await xlsxTexto(zip, "xl/workbook.xml")), "sheet")[0];
+    const rid = hoja1 && (Array.from(hoja1.attributes).find(a => a.localName === "id" && a.prefix) || {}).value;
+    const rel = xlsxTag(xlsxXml(await xlsxTexto(zip, "xl/_rels/workbook.xml.rels")), "Relationship")
+      .find(r => r.getAttribute("Id") === rid);
+    const destino = rel.getAttribute("Target");
+    const ruta = destino.startsWith("/") ? destino.slice(1) : "xl/" + destino;
+    const ssTxt = await xlsxTexto(zip, "xl/sharedStrings.xml");
+    const ss = ssTxt === null ? [] : xlsxTag(xlsxXml(ssTxt), "si").map(si =>
+      xlsxTag(si, "t").filter(t => t.parentNode.localName !== "rPh").map(t => t.textContent).join(""));
+    const filas = xlsxTag(xlsxXml(await xlsxTexto(zip, ruta)), "row").map((r, i) => {
+      const celdas = [], vm = [];
+      xlsxTag(r, "c").forEach(c => {
+        const ref = c.getAttribute("r"), t = c.getAttribute("t"), v = xlsxTag(c, "v")[0];
+        let val = v ? v.textContent : "";
+        if(t === "s") val = ss[Number(val)] ?? "";
+        else if(t === "inlineStr") val = xlsxTag(c, "t").map(x => x.textContent).join("");
+        const col = ref ? xlsxColumna(ref) : celdas.length;
+        celdas[col] = val;
+        const m = Number(c.getAttribute("vm"));
+        if(m >= 1) vm[col] = m;
+      });
+      return {n: Number(r.getAttribute("r")) || i + 1, celdas: Array.from(celdas, x => x ?? ""), vm};
+    });
+    return {zip, filas};
+  }catch(e){ throw new Error(XLSX_MALO); }
+}
+// Ruta dentro del ZIP de un Target relativo a una carpeta.
+function xlsxRutaRel(carpeta, destino){
+  if(destino.startsWith("/")) return destino.slice(1);
+  const p = carpeta.split("/").filter(Boolean);
+  destino.split("/").forEach(x => { if(x === "..") p.pop(); else if(x && x !== ".") p.push(x); });
+  return p.join("/");
+}
+// Devuelve la función vm -> ruta de la imagen dentro del ZIP. Lanza un error que
+// dice qué salto de la cadena falta.
+async function fotCadena(zip){
+  const falta = que => new Error("El archivo no trae las imágenes dentro de las celdas como se espera: " + que + ".");
+  const xml = async nombre => {
+    const t = await xlsxTexto(zip, nombre);
+    if(t === null) throw falta("falta «" + nombre + "»");
+    try{ return xlsxXml(t); }catch(e){ throw falta("«" + nombre + "» no se pudo leer"); }
+  };
+  const meta = await xml("xl/metadata.xml");
+  const tipos = xlsxTag(meta, "metadataType").map(t => t.getAttribute("name"));
+  const fut = xlsxTag(meta, "futureMetadata").find(f => f.getAttribute("name") === "XLRICHVALUE");
+  const val = xlsxTag(meta, "valueMetadata")[0];
+  if(!fut || !val) throw falta("«xl/metadata.xml» no tiene los bloques XLRICHVALUE");
+  const futBk = xlsxTag(fut, "bk").map(b => { const r = xlsxTag(b, "rvb")[0]; return r ? Number(r.getAttribute("i")) : NaN; });
+  const valBk = xlsxTag(val, "bk").map(b => xlsxTag(b, "rc")[0] || null);
+  const estructuras = xlsxTag(await xml("xl/richData/rdrichvaluestructure.xml"), "s")
+    .map(s => xlsxTag(s, "k").map(k => k.getAttribute("n")));
+  const valores = xlsxTag(await xml("xl/richData/rdrichvalue.xml"), "rv")
+    .map(rv => ({s: Number(rv.getAttribute("s")), v: xlsxTag(rv, "v").map(v => v.textContent)}));
+  const rels = xlsxTag(await xml("xl/richData/richValueRel.xml"), "rel")
+    .map(r => (Array.from(r.attributes).find(a => a.localName === "id") || {}).value);
+  const destinos = {};
+  xlsxTag(await xml("xl/richData/_rels/richValueRel.xml.rels"), "Relationship")
+    .forEach(r => { destinos[r.getAttribute("Id")] = r.getAttribute("Target"); });
+  const entero = x => Number.isInteger(x) && x >= 0;
+  return vm => {
+    const rc = valBk[vm - 1];
+    if(!rc) throw falta("la celda apunta al bloque " + vm + " de valueMetadata, que no está en «xl/metadata.xml»");
+    if(tipos[Number(rc.getAttribute("t")) - 1] !== "XLRICHVALUE")
+      throw falta("el bloque " + vm + " de valueMetadata no es de tipo XLRICHVALUE");
+    const k = futBk[Number(rc.getAttribute("v"))];
+    const rv = entero(k) ? valores[k] : null;
+    if(!rv) throw falta("el bloque " + vm + " no lleva a ningún valor de «xl/richData/rdrichvalue.xml»");
+    const pos = (estructuras[rv.s] || []).indexOf("_rvRel:LocalImageIdentifier");
+    if(pos < 0) throw falta("el valor no es una imagen (su estructura no tiene _rvRel:LocalImageIdentifier)");
+    const iRel = Number(String(rv.v[pos] ?? "").trim() || NaN);
+    const id = entero(iRel) ? rels[iRel] : null;
+    if(!id) throw falta("el valor no lleva a ninguna relación de «xl/richData/richValueRel.xml»");
+    const d = destinos[id];
+    if(!d) throw falta("la relación " + id + " no está en «xl/richData/_rels/richValueRel.xml.rels»");
+    const ruta = xlsxRutaRel("xl/richData", d);
+    if(!zip[ruta]) throw falta("la imagen «" + ruta + "» no está en el archivo (carpeta xl/media)");
+    return ruta;
+  };
+}
+// Lee las filas: {prod: {código: [ruta de la imagen en el ZIP | null, ×3]}}. No cambia nada.
+async function analizarFotos(x){
+  const {filas, zip} = x;
+  const esCab = c => normalizarEncabezado(c) === FOT_COLS.codigo[0];
+  if(filas.some(f => f.celdas.some(c => normalizarEncabezado(c) === CAT_COLS.costo[0])))
+    return {error: "Este archivo es el Catálogo de DICOSA (con sus listas de precios): no es el Catálogo de ventas con fotos. "+
+      "Ese se importa en la tarjeta «Importar Catálogo DICOSA»."};
+  const u = ubicarColumnas(filas, FOT_COLS, FOT_NOMBRES);
+  if(u.error) return {error: u.error};
+  if(filas.find(f => f.celdas.some(esCab)).n !== 1)
+    return {error: "Los encabezados del Catálogo de ventas deben estar en la fila 1."};
+  if(!u.datos.some(f => f.vm.some(Boolean)))
+    return {error: "El archivo no trae imágenes en celda: las columnas Imagen 1, Imagen 2 e Imagen 3 vienen vacías, "+
+      "o las imágenes están sueltas sobre la hoja y no dentro de las celdas."};
+  let imagenDe;
+  try{ imagenDe = await fotCadena(zip); }catch(e){ return {error: e.message}; }
+  const prod = {};
+  let sinCodigo = 0;
+  for(const f of u.datos){
+    const codigo = codigoMaterial(f.celdas[u.idx.codigo]);
+    if(!codigo){ sinCodigo++; continue; }
+    if(prod[codigo]) return {error: "Fila " + f.n + ": código repetido en el archivo (código " + codigo + ")."};
+    try{ prod[codigo] = ["img1","img2","img3"].map(k => f.vm[u.idx[k]] ? imagenDe(f.vm[u.idx[k]]) : null); }
+    catch(e){ return {error: "Fila " + f.n + " (código " + codigo + "). " + e.message}; }
+  }
+  return {filas: u.datos.length, sinCodigo, prod};
+}
+// Reduce una imagen: lado mayor a 1600 px como máximo (sin agrandar), fondo blanco, JPEG.
+async function fotoReducir(bytes, tipo){
+  const bmp = await createImageBitmap(new Blob([bytes], tipo ? {type: tipo} : {}));
+  const mayor = Math.max(bmp.width, bmp.height), k = mayor > FOT_LADO ? FOT_LADO / mayor : 1;
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(bmp.width * k));
+  c.height = Math.max(1, Math.round(bmp.height * k));
+  const g = c.getContext("2d");
+  g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
+  g.drawImage(bmp, 0, 0, c.width, c.height);
+  if(bmp.close) bmp.close();
+  const blob = await new Promise(ok => c.toBlob(ok, "image/jpeg", FOT_CALIDAD));
+  if(!blob) throw new Error("no se pudo convertir la imagen");
+  return blob;
+}
+async function fotoHuella(bytes){
+  const d = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return Array.from(d.slice(0, 8), x => x.toString(16).padStart(2, "0")).join("");
+}
+// Convierte, una sola vez cada una, las imágenes que usan los productos que existen.
+// {ruta en el ZIP: {blob, h}} o {error:true} si esa imagen no se pudo leer.
+async function fotPreparar(a, zip, avance){
+  const prep = {};
+  const rutas = [...new Set(Object.keys(a.prod)
+    .filter(c => FOT_CODIGO.test(c) && D.skus.some(s => s.codigo === c)).flatMap(c => a.prod[c]).filter(Boolean))];
+  let i = 0;
+  for(const ruta of rutas){
+    if(avance) avance(++i, rutas.length);
+    try{
+      const bytes = await xlsxBytes(zip, ruta);
+      const h = await fotoHuella(bytes);
+      const blob = await fotoReducir(bytes, FOT_TIPOS[(ruta.split(".").pop() || "").toLowerCase()] || "");
+      prep[ruta] = {blob, h};
+    }catch(e){ prep[ruta] = {error: true}; }
+  }
+  return prep;
+}
+// Qué pasaría con cada foto, con los datos de ahora. No cambia nada.
+function fotPlan(a, prep){
+  const p = {subir:[], iguales:[], quitan:[], ilegibles:[], noExisten:[], noAdmitidos:[], conFoto:[]};
+  Object.keys(a.prod).sort().forEach(c => {
+    const s = D.skus.find(x => x.codigo === c);
+    if(!s){ p.noExisten.push(c); return; }
+    if(!FOT_CODIGO.test(c)){ p.noAdmitidos.push(c); return; }
+    const actuales = fotosDe(s);
+    let alguna = false;
+    a.prod[c].forEach((media, i) => {
+      const n = i + 1, tiene = actuales.find(f => f.n === n);
+      if(!media){ if(tiene) p.quitan.push({codigo:c, n, ruta:tiene.ruta}); return; }
+      const lista = prep[media];
+      // Una imagen que no se pudo leer no sube ni quita nada: la foto que hubiera se queda.
+      if(!lista || lista.error){ p.ilegibles.push({codigo:c, n}); if(tiene) alguna = true; return; }
+      alguna = true;
+      // Igual: misma huella y ya en la ruta con huella (una de antes de R1 se vuelve a subir).
+      if(tiene && tiene.h === lista.h && tiene.ruta === fotRuta(c, n, lista.h)) p.iguales.push({codigo:c, n});
+      else p.subir.push({codigo:c, n, media, h:lista.h});
+    });
+    if(alguna) p.conFoto.push(c);
+  });
+  // Productos que se pueden mostrar y quedarían sin ninguna foto.
+  const con = new Set(p.conFoto), tocados = new Set(Object.keys(a.prod).filter(c => !p.noAdmitidos.includes(c)));
+  p.sinFoto = mosProductos().filter(s => tocados.has(s.codigo) ? !con.has(s.codigo) : !fotosDe(s).length)
+    .map(s => ({codigo:s.codigo, nombre:s.nombre})).sort((x, y) => x.codigo.localeCompare(y.codigo));
+  p.imagenes = new Set(Object.values(a.prod).flat().filter(Boolean)).size;
+  p.peso = p.subir.reduce((t, x) => t + prep[x.media].blob.size, 0);
+  return p;
+}
+const fotFirma = p => nubeFirma({subir: p.subir.map(x => [x.codigo, x.n, x.h]), quitan: p.quitan, iguales: p.iguales,
+  ilegibles: p.ilegibles, noExisten: p.noExisten});
+// Lo que tiene que estar listo antes de calcular: rol, sesión y sincronización al día.
+async function fotListo(){
+  if(!puedeImportar("fotos")) return "Tu rol no importa las fotos.";
+  if(typeof nubeActiva !== "function" || !nubeActiva())
+    return "Las fotos se guardan en la base compartida: entra con tu usuario para importarlas.";
+  if(NUBE.ocupado) return "Se está sincronizando. Intenta de nuevo en unos segundos.";
+  await nubeSincronizar(true);
+  if(NUBE.estado !== "en_linea" || NUBE.pendiente)
+    return "No se pudo dejar la sincronización al día. Revisa la conexión e intenta de nuevo.";
+  return "";
+}
+const fotMal = t => { $("#fotMsg").innerHTML = `<div class="aviso a-mal">${esc(t)}${
+  /No se cambió nada\.\s*$/.test(t) ? "" : " No se cambió nada."}</div>`; };
+const fotInfo = t => { $("#fotMsg").innerHTML = `<div class="aviso a-info">${esc(t)}</div>`; };
+
+let FOT = null;
+$("#fotArchivo").onchange = async function(){
+  const f = this.files[0]; this.value = "";
+  FOT = null; $("#fotPrevia").innerHTML = ""; $("#fotMsg").innerHTML = "";
+  if(!f) return;
+  const pre = await fotListo();
+  if(pre) return fotMal(pre);
+  let x;
+  try{ x = await leerXlsxFotos(f); }catch(e){ return fotMal(e.message); }
+  const a = await analizarFotos(x);
+  if(a.error) return fotMal(a.error);
+  const prep = await fotPreparar(a, x.zip, (i, n) => fotInfo("Leyendo las imágenes del archivo: " + i + " de " + n + "…"));
+  $("#fotMsg").innerHTML = "";
+  FOT = {a, prep, archivo: f.name};
+  pintarPreviaFotos();
+};
+function fotCasillas(){
+  const c = [$("#fotCasilla"), $("#fotCasillaQuitan")].filter(Boolean);
+  if($("#fotConfirmar")) $("#fotConfirmar").disabled = !c.length || c.some(x => !x.checked);
+}
+function pintarPreviaFotos(){
+  const {a, prep, archivo} = FOT, p = fotPlan(a, prep);
+  FOT.firma = fotFirma(p);
+  const lista = (id, titulo, items) => items.length ? `<p class="mini" style="margin:8px 0 2px"><strong>${titulo}</strong></p>
+    <div class="mini" id="${id}" style="max-height:110px;overflow:auto;border:1px solid var(--borde);border-radius:6px;padding:6px 8px">${
+      items.map(esc).join("<br>")}</div>` : "";
+  $("#fotPrevia").innerHTML = `<div class="aviso a-info"><strong>Vista previa: todavía no cambió nada.</strong>
+    <br>Archivo ${esc(archivo)} · filas <strong>${a.filas}</strong>
+    · sin código (se saltan) <strong>${a.sinCodigo}</strong>
+    · imágenes distintas en el archivo <strong id="fotImagenes">${p.imagenes}</strong>
+    <br>Productos con foto <strong id="fotConFoto">${p.conFoto.length}</strong>
+    · códigos que no existen en la base <strong id="fotNoExisten">${p.noExisten.length}</strong>
+    · productos del catálogo que quedan sin foto <strong id="fotSinFoto">${p.sinFoto.length}</strong>
+    <br>Fotos que se suben <strong id="fotSubir">${p.subir.length}</strong>
+    (${(p.peso / 1048576).toFixed(1)} MB ya reducidas)
+    · ya están iguales <strong id="fotIguales">${p.iguales.length}</strong>
+    · se quitan <strong id="fotQuitan">${p.quitan.length}</strong>
+    · imágenes que no se pudieron leer <strong id="fotIlegibles">${p.ilegibles.length}</strong>${
+      p.noAdmitidos.length ? ` · códigos con caracteres no admitidos <strong id="fotNoAdmitidos">${p.noAdmitidos.length}</strong>` : ""}</div>
+    ${lista("fotListaNoExisten", "Códigos del archivo que no existen en la base (sus fotos no se suben):", p.noExisten)}
+    ${lista("fotListaNoAdmitidos", "Códigos con caracteres que el depósito no admite (solo letras, números, guion y guion bajo):", p.noAdmitidos)}
+    ${lista("fotListaIlegibles", "Imágenes que no se pudieron leer (esa foto queda como estaba):", p.ilegibles.map(x => x.codigo + ", imagen " + x.n))}
+    ${lista("fotListaQuitan", "Fotos que se quitan porque la celda viene vacía:", p.quitan.map(x => x.codigo + ", imagen " + x.n))}
+    ${lista("fotListaSinFoto", "Productos del catálogo que quedan sin foto:", p.sinFoto.map(x => x.codigo + " · " + x.nombre))}
+    <p class="mini">Cada foto se guarda como JPEG de ${FOT_LADO} px de lado mayor como máximo. Un producto que viene en el archivo
+      queda con las fotos del archivo; uno que no viene conserva las suyas.</p>
+    <p><label><input type="checkbox" id="fotCasilla" style="width:auto" onchange="fotCasillas()"> Revisé la vista previa:
+      se suben ${p.subir.length} foto(s) de ${p.conFoto.length} producto(s)</label></p>
+    ${p.quitan.length ? `<p><label><input type="checkbox" id="fotCasillaQuitan" style="width:auto" onchange="fotCasillas()">
+      Entiendo que se quitan ${p.quitan.length} foto(s) que hoy tienen esos productos</label></p>` : ""}
+    <button class="b" id="fotConfirmar" onclick="confirmarFotos()" disabled>Confirmar importación de fotos</button>
+    <button class="s" onclick="FOT=null;$('#fotPrevia').innerHTML=''">Cancelar</button>`;
+}
+async function confirmarFotos(){
+  if(!FOT) return;
+  const casilla = $("#fotCasilla"), casillaQuitan = $("#fotCasillaQuitan");
+  if(!casilla || !casilla.checked) return;
+  if(casillaQuitan && !casillaQuitan.checked) return;
+  const pre = await fotListo();
+  if(pre) return fotMal(pre);
+  const {prep} = FOT, p = fotPlan(FOT.a, prep);
+  // Se recalcula con lo que hay ahora (la sincronización pudo traer cambios).
+  if(fotFirma(p) !== FOT.firma){
+    pintarPreviaFotos();
+    return fotMal("Los datos cambiaron al sincronizar. Revisa la vista previa y confirma de nuevo.");
+  }
+  FOT = null;
+  $("#fotPrevia").innerHTML = "";
+  const producto = c => D.skus.find(s => s.codigo === c);
+  let subidas = 0, quitadas = 0, viejas = 0;
+  try{
+    for(const t of p.subir){
+      fotInfo("Subiendo fotos: " + (subidas + 1) + " de " + p.subir.length + "… No cierres esta pantalla.");
+      const ruta = fotRuta(t.codigo, t.n, t.h);
+      // Siempre a una ruta nueva: primero se sube, después el producto apunta a ella.
+      await nubeStorage("POST", ruta, prep[t.media].blob);
+      const s = producto(t.codigo), antes = fotosDe(s).find(f => f.n === t.n);
+      s.fotos = fotosDe(s).filter(f => f.n !== t.n).concat({n:t.n, ruta, h:t.h}).sort((x, y) => x.n - y.n);
+      guardarLocal();
+      subidas++;
+      // Y al final se borra la ruta vieja. Si no se puede, no es error de la importación:
+      // el producto ya apunta a la nueva y el resultado dice cuántas quedaron.
+      if(antes && antes.ruta && antes.ruta !== ruta){
+        try{ await nubeStorage("DELETE", antes.ruta); }catch(e){ viejas++; }
+      }
+    }
+    for(const t of p.quitan){
+      fotInfo("Quitando fotos: " + (quitadas + 1) + " de " + p.quitan.length + "…");
+      await nubeStorage("DELETE", t.ruta);
+      const s = producto(t.codigo), quedan = fotosDe(s).filter(f => f.n !== t.n);
+      if(quedan.length) s.fotos = quedan; else delete s.fotos;
+      guardarLocal();
+      quitadas++;
+    }
+  }catch(e){
+    guardar();
+    $("#fotMsg").innerHTML = `<div class="aviso a-mal"><strong>Se detuvo: se subieron ${subidas} de ${p.subir.length} fotos.</strong>
+      ${esc(String(e.message || e))}<br>Lo que ya subió queda guardado. Vuelve a cargar el mismo archivo: solo se suben las que faltan.</div>`;
+    return;
+  }
+  guardar();
+  $("#fotMsg").innerHTML = `<div class="aviso a-ok"><strong>Fotos importadas.</strong> ${subidas} foto(s) subida(s),
+    ${p.iguales.length} ya estaban iguales, ${quitadas} quitada(s). ${p.conFoto.length} producto(s) con foto.
+    ${p.noExisten.length ? p.noExisten.length + " código(s) del archivo no existen en la base. " : ""}
+    ${p.ilegibles.length ? p.ilegibles.length + " imagen(es) no se pudieron leer. " : ""}
+    ${viejas ? viejas + " foto(s) vieja(s) quedaron en el depósito (no se pudieron borrar; los productos ya usan las nuevas). " : ""}
+    Se ven en «Mostrar catálogo».</div>`;
+}
+
+/* ------------------------------------------------------- MÉDICOS (K4a)
+   Registro de médicos del equipo comercial: D.medicos, una fila por médico en la
+   tabla medicos de la base (sql/campo-1g.sql). El rol pedidos ve y edita solo
+   los que registró (lo decide la base); admin y coordinador ven todos, los
+   editan, los borran y bajan el CSV. Quién registró y cuándo los pone la base
+   (D.medicos_quien, que nunca se sube). La ubicación es opcional y se toma una
+   sola vez, al tocar el botón, estando en el consultorio: nunca sola ni en
+   segundo plano. Las visitas (Fase 2) serán otra tabla que apunte a medicos.id;
+   queda reservado el campo cliente_id para enlazar un médico con un cliente. */
+const ABASTO = {propio:"Stock propio", farmacia:"Farmacia", ambos:"Ambos (stock propio y farmacia)"};
+let MED_GPS = null;      // ubicación de la ficha abierta
+function veTodosMedicos(){ return ["local","admin","coordinador"].includes(rolPantalla()); }
+function medQuien(id){ return (D.medicos_quien || {})[id] || {}; }
+function pintarMedicos(){
+  const q = sinTildes(($("#filtroMed").value || "").trim());
+  const todos = D.medicos || [];
+  const r = todos.filter(m => !q || [m.institucion, m.nombre, m.especialidad].some(x => sinTildes(x).includes(q)))
+    .sort((a, b) => String(a.institucion).localeCompare(String(b.institucion), "es") || String(a.nombre).localeCompare(String(b.nombre), "es"));
+  const jefe = veTodosMedicos(), conQuien = puedeAsignar();
+  $("#medCsv").style.display = jefe ? "" : "none";
+  $("#tablaMedicos").innerHTML = r.length ? `<p class="mini">${r.length} de ${todos.length} médico(s).</p>
+    <div class="tabla-wrap"><table>
+    <thead><tr><th>Institución</th><th>Médico</th><th>Especialidad</th><th>Horario para la visita</th><th>Horario en la clínica</th>
+      <th>Abastecimiento</th><th>Ubicación</th>${conQuien ? "<th>Registró</th>" : ""}<th class="noprint"></th></tr></thead><tbody>
+    ${r.map(m => {
+      const w = medQuien(m.id), g = m.gps;
+      return `<tr><td><strong>${esc(m.institucion)}</strong>${m.otros_lugares ? `<br><span class="mini">También atiende en: ${esc(m.otros_lugares)}</span>` : ""}</td>
+        <td>${esc(m.nombre)}</td><td>${esc(m.especialidad || "—")}</td>
+        <td>${esc(m.horario_visita || "—")}</td><td>${esc(m.horario_clinica || "—")}</td>
+        <td>${esc(ABASTO[m.abastecimiento] || "—")}${m.farmacia ? `<br><span class="mini">${esc(m.farmacia)}</span>` : ""}</td>
+        <td>${g ? `<span class="pill p-ok">± ${esc(String(g.precision_m))} m</span>` : '<span class="pill p-gris">sin ubicación</span>'}</td>
+        ${conQuien ? `<td>${esc(nombreEquipo(w.p) || w.p || "sin subir")}${w.c ? `<br><span class="mini">${esc(fecha(w.c))}</span>` : ""}</td>` : ""}
+        <td class="noprint" style="white-space:nowrap"><button class="s" data-id="${esc(m.id)}" onclick="abrirMedico(this.dataset.id)">Editar</button>
+          ${jefe ? `<button class="s d" data-id="${esc(m.id)}" onclick="borrarMedico(this.dataset.id)">Borrar</button>` : ""}</td></tr>`;
+    }).join("")}</tbody></table></div>`
+    : `<div class="vacio">${todos.length ? "Ningún médico coincide con la búsqueda." : "Todavía no hay médicos registrados."}</div>`;
+}
+$("#filtroMed").oninput = pintarMedicos;
+function abrirMedico(id){
+  const m = id ? (D.medicos || []).find(x => x.id === id) : null;
+  if(id && !m) return;
+  MED_GPS = m && m.gps ? {...m.gps} : null;
+  const campo = (rotulo, idc, valor, extra) => `<div><label>${rotulo}</label>
+    <input id="${idc}" value="${esc(valor || "")}" style="font-size:16px;padding:11px"${extra || ""}></div>`;
+  modal(`<h3 style="margin-top:0">${m ? "Editar médico" : "Médico nuevo"}</h3>
+    <div class="grid g2" style="margin:14px 0">
+      ${campo("Institución (consultorio o razón social) *", "mInst", m?.institucion)}
+      ${campo("Nombre del médico *", "mNom", m?.nombre)}
+      ${campo("Especialidad", "mEsp", m?.especialidad)}
+      ${campo("Horario preferido para la visita", "mHVis", m?.horario_visita, ' placeholder="Ej: martes por la tarde"')}
+      ${campo("Horario en la clínica", "mHCli", m?.horario_clinica)}
+      ${campo("Otras clínicas o lugares donde atiende", "mOtros", m?.otros_lugares)}
+      <div><label>Abastecimiento</label><select id="mAbasto" onchange="medAbasto()" style="font-size:16px;padding:11px">
+        <option value="">Sin dato</option>
+        ${Object.entries(ABASTO).map(([k, t]) => `<option value="${k}"${m?.abastecimiento === k ? " selected" : ""}>${t}</option>`).join("")}
+      </select></div>
+      <div id="mFarmCaja">${campo("Nombre de la farmacia", "mFarm", m?.farmacia)}</div>
+    </div>
+    <hr>
+    <label>Ubicación del consultorio (opcional)</label>
+    <div class="fila" style="align-items:center">
+      <div id="mGpsTxt"></div>
+      <div class="auto"><button type="button" class="s grande" id="mGpsBtn" onclick="medTomarUbicacion()">Tomar ubicación (estando en el consultorio)</button></div>
+      <div class="auto"><button type="button" class="s grande" id="mGpsQuitar" onclick="medQuitarUbicacion()">Quitar</button></div>
+    </div>
+    <div class="mini" id="mGpsMsg" style="margin-top:6px"></div>
+    <div id="mErr"></div><hr>
+    <button class="b grande" data-id="${esc(id || "")}" onclick="guardarMedico(this.dataset.id)">Guardar</button>
+    <button class="s grande" onclick="cerrarModal()">Cancelar</button>`);
+  medAbasto();
+  medPintarGps();
+}
+// El nombre de la farmacia solo se pide con farmacia o ambos.
+function medAbasto(){
+  $("#mFarmCaja").style.display = ["farmacia","ambos"].includes($("#mAbasto").value) ? "" : "none";
+}
+function medPintarGps(){
+  const g = MED_GPS;
+  $("#mGpsTxt").innerHTML = g ? `<strong>${esc(String(g.lat))}, ${esc(String(g.lon))}</strong> · ± ${esc(String(g.precision_m))} m
+    <span class="mini">(tomada el ${esc(fecha(g.tomada))})</span>` : '<span class="mini">Sin ubicación.</span>';
+  $("#mGpsQuitar").style.display = g ? "" : "none";
+  $("#mGpsBtn").textContent = g ? "Tomar de nuevo" : "Tomar ubicación (estando en el consultorio)";
+}
+function medQuitarUbicacion(){ MED_GPS = null; $("#mGpsMsg").textContent = ""; medPintarGps(); }
+function medTomarUbicacion(){
+  const msg = $("#mGpsMsg");
+  if(!navigator.geolocation){ msg.textContent = "Este navegador no da la ubicación. El médico se puede guardar sin ella."; return; }
+  msg.textContent = "Buscando la ubicación… (hasta 15 segundos)";
+  navigator.geolocation.getCurrentPosition(p => {
+    if(!$("#mGpsTxt")) return;      // la ficha ya se cerró
+    const r6 = x => Math.round(x * 1e6) / 1e6;
+    MED_GPS = {lat: r6(p.coords.latitude), lon: r6(p.coords.longitude),
+               precision_m: Math.round(p.coords.accuracy), tomada: new Date().toISOString()};
+    $("#mGpsMsg").textContent = MED_GPS.precision_m > 100
+      ? "La precisión es baja (dentro de un edificio suele pasar). Puedes tomarla de nuevo cerca de una ventana o afuera." : "";
+    medPintarGps();
+  }, e => {
+    if(!$("#mGpsMsg")) return;
+    $("#mGpsMsg").textContent = e && e.code === 1
+      ? "No hay permiso de ubicación para esta página. El médico se puede guardar sin ella. Para activarlo: en el navegador, "+
+        "ajustes del sitio (el candado junto a la dirección) → Ubicación → Permitir, y vuelve a tocar el botón."
+      : "No se pudo obtener la ubicación (señal débil o tiempo agotado). El médico se puede guardar sin ella e intentarlo después.";
+  }, {enableHighAccuracy: true, timeout: 15000, maximumAge: 0});
+}
+function guardarMedico(id){
+  const v = k => ($("#" + k).value || "").trim();
+  const institucion = v("mInst"), nombre = v("mNom"), ab = $("#mAbasto").value;
+  if(!institucion || !nombre){ $("#mErr").innerHTML =
+    `<div class="aviso a-mal">La institución y el nombre del médico son obligatorios.</div>`; return; }
+  const datos = {institucion, nombre, especialidad: v("mEsp"), horario_visita: v("mHVis"), horario_clinica: v("mHCli"),
+    otros_lugares: v("mOtros"), abastecimiento: ABASTO[ab] ? ab : "",
+    farmacia: ["farmacia","ambos"].includes(ab) ? v("mFarm") : "", gps: MED_GPS ? {...MED_GPS} : null};
+  if(id){
+    const m = D.medicos.find(x => x.id === id);
+    if(!m) return cerrarModal();
+    Object.assign(m, datos);
+  }else{
+    D.medicos.push({id: (crypto.randomUUID ? crypto.randomUUID() : uid()), ...datos, registrado: new Date().toISOString()});
+  }
+  guardar(); cerrarModal(); pintarMedicos();
+}
+// Borrar: solo quien ve todos (admin y coordinador; la base tampoco deja a otro rol).
+function borrarMedico(id){
+  if(!veTodosMedicos()) return;
+  const m = (D.medicos || []).find(x => x.id === id);
+  if(!m) return;
+  if(!confirm("¿Borrar a " + m.nombre + " (" + m.institucion + ") del registro de médicos?\n\nSe borra para todo el equipo.")) return;
+  D.medicos = D.medicos.filter(x => x.id !== id);
+  if(D.medicos_quien) delete D.medicos_quien[id];
+  guardar(); pintarMedicos();
+}
+function exportarMedicosCSV(){
+  if(!veTodosMedicos()) return;
+  const f = [["institucion","medico","especialidad","horario_visita","horario_clinica","otros_lugares","abastecimiento",
+    "farmacia","latitud","longitud","precision_m","ubicacion_tomada","registrado_por","registrado_en"]];
+  (D.medicos || []).forEach(m => {
+    const g = m.gps || {}, w = medQuien(m.id);
+    f.push([m.institucion, m.nombre, m.especialidad, m.horario_visita, m.horario_clinica, m.otros_lugares, m.abastecimiento,
+      m.farmacia, g.lat ?? "", g.lon ?? "", g.precision_m ?? "", g.tomada ?? "", w.p ?? "", w.c ?? m.registrado ?? ""]);
+  });
+  bajar("medicos-" + hoy() + ".csv", csv(f));
+}
+
 /* ------------------------------------------------------- RESPALDO Y CSV */
 function bajar(nombre, contenido, tipo){
   const b = new Blob(["﻿"+contenido], {type:tipo||"text/csv;charset=utf-8"});
@@ -4350,19 +5367,26 @@ function exportarCatalogoCSV(){
   // Sin marca (fase 1b). costo es en lempiras: costo_usd × tipo de cambio si hay
   // precio DICOSA en dólares. Las columnas con IVA son informativas (D4a).
   const tc = tcVigente(), vacio = x => (x === null || x === undefined || x === "") ? "" : x;
+  // Fase 1e: con el Catálogo v2 el costo ya viene en lempiras (costo_con_iva = costo × (1 + IVA))
+  // y hay tres listas de precios; «precio» es el de cliente particular. Todo por inner.
   const f = [["codigo","nombre","categoria","unidad","contenido","peso_kg","costo_usd","iva","costo_usd_con_iva",
     "tipo_cambio","tipo_cambio_fecha","costo","costo_con_iva","precio",
     "densidad_l_kg","canal","existencia","comprometido","esperando_pago","disponible","minimo","restringido",
     "codigo_barras","codigo_dkt","categoria_dicosa","subcategoria_dicosa","min_pedido_unidades","min_pedido_cajas",
-    "catalogo_importado"]];
-  D.skus.forEach(s=>{ const c=comprometido(s.codigo), co=costoDe(s), ci=costoConIva(s), d=s.dicosa||{};
+    "catalogo_importado","precio_particular","precio_cadena","precio_subdistribuidor","registro_sanitario",
+    "peso_inner_kg","largo_inner","ancho_inner","alto_inner","volumen_inner","cyp","unidades_inner","fuera_catalogo"]];
+  D.skus.forEach(s=>{ const c=comprometido(s.codigo), co=costoDe(s), ci=costoConIva(s), d=s.dicosa||{}, pr=d.precios||{};
+    const conIva = ci ? vacio(ci.l_iva) : (tieneListas(s) && hayCosto(co) ? r4(co * (1 + (Number(d.iva)||0))) : "");
     f.push([s.codigo,s.nombre,s.categoria,s.unidad,s.contenido,s.peso,
     ci?ci.usd:"", d.iva===undefined?"":d.iva, ci?ci.usd_iva:"",
     ci&&tc?tc.valor:"", ci&&tc?tc.fecha:"",
-    hayCosto(co)?r4(co):"", ci?vacio(ci.l_iva):"", s.precio,(s.peso?(s.precio/s.peso).toFixed(1):0),canalDe(s),
+    hayCosto(co)?r4(co):"", conIva, s.precio,(s.peso?(s.precio/s.peso).toFixed(1):0),canalDe(s),
     existencia(s),c.total,c.esperandoPago,disponible(s),s.minimo,s.restringido?"SI":"NO",
     vacio(d.barras),vacio(d.dkt),vacio(d.categoria),vacio(d.subcategoria),
-    vacio(d.min_unidades),vacio(d.min_cajas),vacio(d.importado)]);});
+    vacio(d.min_unidades),vacio(d.min_cajas),vacio(d.importado),
+    vacio(pr.particular),vacio(pr.cadena),vacio(pr.subdistribuidor),vacio(d.registro),
+    vacio(d.peso_inner),vacio(d.largo),vacio(d.ancho),vacio(d.alto),vacio(d.volumen),vacio(d.cyp),
+    factorInner(s),vacio(s.fuera_catalogo)]);});
   bajar("catalogo-"+hoy()+".csv", csv(f));
 }
 function exportarTodoCSV(){ exportarPedidosCSV(); exportarClientesCSV(); exportarCatalogoCSV(); }
@@ -4429,26 +5453,28 @@ const ROLES = ["admin","coordinador","administrativo","despacho","pedidos"];
 // Paneles de cada rol: "e" se usa completo, "l" solo lectura. Ajustes se abre
 // siempre desde el indicador de conexión; ahí cada rol ve solo sus tarjetas.
 const ROL_PANELES = {
+  // Fase 1g: Mostrar catálogo y Médicos, para admin, coordinador y pedidos (P3a).
   admin:          {inicio:"e", nuevo:"e", despacho:"e", pedidos:"e", clientes:"e",
-                   catalogo:"e", inventario:"e", reposicion:"e", ajustes:"e"},
+                   catalogo:"e", inventario:"e", reposicion:"e", mostrar:"e", medicos:"e", ajustes:"e"},
   coordinador:    {inicio:"e", nuevo:"e", despacho:"e", pedidos:"e", clientes:"e",
-                   catalogo:"e", inventario:"e", reposicion:"e"},
+                   catalogo:"e", inventario:"e", reposicion:"e", mostrar:"e", medicos:"e"},
   administrativo: {catalogo:"e", inventario:"e"},
   despacho:       {despacho:"e", pedidos:"e"},
   pedidos:        {inicio:"e", nuevo:"e", clientes:"e", reposicion:"e",
-                   despacho:"l", pedidos:"l", catalogo:"l", inventario:"l"},
+                   despacho:"l", pedidos:"l", catalogo:"l", inventario:"l", mostrar:"e", medicos:"e"},
   sin_rol:        {}
 };
 const ROL_ENTRADA = {admin:"inicio", coordinador:"inicio", administrativo:"catalogo",
                      despacho:"despacho", pedidos:"inicio", sin_rol:"ajustes"};
 // Tablas que cada rol sube. Lo demás solo se baja.
 const ROL_ESCRIBE = {
-  admin:          ["skus","clientes","pedidos","movimientos","avisos","config","bodegas","inv_detalle"],
-  coordinador:    ["skus","clientes","pedidos","movimientos","avisos","bodegas","inv_detalle"],
+  admin:          ["skus","clientes","pedidos","movimientos","avisos","config","bodegas","inv_detalle","medicos"],
+  coordinador:    ["skus","clientes","pedidos","movimientos","avisos","bodegas","inv_detalle","medicos"],
   administrativo: ["skus","movimientos","avisos","inv_detalle"],
   despacho:       ["pedidos","movimientos","avisos"],
   // 162 (fase A): pedidos no crea movimientos (la base tampoco lo deja).
-  pedidos:        ["clientes","pedidos","avisos"]
+  // Fase 1g: pedidos registra médicos (la base solo le deja los suyos).
+  pedidos:        ["clientes","pedidos","avisos","medicos"]
 };
 // 162 (fase A): qué movimientos sube cada rol, la misma regla que la base
 // (sql/acceso-a.sql). Una sola fila prohibida haría fallar todo el envío.
@@ -4467,7 +5493,9 @@ const COLECCIONES = [
   {t:"movimientos", campo:"movimientos", clave:"id",     nombre:"movimientos"},
   {t:"avisos",      campo:"avisos",      clave:"id",     nombre:"avisos"},
   {t:"bodegas",     campo:"bodegas",     clave:"cod_unico", nombre:"bodegas"},
-  {t:"inv_detalle", campo:"inv_detalle", clave:"id",     nombre:"detalle de inventario"}
+  {t:"inv_detalle", campo:"inv_detalle", clave:"id",     nombre:"detalle de inventario"},
+  // Fase 1g: registro de médicos (sql/campo-1g.sql).
+  {t:"medicos",     campo:"medicos",     clave:"id",     nombre:"médicos"}
 ];
 
 const NUBE = {
@@ -4556,7 +5584,9 @@ function nubeSinCosto(item){ const {costo, costo_usd, ...resto} = item; return r
 // pedidos_costos, que solo leen admin y coordinador. Igual que con los productos,
 // la firma del pedido se toma sin ellos y el espejo guarda sus valores (no la
 // firma), para volver a ponerlos cuando el pedido baja sin ellos.
-const PED_COSTOS = ["costo_prod","margen","contribucion_est","contribucion_real","tipo_cambio"];
+// B1: por_revisar ("perdida" o "sin_costo") lo pone solo la base cuando calcula
+// el costo; viaja como un costo más, así que nunca queda en un rol sin costos.
+const PED_COSTOS = ["costo_prod","margen","contribucion_est","contribucion_real","tipo_cambio","por_revisar"];
 const LIN_COSTOS = ["costo","costo_usd","tc"];
 function nubePedidoSinCosto(p){
   const o = {...p};
@@ -4589,6 +5619,91 @@ function nubePonerCostosPedido(p, c){
 }
 function nubeFirmaFila(t, item){
   return nubeFirma(t === "skus" ? nubeSinCosto(item) : t === "pedidos" ? nubePedidoSinCosto(item) : item);
+}
+
+/* ------------------------------------------- filas que la base rechazó (186)
+   Si la base rechaza una fila (por ejemplo, un cliente que ya no es de quien lo
+   cambió), esa fila queda anotada en D.sin_subir = {tabla: {llave: {firma,
+   motivo, fecha}}}, solo en este navegador. Las demás suben y la bajada sigue.
+   Mientras esté anotada: no se reenvía sola (solo si cambia o con Reintentar),
+   y lo que baje de la base no la pisa ni la borra. Se quita cuando sube, cuando
+   vuelve a quedar igual que la base o cuando alguien pulsa Descartar. */
+const NUBE_RECHAZO = [400, 403, 409, 422];
+const nubeEsRechazo = e => !!e && NUBE_RECHAZO.includes(e.status);
+function nubeMarcada(t, k){ return ((D.sin_subir || {})[t] || {})[String(k)] || null; }
+function nubeMarcar(t, k, firma, e){
+  D.sin_subir = D.sin_subir || {};
+  (D.sin_subir[t] = D.sin_subir[t] || {})[String(k)] =
+    {firma, motivo: String((e && e.message) || e || "").slice(0, 200), fecha: new Date().toISOString()};
+}
+function nubeDesmarcar(t, k){
+  const m = (D.sin_subir || {})[t];
+  if(!m || !(String(k) in m)) return;
+  delete m[String(k)];
+  if(!Object.keys(m).length) delete D.sin_subir[t];
+}
+// [{t, k, nombre, motivo}] de todo lo anotado, con un nombre que se entienda.
+function nubeListaSinSubir(){
+  const l = [];
+  Object.entries(D.sin_subir || {}).forEach(([t, m]) => {
+    const c = COLECCIONES.find(x => x.t === t);
+    Object.entries(m || {}).forEach(([k, v]) => {
+      const x = c ? (D[c.campo] || []).find(y => String(y[c.clave]) === k) : null;
+      const nombre = t === "pedidos" && x ? "Pedido " + x.numero + " (" + (x.cliente || "") + ")"
+        : t === "clientes" && x ? "Cliente " + (x.nombre || k)
+        : t === "skus" && x ? "Producto " + (x.nombre || k)
+        : t === "medicos" && x ? "Médico " + (x.nombre || k)
+        : t === "config" ? "Ajustes (" + k + ")"
+        : (c ? c.nombre : t) + " " + k;
+      l.push({t, k, nombre, motivo: (v && v.motivo) || ""});
+    });
+  });
+  return l;
+}
+function nubeAvisoSinSubir(){
+  const l = nubeListaSinSubir();
+  if(!l.length) return "";
+  return '<div class="aviso a-mal noprint" data-sin-subir><strong>' + l.length +
+    ' registro(s) de este dispositivo no llegaron a la base: la base no los aceptó.</strong> ' +
+    'Siguen guardados en este navegador y lo demás sí se envió.<br>' +
+    l.map(x => esc(x.nombre) + ': ' + esc(x.motivo) +
+      ' <button class="s" data-t="' + esc(x.t) + '" data-k="' + esc(x.k) +
+      '" onclick="nubeDescartar(this.dataset.t, this.dataset.k)">Descartar</button>').join("<br>") +
+    '<br><button class="s" onclick="nubeReintentar()">Reintentar</button></div>';
+}
+// Quita las anotaciones y vuelve a enviar; lo que la base siga sin aceptar se
+// anota otra vez.
+async function nubeVueltaCompleta(){
+  // Si hay una vuelta en curso se espera a que termine (hasta 10 s).
+  for(let i = 0; i < 200 && NUBE.ocupado; i++) await new Promise(r => setTimeout(r, 50));
+  return nubeSincronizar(true);
+}
+function nubeReintentar(){
+  D.sin_subir = {};
+  guardarLocal();
+  nubePintarPill();
+  return nubeVueltaCompleta();
+}
+// Descartar es la única forma de perder el cambio anotado, y pide confirmación.
+// La fila se quita de este navegador y se vuelve a bajar todo: si la base la
+// tiene y este usuario la puede leer, vuelve con la versión de la base.
+function nubeDescartar(t, k){
+  const x = nubeListaSinSubir().find(y => y.t === t && y.k === String(k));
+  if(!x) return;
+  if(!confirm("¿Descartar lo que no llegó a la base?\n\n" + x.nombre + "\n\n" +
+    "Lo que se hizo en este dispositivo con ese registro se pierde. Si la base lo tiene, " +
+    "vuelve como está en la base; si nunca llegó, deja de existir.")) return;
+  nubeDesmarcar(t, k);
+  const c = COLECCIONES.find(y => y.t === t);
+  if(c) D[c.campo] = (D[c.campo] || []).filter(y => String(y[c.clave]) !== String(k));
+  if(NUBE.espejo[t]) delete NUBE.espejo[t][String(k)];
+  // La vuelta siguiente baja todo otra vez (queda anotado por si se recarga antes).
+  D.rebajar = true;
+  guardarLocal();
+  nubeGuardarEspejo();
+  nubePintarPill();
+  nubeRepintar();
+  return nubeVueltaCompleta();
 }
 
 /* ---------------------------------------------------------------- roles --- */
@@ -4708,7 +5823,9 @@ async function nubeFetch(ruta, opciones){
   });
   if(!r.ok){
     const txt = await r.text().catch(()=> "");
-    throw new Error("La base respondió " + r.status + (txt ? ": " + txt.slice(0,160) : ""));
+    const err = new Error("La base respondió " + r.status + (txt ? ": " + txt.slice(0,160) : ""));
+    err.status = r.status;      // 186: para distinguir una fila rechazada de un fallo
+    throw err;
   }
   if(r.status === 204) return null;
   const t = await r.text();
@@ -4716,6 +5833,40 @@ async function nubeFetch(ruta, opciones){
 }
 
 const nubeRpc = (fn, args) => nubeFetch("/rest/v1/rpc/" + fn, {method:"POST", body: args || {}});
+
+// Fase 1g: depósito privado de fotos (Storage), con el mismo token del usuario.
+//   GET    ruta        -> la imagen (Blob); solo usuarios del equipo.
+//   POST   ruta, Blob  -> sube la foto a una ruta nueva, sin x-upsert: nunca sobrescribe
+//                         (si la ruta ya existe, Storage la rechaza y aquí es un error más).
+//   DELETE ruta        -> la borra (solo admin y coordinador).
+// La ruta es la de dentro del depósito: productos/<código>/<n>-<huella>.jpg (ver fotRuta).
+const NUBE_DEPOSITO = "catalogo-fotos";
+async function nubeStorage(metodo, ruta, cuerpo){
+  const tk = await nubeToken();
+  const partes = String(ruta).split("/").map(encodeURIComponent).join("/");
+  const base = NUBE.url + "/storage/v1/object/";
+  const cab = {"apikey": NUBE.key, "Authorization": "Bearer " + tk};
+  let url, body;
+  if(metodo === "GET") url = base + "authenticated/" + NUBE_DEPOSITO + "/" + partes;
+  else if(metodo === "POST"){
+    url = base + NUBE_DEPOSITO + "/" + partes;
+    cab["Content-Type"] = cuerpo.type || "image/jpeg";
+    // Los bytes y no el Blob: así el envío es igual en todos los navegadores.
+    body = new Uint8Array(await cuerpo.arrayBuffer());
+  }else{
+    url = base + NUBE_DEPOSITO;
+    cab["Content-Type"] = "application/json";
+    body = JSON.stringify({prefixes: [String(ruta)]});
+  }
+  const r = await fetch(url, {method: metodo, headers: cab, body});
+  if(!r.ok){
+    const txt = await r.text().catch(() => "");
+    const err = new Error("El depósito de fotos respondió " + r.status + (txt ? ": " + txt.slice(0, 160) : ""));
+    err.status = r.status;
+    throw err;
+  }
+  return metodo === "GET" ? r.blob() : null;
+}
 
 async function nubeEntrar(email, clave){
   if(!NUBE.url || !NUBE.key) throw new Error("Falta configurar la dirección y la llave del proyecto.");
@@ -4736,19 +5887,23 @@ async function nubeEntrar(email, clave){
 function nubeSalir(){
   const aviso = "Se va a desconectar este navegador.\n\n" +
     "Se borran de aquí los datos que vinieron de la base (en la base quedan) y este navegador vuelve a empezar." +
-    (NUBE.pendiente ? "\n\nATENCIÓN: hay cambios que todavía no llegaron a la base y se pierden." : "") +
+    (NUBE.pendiente || nubeListaSinSubir().length
+      ? "\n\nATENCIÓN: hay cambios que todavía no llegaron a la base y se pierden." : "") +
     "\n\n¿Continuar?";
   if(!confirm(aviso)) return;
   NUBE.saliendo = true;
   if(NUBE.timer){ clearInterval(NUBE.timer); NUBE.timer = null; }
   clearTimeout(nubeTimerEmpuje);
   try{ [NUBE_SES, NUBE_ROL, NUBE_MARK, CLAVE].forEach(k => localStorage.removeItem(k)); }catch(e){}
-  location.reload();
+  // Fase 1g: las fotos guardadas en este navegador también vinieron de la base.
+  const fin = () => location.reload();
+  try{ caches.delete(FOTOS_CACHE).then(fin, fin); }catch(e){ fin(); }
 }
 
 /* --------------------------------------------------------------- subir --- */
 
-function nubeCambiosLocales(){
+// noBorrar (1g-R2): tablas en las que esta vuelta no borra nada en la base.
+function nubeCambiosLocales(noBorrar){
   const lotes = {};
   let n = 0;
   // Solo se suben las tablas que el rol puede escribir (la base igual lo
@@ -4777,13 +5932,21 @@ function nubeCambiosLocales(){
         (c.t === "pedidos" && conCostos && nubePedidoTraeCostos(item) &&
          nubeFirma(ep[k] || {}) !== nubeFirma(nubePedidoCostos(item)));
       if(esp[k] !== f || cambiaCosto){
+        // 186: la fila que la base rechazó no se reenvía sola mientras siga igual.
+        const m = nubeMarcada(c.t, k);
+        if(m && m.firma === f) return;
         const datos = c.t === "skus" && !conCostos ? nubeSinCosto(item)
                     : c.t === "pedidos" && !conCostos ? nubePedidoSinCosto(item) : item;
         filas.push({[c.clave]: String(k), datos: datos}); n++;
-      }
+      }else nubeDesmarcar(c.t, k);     // volvió a quedar igual que la base
     });
+    // Una fila anotada que ya no existe aquí deja de estar anotada.
+    Object.keys((D.sin_subir || {})[c.t] || {}).forEach(k => { if(!vivos[k]) nubeDesmarcar(c.t, k); });
     // Los movimientos nunca se borran de la base desde aquí (D8).
-    const borrar = c.t === "movimientos" ? [] : Object.keys(esp).filter(k => !vivos[k]);
+    // 1g-R2: tampoco en una tabla con filas sin clave recién quitadas, hasta
+    // que se baje todo otra vez (ver nubeQuitarSinClave).
+    const borrar = c.t === "movimientos" || (noBorrar || []).includes(c.t) ? []
+                 : Object.keys(esp).filter(k => !vivos[k]);
     if(filas.length || borrar.length) lotes[c.t] = {c, filas, borrar};
     n += borrar.length;
   });
@@ -4800,7 +5963,9 @@ function nubeCambiosLocales(){
   [["params", D.params], ["banco", D.banco], ["tipo_cambio", D.tipo_cambio || []],
    ["generadores", D.generadores || {}]].forEach(([k, v]) => {
     const f = nubeFirma(v);
-    if(esp[k] !== f){ cfgFilas.push({clave:k, datos:v}); n++; }
+    const m = nubeMarcada("config", k);
+    if(esp[k] !== f){ if(m && m.firma === f) return; cfgFilas.push({clave:k, datos:v}); n++; }
+    else nubeDesmarcar("config", k);
   });
   if(cfgFilas.length) lotes.config = {c:{t:"config", clave:"clave"}, filas:cfgFilas, borrar:[]};
   return {lotes, n, asignar};
@@ -4836,27 +6001,47 @@ async function nubeSubirAsignar(lista){
   }
 }
 
-async function nubeSubir(){
-  const {lotes, n, asignar} = nubeCambiosLocales();
+async function nubeSubir(noBorrar){
+  const {lotes, n, asignar} = nubeCambiosLocales(noBorrar);
   if(!n) return 0;
   for(const t of Object.keys(lotes)){
     const {c, filas, borrar} = lotes[t];
     if(filas.length){
+      const enviar = parte => nubeFetch("/rest/v1/" + t, {
+        method:"POST",
+        headers:{"Prefer":"resolution=merge-duplicates,return=minimal"},
+        body: parte
+      });
       // De a 200 filas por envío, para no armar peticiones enormes.
       for(let i = 0; i < filas.length; i += 200){
-        await nubeFetch("/rest/v1/" + t, {
-          method:"POST",
-          headers:{"Prefer":"resolution=merge-duplicates,return=minimal"},
-          body: filas.slice(i, i+200)
+        const parte = filas.slice(i, i+200);
+        let subieron = parte;
+        try{ await enviar(parte); }
+        catch(e){
+          // 186: si la base rechaza el lote (no un fallo de red, de sesión ni del
+          // servidor), se envía fila por fila: las que pasan suben y la rechazada
+          // queda anotada, con su motivo, sin dejar en error todo el envío.
+          if(!nubeEsRechazo(e)) throw e;
+          subieron = [];
+          for(const f of parte){
+            let error = parte.length === 1 ? e : null;
+            if(!error){
+              try{ await enviar([f]); }
+              catch(e2){ if(!nubeEsRechazo(e2)) throw e2; error = e2; }
+            }
+            if(error) nubeMarcar(t, f[c.clave], nubeFirmaFila(t, f.datos), error);
+            else subieron.push(f);
+          }
+        }
+        subieron.forEach(f => {
+          NUBE.espejo[t][f[c.clave]] = nubeFirmaFila(t, f.datos);
+          nubeDesmarcar(t, f[c.clave]);
+          if(t === "skus" && f.datos.costo !== undefined) NUBE.espejo.costos[f[c.clave]] = f.datos.costo;
+          if(t === "skus" && f.datos.costo_usd !== undefined) NUBE.espejo.costos_usd[f[c.clave]] = f.datos.costo_usd;
+          if(t === "pedidos" && nubePedidoTraeCostos(f.datos))
+            NUBE.espejo.pedidos_costos[f[c.clave]] = nubePedidoCostos(f.datos);
         });
       }
-      filas.forEach(f => {
-        NUBE.espejo[t][f[c.clave]] = nubeFirmaFila(t, f.datos);
-        if(t === "skus" && f.datos.costo !== undefined) NUBE.espejo.costos[f[c.clave]] = f.datos.costo;
-        if(t === "skus" && f.datos.costo_usd !== undefined) NUBE.espejo.costos_usd[f[c.clave]] = f.datos.costo_usd;
-        if(t === "pedidos" && nubePedidoTraeCostos(f.datos))
-          NUBE.espejo.pedidos_costos[f[c.clave]] = nubePedidoCostos(f.datos);
-      });
     }
     for(const k of borrar){
       await nubeFetch("/rest/v1/" + t + "?" + c.clave + "=eq." + encodeURIComponent(k), {method:"DELETE"});
@@ -4875,9 +6060,19 @@ function nubeAplicar(campo, clave, tabla, filas){
   filas.forEach(f => {
     // 150 (fase A): a un rol que no ve costos el pedido le queda sin ellos,
     // aunque la base (antes de acceso-a.sql) todavía los mande.
-    const item = tabla === "pedidos" && !conCostos && f.d ? nubePedidoSinCosto(f.d) : f.d, k = String(f.k);
+    const k = String(f.k);
+    let item = tabla === "pedidos" && !conCostos && f.d ? nubePedidoSinCosto(f.d) : f.d;
+    // 1g-R2: la fila manda su clave en la columna (k). Si los datos no la traen
+    // (fila creada desde el panel o por un envío directo) o traen otra, se pone
+    // la de la columna: sin ella la fila quedaba repetida y sin clave, y la
+    // vuelta siguiente la daba por borrada aquí y la borraba de la base.
+    if(item && typeof item === "object" && (item[clave] === undefined || item[clave] === null || String(item[clave]) !== k))
+      item = {...item, [clave]: k};
     const fi = nubeFirmaFila(tabla, item);
     if(NUBE.espejo[tabla][k] === fi) return;      // ya lo teníamos igual
+    // 186: una fila con un cambio de aquí que la base rechazó no se pisa con lo
+    // que baja; se resuelve con Reintentar o Descartar.
+    if(nubeMarcada(tabla, k)) return;
     // El producto llega sin costo: se le pone el último que mandó la base.
     const ec = NUBE.espejo.costos || {}, eu = NUBE.espejo.costos_usd || {};
     if(tabla === "skus" && item.costo === undefined && ec[k] !== undefined) item.costo = ec[k];
@@ -4911,6 +6106,14 @@ async function nubeBajar(){
     const k = String(f.k);
     if(rs[k] !== f.a){ if(f.a === null || f.a === undefined) delete rs[k]; else rs[k] = f.a; n++; }
   });
+  // Quién registró cada médico y cuándo (fase 1g): la base lo manda aparte, en
+  // "p" y "c". Se guarda solo en este navegador y nunca se sube.
+  const mq = D.medicos_quien = D.medicos_quien || {};
+  (r.medicos || []).forEach(f => {
+    if(!f || !("p" in f || "c" in f)) return;
+    const k = String(f.k), v = {p: f.p ?? null, c: f.c ?? null};
+    if(nubeFirma(mq[k] || null) !== nubeFirma(v)){ mq[k] = v; n++; }
+  });
   // Costos de los pedidos (150, fase A): solo llegan a admin y coordinador.
   const ep = NUBE.espejo.pedidos_costos = NUBE.espejo.pedidos_costos || {};
   if(veCostos()) (r.pedidos_costos || []).forEach(f => {
@@ -4941,6 +6144,7 @@ async function nubeBajar(){
   (r.config || []).forEach(f => {
     const fi = nubeFirma(f.d);
     if(NUBE.espejo.config[f.k] === fi) return;
+    if(nubeMarcada("config", f.k)) return;        // 186: igual que las demás filas
     if(f.k === "params") D.params = f.d;
     if(f.k === "banco")  D.banco  = f.d;
     if(f.k === "tipo_cambio") D.tipo_cambio = Array.isArray(f.d) ? f.d : [];
@@ -4967,6 +6171,7 @@ async function nubeReconciliar(){
       const k = String(x[c.clave]);
       if(vivos.has(k)) return true;
       if(NUBE.espejo[c.t][k] === undefined) return true;   // creado aquí, aún sin subir
+      if(nubeMarcada(c.t, k)) return true;                 // 186: no se borra en silencio
       delete NUBE.espejo[c.t][k];
       return false;
     });
@@ -5001,6 +6206,28 @@ async function nubeTraerEquipo(){
 
 /* -------------------------------------------------------- sincronización --- */
 
+// 1g-R2: antes del arreglo de nubeAplicar, una fila que bajaba sin su clave en
+// los datos quedaba guardada sin clave. Aquí se quita; la vuelta baja todo otra
+// vez: si la base aún la tiene, vuelve con su clave, y si no, ya no está. Hasta
+// que esa bajada termine, la tabla no borra nada en la base (D.sin_clave), así
+// que la reparación nunca manda un DELETE.
+function nubeQuitarSinClave(){
+  let n = 0;
+  COLECCIONES.forEach(c => {
+    // Los movimientos no se quitan (D8): uno sin id solo puede ser local y de antes.
+    if(c.t === "movimientos") return;
+    const arr = D[c.campo] || [];
+    const quedan = arr.filter(x => x && x[c.clave] !== undefined && x[c.clave] !== null);
+    if(quedan.length === arr.length) return;
+    n += arr.length - quedan.length;
+    D[c.campo] = quedan;
+    D.sin_clave = D.sin_clave || [];
+    if(!D.sin_clave.includes(c.t)) D.sin_clave.push(c.t);
+    D.rebajar = true;
+  });
+  return n;
+}
+
 async function nubeSincronizar(forzar){
   if(!nubeActiva() || NUBE.ocupado) return;
   if(!navigator.onLine){ nubeEstado("sin_red", "Sin internet — trabajando en este navegador"); return; }
@@ -5008,10 +6235,16 @@ async function nubeSincronizar(forzar){
   try{
     // El rol se pregunta una vez por carga, antes de subir nada.
     if(!NUBE.rolLeido) await nubeLeerRol();
-    const subidos = await nubeSubir();
-    let bajados = await nubeBajar();
+    // 1g-R2: filas sin clave guardadas por la versión de antes.
+    const quitadas = nubeQuitarSinClave();
+    // 186: tras Descartar se baja todo otra vez.
+    const rebajar = !!D.rebajar;
+    if(rebajar) NUBE.desde = "1970-01-01T00:00:00Z";
+    const subidos = await nubeSubir(D.sin_clave || []);
+    let bajados = await nubeBajar() + quitadas;
+    if(rebajar){ delete D.rebajar; delete D.sin_clave; bajados++; }
     NUBE.vueltas++;
-    const completa = forzar || NUBE.vueltas % 8 === 1;
+    const completa = forzar || quitadas > 0 || NUBE.vueltas % 8 === 1;
     if(completa) bajados += await nubeReconciliar();
     bajados += await nubeTraerAjenos();
     if(completa) bajados += await nubeTraerEquipo();
@@ -5044,9 +6277,11 @@ function nubeRepintar(){
   const p = abierto.id.replace("p-","");
   const f = {inicio:"pintarInicio", despacho:"pintarDespacho", pedidos:"pintarPedidos",
              clientes:"pintarClientes", catalogo:"pintarCatalogo", inventario:"pintarInventario",
-             reposicion:"pintarReposicion", ajustes:"pintarAjustes"}[p];
-  // En "Nuevo pedido" no se repinta: el usuario está escribiendo.
-  if(f && typeof window[f] === "function" && !document.querySelector("#modal.on")) window[f]();
+             reposicion:"pintarReposicion", ajustes:"pintarAjustes",
+             mostrar:"pintarMostrar", medicos:"pintarMedicos"}[p];
+  // En "Nuevo pedido" no se repinta: el usuario está escribiendo. Tampoco con una
+  // ventana abierta ni con el visor de fotos abierto (fase 1g).
+  if(f && typeof window[f] === "function" && !document.querySelector("#modal.on, #visor.on")) window[f]();
 }
 
 function nubeEstado(e, detalle){
@@ -5087,6 +6322,27 @@ async function nubePrimeraVez(){
   const pendientes = Object.keys(espMov).length && nubeEscribe("movimientos") ? D.movimientos.filter(m =>
     m.id && m.id !== CORTE_ID && !String(m.id).startsWith("ini|") && !m.ejemplo &&
     espMov[m.id] !== nubeFirma(m) && nubeSubeMovimiento(m)) : [];
+  // B1 (decisión 5): lo mismo con los pedidos y los clientes hechos en este
+  // dispositivo que nunca llegaron a la base (por ejemplo, confirmados entre el
+  // vencimiento de la sesión y este reingreso). Solo si este navegador ya estuvo
+  // sincronizado (su marca «desde» no es la inicial) y el rol escribe esa tabla.
+  // No se envían aquí: se conservan y suben en la vuelta siguiente por el envío
+  // normal, con el mismo id, así que ni se pierden ni se duplican. Los cambios
+  // a filas que la base ya tenía no se rescatan: se cuentan para avisarlo.
+  const yaSincronizado = NUBE.desde !== "1970-01-01T00:00:00Z";
+  // Fase 1g: también los médicos registrados sin señal o con la sesión vencida.
+  const rescate = {clientes: [], pedidos: [], medicos: []};
+  let reemplazados = 0;
+  if(yaSincronizado) COLECCIONES.forEach(c => {
+    if(c.t === "movimientos" || !nubeEscribe(c.t)) return;
+    const esp = (NUBE.espejo && NUBE.espejo[c.t]) || {};
+    (D[c.campo] || []).forEach(x => {
+      const k = x && x[c.clave];
+      if(k === undefined || k === null || x.ejemplo) return;
+      if(esp[k] === undefined){ if(rescate[c.t]) rescate[c.t].push(x); }
+      else if(esp[k] !== nubeFirmaFila(c.t, x)) reemplazados++;
+    });
+  });
   nubeOlvidarEspejo();
   if(vacia && nubeRolPantalla() === "admin"){
     await nubeSubir();
@@ -5104,6 +6360,7 @@ async function nubePrimeraVez(){
   }
   D.clientes = []; D.pedidos = []; D.movimientos = []; D.avisos = [];
   D.bodegas = []; D.inv_detalle = [];
+  D.medicos = []; D.medicos_quien = {};
   // Los productos también los manda la base: si quedaran los locales que la
   // base no tiene, la vuelta siguiente los subiría como recién creados aquí.
   D.skus = [];
@@ -5113,7 +6370,25 @@ async function nubePrimeraVez(){
   D.generadores = {}; D.asignar = {}; D.asignado = {};
   // Fase A: rechazados y responsables también son de la base.
   D.rechazado = {}; D.responsables = {};
+  // 186: las anotaciones de filas rechazadas eran de la sesión anterior.
+  D.sin_subir = {}; delete D.rebajar; delete D.sin_clave;
   const n = await nubeBajar();
+  // B1: lo rescatado vuelve a su sitio si la base no lo trajo ya. Queda sin
+  // espejo, o sea «creado aquí, aún sin subir»: la reconciliación no lo quita y
+  // la vuelta siguiente lo sube. A un rol sin costos el pedido le queda sin ellos.
+  let rescatados = 0;
+  rescate.clientes.forEach(x => {
+    if(D.clientes.some(y => String(y.id) === String(x.id))) return;
+    D.clientes.push(x); rescatados++;
+  });
+  rescate.pedidos.slice().reverse().forEach(x => {
+    if(D.pedidos.some(y => String(y.id) === String(x.id))) return;
+    D.pedidos.unshift(veCostos() ? x : nubePedidoSinCosto(x)); rescatados++;
+  });
+  rescate.medicos.forEach(x => {
+    if(D.medicos.some(y => String(y.id) === String(x.id))) return;
+    D.medicos.push(x); rescatados++;
+  });
   // Parámetros y cuenta que la base no trae se quedan aquí, pero no se suben.
   [["params", D.params], ["banco", D.banco], ["tipo_cambio", D.tipo_cambio],
    ["generadores", D.generadores]].forEach(([k, v]) => {
@@ -5125,7 +6400,7 @@ async function nubePrimeraVez(){
   nubeGuardarEspejo();
   NUBE.ultima = Date.now();
   nubeEstado("en_linea", "");
-  return {accion:"bajo", n, vacia: !!vacia};
+  return {accion:"bajo", n, vacia: !!vacia, rescatados, reemplazados};
 }
 
 /* ================================================================== UI === */
@@ -5146,7 +6421,10 @@ function nubePintarPill(){
     if(NUBE.pendiente) extra = " · guardando";
     else if(NUBE.ultima) extra = " · al día";
   }
-  el.style.background = m.b; el.style.color = m.c;
+  // 186: lo que la base rechazó se ve desde cualquier pantalla.
+  const sinSubir = NUBE.sesion && D ? nubeListaSinSubir().length : 0;
+  if(sinSubir) extra = " · " + sinSubir + " sin subir";
+  el.style.background = sinSubir ? mapa.error.b : m.b; el.style.color = sinSubir ? mapa.error.c : m.c;
   el.textContent = m.p + " " + m.t + extra;
   // 161 (fase A): aviso fijo mientras este navegador no tenga sesión.
   const av = document.getElementById("avisoLocal");
@@ -5205,6 +6483,7 @@ function nubeTarjeta(){
         nubeDato("Última sincronización", seg===null ? "—" : (seg<60 ? "hace "+seg+" s" : "hace "+Math.round(seg/60)+" min")) +
       '</div>' +
       (NUBE.detalle ? '<div style="background:#FDECEA;color:#B3261E;font-size:12.5px;padding:9px 11px;border-radius:6px;margin-bottom:12px">'+esc(NUBE.detalle)+'</div>' : '') +
+      nubeAvisoSinSubir() +
       '<button class="b" onclick="nubeSincronizar(true)">Sincronizar ahora</button> ' +
       '<button class="s" onclick="nubeSalir()">Desconectar este navegador</button>' +
       '<p style="margin:14px 0 0;color:#6B7A8F;font-size:12px">' +
@@ -5323,14 +6602,19 @@ function nubeLogin(){
       nubeArrancar();
       // El panel abierto (Ajustes o el de entrada del rol) se dibuja con lo bajado.
       nubeRepintar();
-      alert(r.accion === "subio"
+      alert((r.accion === "subio"
         ? "Listo. La base estaba vacía, así que se subió la información de este navegador.\n\n" +
           "Ahora puedes abrir el sistema en otro dispositivo, entrar con el mismo usuario, y verás lo mismo."
         : r.vacia
         ? "Listo. La base todavía está vacía: la primera carga la hace un usuario admin.\n\n" +
           "Cuando la haga, este dispositivo verá la información en pocos segundos."
         : "Listo. La base ya tenía información y se trajo a este navegador.\n\n" +
-          "Desde ahora este dispositivo y los demás ven lo mismo.");
+          "Desde ahora este dispositivo y los demás ven lo mismo.") +
+        // B1 (decisión 5): lo hecho aquí sin sesión no se pierde ni se calla.
+        (r.rescatados ? "\n\nSe conservaron " + r.rescatados + " registro(s) hechos en este dispositivo " +
+          "que no habían llegado a la base (pedidos, clientes o médicos nuevos); se envían ahora." : "") +
+        (r.reemplazados ? "\n\nATENCIÓN: " + r.reemplazados + " cambio(s) a registros que la base ya tenía " +
+          "no habían llegado a ella y se reemplazaron por lo que tiene la base." : ""));
     }catch(e){
       err(String(e.message || e));
       b.disabled = false; b.textContent = "Entrar";
