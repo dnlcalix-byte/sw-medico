@@ -351,6 +351,9 @@ button.grande{font-size:16px;padding:13px 20px;min-height:48px}
   <div class="card">
     <div class="fila noprint">
       <div><label>Buscar</label><input id="filtroCli" placeholder="Nombre o teléfono…"></div>
+      <div><label>Zona de envío</label><select id="filtroCliZona">
+        <option value="">Todas</option><option value="sin">Sin zona</option>
+        <option value="local">Local</option><option value="foraneo">Foráneo</option></select></div>
       <div class="auto"><button class="b" onclick="abrirNuevoCliente()">+ Nuevo cliente</button></div>
       <div class="auto"><button class="s" onclick="exportarClientesCSV()">Exportar CSV</button></div>
     </div>
@@ -360,8 +363,8 @@ button.grande{font-size:16px;padding:13px 20px;min-height:48px}
     <h3>Importar Clientes DICOSA</h3>
     <p class="mini">Archivo Clientes (.xlsx, primera hoja). Primero se ve una vista previa; nada cambia hasta confirmar.
       DICOSA manda en nombre, teléfono, dirección y sus datos (código, contacto, grupo, especialidad, zona, departamento,
-      municipio, ubicación y generador). Crédito, referencia, tipo y lista de precios no se tocan (un cliente nuevo entra sin
-      lista de precios). Un cliente que deja de venir no se borra:
+      municipio, ubicación y generador). Crédito, referencia, tipo, lista de precios y zona de envío no se tocan (un cliente
+      nuevo entra sin lista de precios y sin zona de envío). Un cliente que deja de venir no se borra:
       se marca. Los pedidos ya hechos conservan sus datos.</p>
     <div class="fila"><div><label>Archivo de Clientes</label><input id="cliArchivo" type="file" accept=".xlsx"></div></div>
     <div id="cliPrevia"></div>
@@ -540,19 +543,48 @@ button.grande{font-size:16px;padding:13px 20px;min-height:48px}
     <p class="mini" id="ultimoRespaldo" style="margin-top:8px"></p>
   </div>
 
-  <div class="card">
-    <h3>Cuenta bancaria para depósitos</h3>
-    <p class="mini">Estos datos se incluyen en el mensaje que le pides al cliente. Sin ellos el aviso sale incompleto.</p>
+  <!-- Fase 1f: lista de cuentas (fila «cuentas» de config). La fila «banco» de antes no se borra ni se cambia. -->
+  <div class="card" id="ctaCard">
+    <h3>Cuentas bancarias de DICOSA</h3>
+    <p class="mini">Todas las cuentas de esta lista salen en el mensaje de depósito que se le manda al cliente, para que
+      elija el banco que le quede mejor. Sin cuentas el aviso sale incompleto.</p>
+    <div id="ctaEspera"></div>
+    <div id="ctaLista" style="margin-top:10px"></div>
     <div class="grid g2" style="margin-top:10px">
-      <div><label>Banco</label><input id="bkBanco" placeholder="Ej: Banco Atlántida"></div>
-      <div><label>Número de cuenta</label><input id="bkCuenta" placeholder="Ej: 1234-5678-90"></div>
-      <div><label>Titular de la cuenta</label><input id="bkTitular"></div>
-      <div><label>Tipo de cuenta</label><input id="bkTipo" placeholder="Ahorro o cheques"></div>
+      <div><label>Banco *</label><input id="ctaBanco"></div>
+      <div><label>Número de cuenta *</label><input id="ctaNumero"></div>
+      <div><label>Tipo de cuenta</label><input id="ctaTipo" placeholder="Ahorro o cheques"></div>
+      <div><label>Titular de la cuenta</label><input id="ctaTitular"></div>
     </div>
     <div class="fila" style="margin-top:12px">
-      <div class="auto"><button class="b" onclick="guardarBanco()">Guardar datos bancarios</button></div>
+      <div class="auto"><button class="b" id="ctaGuardar" onclick="guardarCuenta()">Agregar cuenta</button></div>
+      <div class="auto"><button class="s" id="ctaCancelar" onclick="cancelarCuenta()" style="display:none">Cancelar</button></div>
     </div>
-    <div id="bancoMsg"></div>
+    <div id="ctaMsg"></div>
+  </div>
+
+  <!-- Fase 1f: mínimos y cargos de envío por zona (fila «envio» de config). -->
+  <div class="card" id="envCard">
+    <h3>Envío</h3>
+    <p class="mini">El pedido lleva cargo de envío si su subtotal (sin IVA) no llega al mínimo de la zona del cliente.
+      La base vuelve a calcular el cargo al recibir el pedido. Los cargos son provisionales hasta tener la cotización
+      de Expreco. La hora de corte es la de Honduras: un pedido foráneo confirmado antes sale el mismo día hábil;
+      después, el siguiente (lunes a viernes, sin feriados).</p>
+    <div id="envEspera"></div>
+    <div class="grid g3" style="margin-top:10px">
+      <div><label>Local: envío gratis desde (L.)</label><input id="envMinLocal" type="number" min="0" step="0.01"></div>
+      <div><label>Local: cargo de envío (L.)</label><input id="envCargoLocal" type="number" min="0" step="0.01"></div>
+      <div><label>Hora de corte foráneo (Honduras)</label><input id="envHora" type="time"></div>
+      <div><label>Foráneo: envío gratis desde (L.)</label><input id="envMinForaneo" type="number" min="0" step="0.01"></div>
+      <div><label>Foráneo: cargo de envío (L.)</label><input id="envCargoForaneo" type="number" min="0" step="0.01"></div>
+      <div><label>Origen de los cargos</label><input id="envNota" placeholder="Ej: provisional"></div>
+      <div><label>Foráneo: días hábiles, mínimo</label><input id="envDiasMin" type="number" min="0" step="1"></div>
+      <div><label>Foráneo: días hábiles, máximo</label><input id="envDiasMax" type="number" min="0" step="1"></div>
+    </div>
+    <div class="fila" style="margin-top:12px">
+      <div class="auto"><button class="b" id="envGuardar" onclick="guardarEnvio()">Guardar envío</button></div>
+    </div>
+    <div id="envMsg"></div>
   </div>
 
   <div class="card" id="tcCard">
@@ -1476,10 +1508,11 @@ const CLAVE = "sdim_v1";
 // no se sube a la base, no va en los respaldos y «Borrar todo» no la toca.
 const LETRA_CLAVE = "sdim_letra";
 
+// Fase 1f (decisión 4a): el cargo de urgencia por express dejó de aplicarse. Sus dos
+// reglas (pedido_minimo_express y cargo_urgencia) ya no están aquí; si la fila params
+// las trae guardadas, se quedan como están y nadie las usa.
 const PARAMS_DEF = {
-  pedido_minimo_express:   {v:400,  u:"L.",    d:"Monto mínimo para entrega express sin cargo"},
-  cargo_urgencia:          {v:40,   u:"L.",    d:"Cargo por entrega express bajo el mínimo"},
-  limite_peso_on_demand:   {v:10,   u:"kg",    d:"Límite de carga por viaje del courier"},
+  limite_peso_on_demand:  {v:10,   u:"kg",    d:"Límite de carga por viaje del courier"},
   umbral_densidad_canal:   {v:100,  u:"L./kg", d:"Densidad que separa canal express de volumen"},
   dias_alerta_reposicion:  {v:7,    u:"días",  d:"Anticipación del aviso de reposición"},
   dias_supresion_alerta:   {v:14,   u:"días",  d:"No repetir el mismo aviso antes de"},
@@ -1501,8 +1534,25 @@ const PROVEEDORES = [
    hora_inicio:"11:00", hora_fin:"19:00"}
 ];
 
+/* --------------------------------------------- envío por zona (fase 1f, C7a)
+   Cada cliente tiene una zona de envío (envio_zona: local o foraneo) que ponen
+   solo Admin y Coordinador; sin zona no se confirma un pedido. El pedido lleva
+   cargo de envío si su subtotal (sin IVA) no llega al mínimo de su zona. Los
+   mínimos y cargos viven en la fila «envio» de config (D.envio), que escribe solo
+   el Admin; la base vuelve a calcular el cargo al recibir el pedido
+   (sql/envio-1f.sql) e ignora el del navegador. Los valores de aquí son la
+   decisión C7a; los cargos son provisionales hasta la cotización de Expreco. */
+const ENVIO_DEF = {minimo_local:500, minimo_foraneo:1000, cargo_local:100, cargo_foraneo:150,
+                   hora_corte:"16:00", dias_min:1, dias_max:5, nota:"provisional"};
+const ZONAS = {local:"Local", foraneo:"Foráneo"};
+const NIVEL_FORANEO = "Foráneo por Expreco", CANAL_FORANEO = "Expreco (foráneo)";
+const ZONA_HN = "America/Tegucigalpa";
+
 let D = null;              // datos
 let P = {cliente:null, lineas:[], override:null};   // pedido en curso
+// Fase 1f: zona elegida para poner a los clientes marcados, y cuenta que se está editando.
+let CLI_ZONA = "local";
+let CTA_EDIT = null;
 // Fase 1e: clientes marcados en Clientes para ponerles la lista de precios, y la lista elegida.
 const CLI_SEL = new Set();
 let CLI_LISTA = "particular";
@@ -1589,6 +1639,70 @@ function puedeLista(){ return ["local","admin","coordinador"].includes(rolPantal
 function puedeFactor(){ return ["local","admin"].includes(rolPantalla()); }
 function factorInner(s){ const n = Number(s && s.unidades_inner); return Number.isInteger(n) && n >= 1 ? n : 1; }
 
+/* ------------------------------------------------ envío por zona (fase 1f) */
+function zonaCliente(c){ return c && ZONAS[c.envio_zona] ? c.envio_zona : ""; }
+// Quién pone la zona de envío de un cliente (3a): admin y coordinador.
+function puedeZona(){ return ["local","admin","coordinador"].includes(rolPantalla()); }
+// La fila envio, campo por campo: lo que no sea válido toma el valor de C7a.
+function envioCfg(){
+  const e = (D && D.envio && typeof D.envio === "object" && !Array.isArray(D.envio)) ? D.envio : {};
+  const monto = k => (esNum(e[k]) && e[k] >= 0) ? e[k] : ENVIO_DEF[k];
+  const entero = k => (Number.isInteger(e[k]) && e[k] >= 0) ? e[k] : ENVIO_DEF[k];
+  const o = {minimo_local:monto("minimo_local"), minimo_foraneo:monto("minimo_foraneo"),
+             cargo_local:monto("cargo_local"), cargo_foraneo:monto("cargo_foraneo"),
+             hora_corte: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(e.hora_corte || "")) ? e.hora_corte : ENVIO_DEF.hora_corte,
+             dias_min:entero("dias_min"), dias_max:entero("dias_max"),
+             nota: typeof e.nota === "string" ? e.nota : ENVIO_DEF.nota};
+  if(o.dias_max < o.dias_min) o.dias_max = o.dias_min;
+  return o;
+}
+// Cargo de envío de un subtotal en una zona: 0 desde el mínimo; sin zona no hay cálculo.
+function cargoEnvio(zona, sub){
+  if(!ZONAS[zona]) return {zona:"", minimo:null, cargo:0};
+  const e = envioCfg(), minimo = e["minimo_" + zona];
+  return {zona, minimo, cargo: sub >= minimo ? 0 : e["cargo_" + zona]};
+}
+// Fecha (AAAA-MM-DD) y minutos desde la medianoche en Honduras, sea cual sea el reloj del dispositivo.
+function ahoraHN(d){
+  const o = {};
+  new Intl.DateTimeFormat("en-CA", {timeZone:ZONA_HN, year:"numeric", month:"2-digit", day:"2-digit",
+    hour:"2-digit", minute:"2-digit", hourCycle:"h23"}).formatToParts(d || new Date())
+    .forEach(x => { o[x.type] = x.value; });
+  return {fecha: o.year + "-" + o.month + "-" + o.day, min: (Number(o.hour) % 24) * 60 + Number(o.minute)};
+}
+// Días hábiles (7a): lunes a viernes, sin feriados. Las fechas son AAAA-MM-DD.
+function diaMas(f, n){ const d = new Date(f + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+function esHabil(f){ const w = new Date(f + "T12:00:00Z").getUTCDay(); return w >= 1 && w <= 5; }
+function sumarHabiles(f, n){ let x = f; for(let i = 0; i < n; i++){ do x = diaMas(x, 1); while(!esHabil(x)); } return x; }
+// Instante de una fecha y hora (HH:MM) de Honduras.
+function instanteHN(f, hhmm){
+  const [y, m, d] = f.split("-").map(Number), [h, mi] = hhmm.split(":").map(Number);
+  const meta = Date.UTC(y, m - 1, d, h, mi);
+  let t = meta;
+  for(let i = 0; i < 2; i++){
+    const a = ahoraHN(new Date(t)), [ay, am, ad] = a.fecha.split("-").map(Number);
+    t += meta - Date.UTC(ay, am - 1, ad, 0, a.min);
+  }
+  return new Date(t);
+}
+// Salida de un pedido foráneo confirmado en el instante d: antes de la hora de corte de
+// un día hábil sale ese día; si no, el siguiente día hábil. Es una promesa de pantalla y
+// de mensaje, no un control de la base.
+function salidaForanea(d){
+  const e = envioCfg(), a = ahoraHN(d), [h, mi] = e.hora_corte.split(":").map(Number);
+  const sale = esHabil(a.fecha) && a.min < h * 60 + mi ? a.fecha : sumarHabiles(a.fecha, 1);
+  return {sale, dias_min:e.dias_min, dias_max:e.dias_max,
+          limite: instanteHN(sumarHabiles(sale, e.dias_max), "18:00").toISOString()};
+}
+function fechaCorta(f){ const [y, m, d] = String(f || "").split("-"); return d && m && y ? d + "/" + m + "/" + y : "—"; }
+function esForaneo(p){ return !!p && (p.nivel === "foraneo" || (p.envio || {}).zona === "foraneo"); }
+// «de 1 a 5 días hábiles» con los días guardados en el pedido.
+function textoDiasEnvio(v){
+  const a = Number((v || {}).dias_min), b = Number((v || {}).dias_max);
+  if(!(b >= 0) || !(a >= 0)) return "en los próximos días hábiles";
+  return a === b ? "en " + b + " día(s) hábil(es)" : "de " + a + " a " + b + " días hábiles";
+}
+
 // Para pedirse, un producto necesita precio de venta y peso mayores que 0 (D2).
 // Con lista (la del cliente), un producto con listas necesita precio en ESA lista.
 function faltaParaVender(s, lista){
@@ -1620,6 +1734,7 @@ function cargar(){
     migrado_inventario_fisico: true,
     clientes: [], pedidos: [], movimientos: [], avisos: [],
     banco: {banco:"", cuenta:"", titular:"", tipo:""},
+    cuentas: [], envio: {...ENVIO_DEF},
     ultimoRespaldo: null
   };
   migrar();          // deriva unidad/contenido también en instalación nueva
@@ -1639,6 +1754,20 @@ function migrar(){
   });
   // Cobro por depósito bancario: la preparación no espera, el despacho sí
   D.banco = D.banco || {banco:"", cuenta:"", titular:"", tipo:""};
+  // Fase 1f: lista de cuentas bancarias y reglas de envío (filas cuentas y envio de config).
+  // Si los datos guardados son de la versión de antes y este navegador usa la base
+  // compartida, lo que se pone aquí son valores de entrada, no los de la base: quedan
+  // marcados (pend_1f) para bajarlos antes de subir nada (ver nubeSincronizar). Sin eso,
+  // un Admin que abre la versión nueva pisaría con la lista vacía las cuentas que otro
+  // dispositivo ya escribió.
+  const estrena1f = !Array.isArray(D.cuentas) || !D.envio || typeof D.envio !== "object" || Array.isArray(D.envio);
+  if(!Array.isArray(D.cuentas)) D.cuentas = [];
+  if(!D.envio || typeof D.envio !== "object" || Array.isArray(D.envio)) D.envio = {...ENVIO_DEF};
+  if(estrena1f){
+    let usaBase = false;
+    try{ usaBase = !!(localStorage.getItem("sdim_sesion") || localStorage.getItem("sdim_espejo")); }catch(e){}
+    if(usaBase) D.pend_1f = true;
+  }
   D.pedidos.forEach(p => {
     if(p.pago_estado === undefined) p.pago_estado = "pendiente";
     if(p.pago === undefined) p.pago = null;
@@ -1898,18 +2027,44 @@ function calcularPedido(){
   const sinCosto = P.lineas.filter(l=>!hayCosto(l.costo));
   const cost = sinCosto.length ? null : P.lineas.reduce((a,l)=>a + l.cantidad*l.costo, 0);
   const peso = P.lineas.reduce((a,l)=>a + l.cantidad*l.peso, 0);
-  const nivel = $("#nivel") ? $("#nivel").value : "ventana";
+  // Fase 1f: el único cargo es el de envío, según la zona del cliente (el de urgencia
+  // por express ya no se aplica). Un cliente foráneo tiene un solo nivel, por Expreco.
+  const zona = zonaCliente(P.cliente), foraneo = zona === "foraneo";
+  const elegido = $("#nivel") ? $("#nivel").value : "ventana";
+  const nivel = foraneo ? "foraneo" : (elegido === "foraneo" ? "ventana" : elegido);
+  const env = cargoEnvio(zona, sub), cargo = env.cargo, minimo = env.minimo;
 
-  const minimo = par("pedido_minimo_express");
-  const cargo  = (nivel==="express" && sub < minimo) ? par("cargo_urgencia") : 0;
-
-  const m = motorCanal(peso, nivel);
+  // costo_entrega_est sigue saliendo del navegador (5a). Local: el motor de canal de
+  // siempre. Foráneo: no hay cotización de Expreco; se estima con el cargo foráneo
+  // provisional de la fila envio.
+  const m = foraneo ? {canal:CANAL_FORANEO, costo:envioCfg().cargo_foraneo,
+      motivo:"Cliente foráneo: va por Expreco. El costo de entrega estimado es el cargo foráneo provisional, no una cotización."}
+    : motorCanal(peso, nivel);
   const margen = cost===null ? null : sub - cost + cargo;
   const contrib = margen===null ? null : margen - m.costo;
 
-  return {sub, cost, peso, nivel, cargo, minimo, margen, contrib, sinCosto,
+  return {sub, cost, peso, nivel, cargo, minimo, zona, margen, contrib, sinCosto,
           canal:m.canal, costoEnt:m.costo, motivo:m.motivo, total:sub+cargo};
 }
+// Fase 1f (8a): un cliente foráneo solo tiene el nivel «Foráneo por Expreco»; con un
+// cliente local (o sin cliente) vuelven los tres niveles y el que estaba elegido.
+const NIVELES_LOCALES = `<option value="express">Express — menos de 30 min</option>
+          <option value="ventana">Ventana del día</option>
+          <option value="programado">Programado</option>`;
+function pintarNivel(){
+  const sel = $("#nivel"); if(!sel) return;
+  const foraneo = zonaCliente(P.cliente) === "foraneo";
+  const puesto = sel.options.length === 1 && sel.options[0].value === "foraneo";
+  if(foraneo === puesto) return;
+  if(foraneo){
+    sel.dataset.local = sel.value;
+    sel.innerHTML = `<option value="foraneo">${NIVEL_FORANEO}</option>`;
+  }else{
+    sel.innerHTML = NIVELES_LOCALES;
+    sel.value = sel.dataset.local || "ventana";
+  }
+}
+function sinZonaPedido(){ return !!P.cliente && !zonaCliente(P.cliente); }
 
 // Fase 1e: el precio de cada línea es el de la lista del cliente, con los datos
 // de ahora. Se rehace en cada cálculo: al cambiar de cliente, al repetir un
@@ -1925,6 +2080,7 @@ function lineasSinPrecio(){ return P.lineas.filter(l => !(Number(l.precio) > 0))
 
 function recalc(){
   repreciar();
+  pintarNivel();
   const c = calcularPedido();
   const ex = revisarExistencia(P.lineas);
   $("#canalSug").value = P.lineas.length ? c.canal : "—";
@@ -1939,7 +2095,6 @@ function recalc(){
     return;
   }
 
-  const bajoMinimo = c.nivel==="express" && c.sub < c.minimo;
   // Un rol que no ve costos no ve margen ni contribución, ni el aviso de
   // pérdida. B1: el rol pedidos sí confirma; el costo lo calcula la base
   // (sql/costos-b1.sql) y, si pierde, el pedido queda por revisar allá.
@@ -1948,7 +2103,11 @@ function recalc(){
   const pierde = conCostos && esNum(c.contrib) && c.contrib < 0;
 
   const sinLista = sinListaPedido(), sinPrecio = sinLista ? [] : lineasSinPrecio();
+  const sinZona = sinZonaPedido();
   $("#economia").innerHTML = `
+    ${sinZona ? `<div class="aviso a-mal" data-sin-zona><strong>Este cliente no tiene zona de envío.</strong>
+      No se puede confirmar el pedido: la zona (local o foránea) la pone el administrador o el coordinador en Clientes.
+      Sin zona no se sabe el cargo de envío.</div>` : ""}
     ${sinLista ? `<div class="aviso a-mal" data-sin-lista><strong>Este cliente no tiene lista de precios.</strong>
       No se puede confirmar el pedido: la lista la asigna el administrador o el coordinador en Clientes.
       Los precios que ves son los de cliente particular, solo de referencia.</div>` : ""}
@@ -1963,9 +2122,14 @@ function recalc(){
     ${conCostos && c.sinCosto.length ? `<div class="aviso a-med">${c.sinCosto.map(l=>
       `«${esc(l.nombre)}» no tiene costo registrado.`).join("<br>")}
       El margen y la contribución no se pueden calcular; el pedido se puede confirmar igual.</div>` : ""}
-    ${c.cargo ? `<div class="aviso a-med">El pedido es de ${L0(c.sub)} y el mínimo para express sin cargo
-      es ${L0(c.minimo)}. Se agrega un cargo de urgencia de ${L0(c.cargo)}.
-      <br><strong>Alternativa sin cargo:</strong> ofrecer entrega en la ventana del día.</div>` : ""}
+    ${c.zona && c.cargo ? `<div class="aviso a-med" data-cargo-envio>Envío ${c.zona==="foraneo"?"foráneo":"local"}: el subtotal es de ${L(c.sub)}
+      y el envío es gratis desde ${L0(c.minimo)}. Se agrega un cargo de envío de ${L(c.cargo)}.
+      <strong>Total a pagar: ${L(c.total)}.</strong></div>` : ""}
+    ${c.zona && !c.cargo ? `<div class="aviso a-ok" data-envio-gratis>Envío ${c.zona==="foraneo"?"foráneo":"local"} sin cargo:
+      el subtotal llega al mínimo de ${L0(c.minimo)}.</div>` : ""}
+    ${c.zona==="foraneo" ? (() => { const s = salidaForanea(new Date()); return `<div class="aviso a-info" data-salida-foranea>
+      Cliente foráneo: va por Expreco. Si se confirma ahora, sale el ${fechaCorta(s.sale)} y la entrega es
+      ${textoDiasEnvio(s)} desde la salida.</div>`; })() : ""}
     ${pierde ? `<div class="aviso a-mal"><strong>Este pedido pierde ${L0(Math.abs(c.contrib))}.</strong>
       El margen de ${L0(c.margen)} no cubre el costo de entrega de ${L0(c.costoEnt)}.
       Sube el pedido, cámbialo a ventana programada, o autorízalo dejando constancia.</div>` : ""}
@@ -2006,6 +2170,7 @@ function habilitarConfirmar(){
   // Fase 1e: sin lista de precios del cliente, o con una línea sin precio, no se confirma.
   $("#btnConfirmar").disabled = !P.cliente || !P.lineas.length ||
     sinListaPedido() || lineasSinPrecio().length > 0 ||
+    sinZonaPedido() ||                       // fase 1f: sin zona de envío no se confirma
     ex.sinCatalogo.length > 0 || (ex.faltan.length > 0 && !puedeForzarExistencia()) ||
     (!!m1 && m1.value.trim().length < 8) || (!!m2 && m2.value.trim().length < 8);
 }
@@ -2255,6 +2420,9 @@ function confirmarPedido(){
   // Fase 1e: sin lista de precios del cliente no se confirma (la base tampoco lo acepta).
   if(sinListaPedido()){ alert("Este cliente no tiene lista de precios.\n\n"+
     "La asigna el administrador o el coordinador en Clientes; sin lista no se confirma un pedido."); recalc(); return; }
+  // Fase 1f: sin zona de envío tampoco (la base tampoco lo acepta).
+  if(sinZonaPedido()){ alert("Este cliente no tiene zona de envío.\n\n"+
+    "La pone el administrador o el coordinador en Clientes; sin zona no se confirma un pedido."); recalc(); return; }
   repreciar();
   // Se vuelve a comprobar al pulsar, con los datos que tenga el navegador ahora.
   const ex = revisarExistencia(P.lineas);
@@ -2301,6 +2469,12 @@ function confirmarPedido(){
     }
   }
   const sla = c.nivel==="express" ? par("sla_express_min") : par("sla_ventana_min");
+  // Fase 1f: zona, mínimo y cargo con que se calculó (la base los vuelve a poner). Un
+  // pedido foráneo guarda además su salida, calculada con la hora de Honduras, y los
+  // días hábiles prometidos; su «prometido» es el último de esos días, a las 18:00.
+  const foranea = c.zona === "foraneo" ? salidaForanea(new Date()) : null;
+  const envio = {zona:c.zona, minimo:c.minimo, cargo:c.cargo,
+    ...(foranea ? {sale:foranea.sale, dias_min:foranea.dias_min, dias_max:foranea.dias_max} : {})};
   let ped = {
     // Letra del dispositivo, guion y parte numérica. La parte numérica es la
     // mayor de todos los pedidos, con o sin letra, más 1 (mínimo 1001), para
@@ -2310,7 +2484,7 @@ function confirmarPedido(){
     telefono: P.cliente.telefono, direccion: P.cliente.direccion,
     lineas: JSON.parse(JSON.stringify(P.lineas)),
     nivel: c.nivel, canal: c.canal, estado: "confirmado",
-    subtotal: c.sub, costo_prod: c.cost, cargo: c.cargo, total: c.total,
+    subtotal: c.sub, costo_prod: c.cost, cargo: c.cargo, total: c.total, envio,
     peso: c.peso, margen: c.margen,
     // Tipo de cambio con que se fijó el costo de las líneas en dólares (nota de origen).
     tipo_cambio: (P.lineas.find(l => l.tc) || {}).tc || null,
@@ -2319,7 +2493,7 @@ function confirmarPedido(){
     hecho_por: ($("#hechoPor")||{value:"El médico"}).value,
     pago_estado: P.cliente.credito ? "credito" : "pendiente",
     pago: null,
-    prometido: new Date(Date.now() + sla*60000).toISOString(),
+    prometido: foranea ? foranea.limite : new Date(Date.now() + sla*60000).toISOString(),
     entregado: null,
     override: motivo, override_fecha: motivo ? ahora : null, override_letra: motivo ? letra : null,
     override_existencia: motivoEx, override_existencia_fecha: motivoEx ? ahora : null,
@@ -2334,7 +2508,10 @@ function confirmarPedido(){
   guardar();
   limpiarPedido();
   alert("Pedido " + ped.numero + " confirmado.\n\n" +
-        "Canal: " + ped.canal + "\nProme­tido para: " + fecha(ped.prometido));
+        "Canal: " + ped.canal + (foranea
+          ? "\nSale: " + fechaCorta(foranea.sale) + "\nEntrega: " + textoDiasEnvio(foranea) + " desde la salida"
+          : "\nProme­tido para: " + fecha(ped.prometido)) +
+        (ped.cargo ? "\nCargo de envío: " + L(ped.cargo) + " · Total: " + L(ped.total) : ""));
   ir("pedidos");
 }
 </script>
@@ -2409,8 +2586,13 @@ function pintarInicio(){
   const sinSubir = typeof nubeAvisoSinSubir === "function" ? nubeAvisoSinSubir() : "";
   // Fase 1e (3a): clientes sin lista de precios, para quien puede asignarla.
   const sinListaCli = puedeLista() ? D.clientes.filter(c => !listaCliente(c)).length : 0;
+  // Fase 1f (2a): clientes sin zona de envío, para quien puede ponerla.
+  const sinZonaCli = puedeZona() ? D.clientes.filter(c => !zonaCliente(c)).length : 0;
   $("#pendientes").innerHTML = `
     ${sinSubir}
+    ${sinZonaCli ? `<div class="aviso a-med" data-sin-zona><strong>${sinZonaCli} cliente(s) sin zona de envío.</strong>
+      No se les puede confirmar un pedido hasta ponerles si son locales o foráneos.
+      <button class="s" onclick="ir('clientes')">Poner en Clientes</button></div>` : ""}
     ${sinListaCli ? `<div class="aviso a-med" data-sin-lista><strong>${sinListaCli} cliente(s) sin lista de precios.</strong>
       No se les puede confirmar un pedido hasta asignársela.
       <button class="s" onclick="ir('clientes')">Asignar en Clientes</button></div>` : ""}
@@ -2626,7 +2808,10 @@ function tarjetaPedido(p, f){
   const min = minutosDesde(p.fecha);
   const restan = p.prometido ? Math.floor((new Date(p.prometido)-Date.now())/60000) : null;
   const cls = restan===null ? "" : restan < 0 ? "urg" : restan < 10 ? "att" : "";
-  const cro = restan===null ? `${min} min`
+  // Fase 1f: un pedido foráneo no cuenta minutos; muestra su salida y sus días hábiles.
+  const cro = esForaneo(p) && (p.envio||{}).sale && !(restan < 0)
+              ? `sale ${fechaCorta(p.envio.sale)} · ${textoDiasEnvio(p.envio)}`
+            : restan===null ? `${min} min`
             : restan < 0 ? `${Math.abs(restan)} min TARDE`
             : `faltan ${restan} min`;
   const colCro = restan===null ? "var(--gris)" : restan<0 ? "var(--rojo)" : restan<10 ? "#D68910" : "var(--verde)";
@@ -2677,8 +2862,12 @@ const MENSAJES = {
     `Ya lo estamos preparando y le avisamos apenas salga.`,
   listo: p => `Dr(a). ${p.cliente}, su pedido #${p.numero} está listo y sale en camino en breve. `+
     `Llega a ${p.direccion}.`,
-  en_ruta: p => `Dr(a). ${p.cliente}, su pedido #${p.numero} va en camino. `+
-    `Llega aproximadamente a las ${new Date(p.prometido).toLocaleTimeString("es-HN",{hour:"2-digit",minute:"2-digit"})}.`
+  // Fase 1f: un pedido foráneo va por Expreco y no promete una hora, sino días hábiles.
+  en_ruta: p => esForaneo(p)
+    ? `Dr(a). ${p.cliente}, su pedido #${p.numero} va en camino con Expreco. `+
+      `La entrega es ${textoDiasEnvio(p.envio)} desde su salida${(p.envio||{}).sale ? " (salida: "+fechaCorta(p.envio.sale)+")" : ""}.`
+    : `Dr(a). ${p.cliente}, su pedido #${p.numero} va en camino. `+
+      `Llega aproximadamente a las ${new Date(p.prometido).toLocaleTimeString("es-HN",{hour:"2-digit",minute:"2-digit"})}.`
 };
 
 function avisarCliente(id){
@@ -2802,38 +2991,163 @@ function confirmarDeposito(id){
 
 function pedirDeposito(id){
   const p = D.pedidos.find(x=>x.id===id);
-  const b = D.banco || {};
-  const faltan = !b.banco || !b.cuenta;
+  // Fase 1f: todas las cuentas de la lista (fila cuentas de config), una debajo de otra.
+  // El total es p.total, que ya incluye el cargo de envío.
+  const cs = cuentasValidas();
+  const faltan = !cs.length;
   const datos = faltan
-    ? "\n[Falta configurar la cuenta bancaria en Ajustes]"
-    : `\n\n${b.banco}\nCuenta ${b.tipo||""} n.º ${b.cuenta}\nA nombre de: ${b.titular||""}`;
+    ? "\n[Falta configurar las cuentas bancarias en Ajustes]"
+    : `\n\nPuede depositar en ${cs.length === 1 ? "esta cuenta" : "cualquiera de estas cuentas, la del banco que le quede mejor"}:` +
+      cs.map(c => `\n\n${c.banco}\nCuenta ${c.tipo ? c.tipo + " " : ""}n.º ${c.numero}` +
+        (c.titular ? `\nA nombre de: ${c.titular}` : "")).join("");
   const t = `Dr(a). ${p.cliente}, su pedido #${p.numero} ya está en preparación.\n\n`+
     `Total: ${L0(p.total)}${datos}\n\n`+
-    `En cuanto nos comparta el comprobante, sale de inmediato hacia su consultorio.`;
+    (esForaneo(p) ? `En cuanto nos comparta el comprobante, sale por Expreco hacia su consultorio.`
+                  : `En cuanto nos comparta el comprobante, sale de inmediato hacia su consultorio.`);
   modal(`<h3 style="margin-top:0">Solicitud de depósito — pedido ${p.numero}</h3>
-    ${faltan?`<div class="aviso a-med">Todavía no has configurado la cuenta bancaria.
-      Ve a <strong>Ajustes</strong> y complétala para que el mensaje salga bien.</div>`:""}
+    ${faltan?`<div class="aviso a-med">Todavía no hay cuentas bancarias configuradas.
+      El administrador las escribe en <strong>Ajustes</strong>, en «Cuentas bancarias de DICOSA», para que el mensaje salga bien.</div>`:""}
     <p class="mini">Cópialo y pégalo en WhatsApp al ${esc(p.telefono)}.
     El pedido sigue preparándose mientras tanto.</p>
-    <textarea id="msgTxt" rows="8" style="margin:10px 0">${esc(t)}</textarea>
+    <textarea id="msgTxt" rows="${Math.min(18, 8 + cs.length * 4)}" style="margin:10px 0">${esc(t)}</textarea>
     <button class="b" onclick="copiarTexto(document.getElementById('msgTxt').value)">Copiar mensaje</button>
     <button class="s" onclick="cerrarModal()">Cerrar</button>`);
 }
 
-function guardarBanco(){
-  D.banco = {banco:$("#bkBanco").value.trim(), cuenta:$("#bkCuenta").value.trim(),
-             titular:$("#bkTitular").value.trim(), tipo:$("#bkTipo").value.trim()};
-  guardar();
-  $("#bancoMsg").innerHTML = `<div class="aviso a-ok">Datos bancarios guardados.
-    Ya salen completos en la solicitud de depósito.</div>`;
-  setTimeout(()=>$("#bancoMsg").innerHTML="", 4000);
+/* ---------------------------------- cuentas bancarias de DICOSA (fase 1f, C6a)
+   Lista D.cuentas = [{id, banco, tipo, numero, titular}], la fila «cuentas» de
+   config: la escribe solo el Admin y la leen todos los roles (la usa quien arma
+   el aviso de depósito). La fila «banco» de antes (D.banco, una sola cuenta) no
+   se borra ni se cambia: «Pasar a la lista» la copia como una cuenta más. */
+// 1F-R3 (Q8a): mientras dura la primera bajada completa de pend_1f, las tarjetas Cuentas y
+// Envío no dejan guardar: lo que se escribiera en ese rato podía quedar anotado como subido
+// sin subirse (ver nubeSincronizar). Al terminar la bajada se vuelve a pintar y se habilitan.
+const ESPERA_1F = "Esperando la primera bajada de la base compartida: se podrá guardar cuando termine.";
+const NO_GUARDO_1F = "No se guardó: falta que termine la primera bajada de la base compartida.";
+function espera1f(){ return !!(typeof D === "object" && D && D.pend_1f); }
+function pintarEspera1f(){
+  const e = espera1f();
+  ["#ctaEspera", "#envEspera"].forEach(s => { const x = $(s); if(x) x.innerHTML = e ? `<div class="aviso a-med">${ESPERA_1F}</div>` : ""; });
+  ["#ctaGuardar", "#ctaPasar", "#envGuardar"].forEach(s => { const x = $(s); if(x) x.disabled = e; });
+  $$("#ctaLista button.d").forEach(b => { b.disabled = e; });
+}
+const ctaIgual = (a, b) => String(a || "").replace(/\s+/g, "").toLowerCase() === String(b || "").replace(/\s+/g, "").toLowerCase();
+// Cuentas que se pueden mostrar: con banco y número.
+function cuentasValidas(){
+  return (Array.isArray(D.cuentas) ? D.cuentas : []).filter(c => c && typeof c === "object" &&
+    String(c.banco || "").trim() && String(c.numero || "").trim());
+}
+function pintarCuentas(){
+  if(!$("#ctaLista")) return;
+  const cs = Array.isArray(D.cuentas) ? D.cuentas : [], b = D.banco || {};
+  // La fila banco de antes, si tiene datos y su número todavía no está en la lista.
+  const pasar = String(b.banco || "").trim() && String(b.cuenta || "").trim() && !cs.some(c => ctaIgual(c.numero, b.cuenta));
+  $("#ctaLista").innerHTML =
+    (pasar ? `<div class="aviso a-info">La cuenta que había antes (${esc(b.banco)}, n.º ${esc(b.cuenta)}) no está en la lista.
+       <button class="s" id="ctaPasar" onclick="pasarBancoALista()">Pasar a la lista</button></div>` : "") +
+    (cs.length ? `<div class="tabla-wrap"><table>
+      <thead><tr><th>Banco</th><th>Tipo</th><th>Número</th><th>Titular</th><th></th></tr></thead><tbody>
+      ${cs.map(c => `<tr data-cta="${esc(c.id)}"><td><strong>${esc(c.banco)}</strong></td><td>${esc(c.tipo||"—")}</td>
+        <td>${esc(c.numero)}</td><td>${esc(c.titular||"—")}</td>
+        <td><button class="s" data-id="${esc(c.id)}" onclick="editarCuenta(this.dataset.id)">Editar</button>
+          <button class="s d" data-id="${esc(c.id)}" onclick="quitarCuenta(this.dataset.id)">Quitar</button></td></tr>`).join("")}
+      </tbody></table></div>`
+    : `<div class="aviso a-med">Todavía no hay cuentas en la lista: el aviso de depósito sale incompleto.</div>`);
+  const ed = CTA_EDIT ? cs.find(c => c.id === CTA_EDIT) : null;
+  if(!ed) CTA_EDIT = null;
+  $("#ctaGuardar").textContent = ed ? "Guardar cambios" : "Agregar cuenta";
+  $("#ctaCancelar").style.display = ed ? "" : "none";
+  pintarEspera1f();
+}
+function ctaMensaje(clase, texto){
+  $("#ctaMsg").innerHTML = texto ? `<div class="aviso ${clase}">${texto}</div>` : "";
+}
+function ctaFormulario(c){
+  $("#ctaBanco").value = (c && c.banco) || ""; $("#ctaTipo").value = (c && c.tipo) || "";
+  $("#ctaNumero").value = (c && c.numero) || ""; $("#ctaTitular").value = (c && c.titular) || "";
+}
+function guardarCuenta(){
+  const c = {banco:$("#ctaBanco").value.trim(), tipo:$("#ctaTipo").value.trim(),
+             numero:$("#ctaNumero").value.trim(), titular:$("#ctaTitular").value.trim()};
+  if(espera1f()){ ctaMensaje("a-mal", NO_GUARDO_1F); pintarEspera1f(); return; }
+  if(!c.banco || !c.numero){ ctaMensaje("a-mal", "Banco y número de cuenta son obligatorios."); return; }
+  if(!Array.isArray(D.cuentas)) D.cuentas = [];
+  const repetido = D.cuentas.some(x => x.id !== CTA_EDIT && ctaIgual(x.numero, c.numero));
+  const ed = CTA_EDIT ? D.cuentas.find(x => x.id === CTA_EDIT) : null;
+  // Se reemplaza la lista (no se cambia en sitio) para que la firma de la fila cambie siempre.
+  D.cuentas = ed ? D.cuentas.map(x => x.id === ed.id ? {id:ed.id, ...c} : x) : [...D.cuentas, {id:uid(), ...c}];
+  CTA_EDIT = null;
+  guardar(); ctaFormulario(null); pintarCuentas();
+  ctaMensaje(repetido ? "a-med" : "a-ok", repetido
+    ? "Cuenta guardada, pero ese número está repetido: ya lo tiene otra cuenta de la lista. Revisa que no sea la misma."
+    : "Cuenta guardada. Ya sale en la solicitud de depósito.");
+}
+function editarCuenta(id){
+  const c = (D.cuentas || []).find(x => x.id === id); if(!c) return;
+  CTA_EDIT = id; ctaFormulario(c); ctaMensaje("", ""); pintarCuentas();
+}
+function cancelarCuenta(){ CTA_EDIT = null; ctaFormulario(null); ctaMensaje("", ""); pintarCuentas(); }
+function quitarCuenta(id){
+  const c = (D.cuentas || []).find(x => x.id === id); if(!c) return;
+  if(espera1f()){ ctaMensaje("a-mal", NO_GUARDO_1F); pintarEspera1f(); return; }
+  if(!confirm("Quitar de la lista la cuenta de " + c.banco + ", n.º " + c.numero + ".\n\n" +
+    "Deja de salir en la solicitud de depósito. ¿Continuar?")) return;
+  D.cuentas = D.cuentas.filter(x => x.id !== id);
+  if(CTA_EDIT === id){ CTA_EDIT = null; ctaFormulario(null); }
+  guardar(); pintarCuentas();
+  ctaMensaje("a-ok", "Cuenta quitada de la lista.");
+}
+// Decisión 6a: copia la fila banco de antes como una cuenta de la lista. La fila banco queda igual.
+function pasarBancoALista(){
+  const b = D.banco || {};
+  if(!String(b.banco || "").trim() || !String(b.cuenta || "").trim()) return;
+  if(espera1f()){ ctaMensaje("a-mal", NO_GUARDO_1F); pintarEspera1f(); return; }
+  if(!Array.isArray(D.cuentas)) D.cuentas = [];
+  if(D.cuentas.some(c => ctaIgual(c.numero, b.cuenta))){ pintarCuentas(); return; }
+  D.cuentas = [{id:uid(), banco:String(b.banco).trim(), tipo:String(b.tipo || "").trim(),
+                numero:String(b.cuenta).trim(), titular:String(b.titular || "").trim()}, ...D.cuentas];
+  guardar(); pintarCuentas();
+  ctaMensaje("a-ok", "La cuenta de antes ya está en la lista.");
+}
+
+/* ------------------------------------------ reglas de envío (fase 1f, C7a) */
+function pintarEnvio(){
+  if(!$("#envMinLocal")) return;
+  const e = envioCfg();
+  $("#envMinLocal").value = e.minimo_local; $("#envCargoLocal").value = e.cargo_local;
+  $("#envMinForaneo").value = e.minimo_foraneo; $("#envCargoForaneo").value = e.cargo_foraneo;
+  $("#envHora").value = e.hora_corte; $("#envDiasMin").value = e.dias_min; $("#envDiasMax").value = e.dias_max;
+  $("#envNota").value = e.nota;
+  pintarEspera1f();
+}
+function guardarEnvio(){
+  const mal = t => { $("#envMsg").innerHTML = `<div class="aviso a-mal">${t}</div>`; };
+  const num = id => { const t = $(id).value.trim(); return t === "" ? NaN : Number(t); };
+  if(espera1f()){ pintarEspera1f(); return mal(NO_GUARDO_1F); }
+  const montos = {minimo_local:num("#envMinLocal"), cargo_local:num("#envCargoLocal"),
+                  minimo_foraneo:num("#envMinForaneo"), cargo_foraneo:num("#envCargoForaneo")};
+  if(Object.values(montos).some(v => !isFinite(v) || v < 0))
+    return mal("Los mínimos y los cargos deben ser números de 0 o más. No se guardó nada.");
+  const hora = $("#envHora").value.trim();
+  if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) return mal("La hora de corte va como HH:MM, por ejemplo 16:00. No se guardó nada.");
+  const dmin = num("#envDiasMin"), dmax = num("#envDiasMax");
+  if(!Number.isInteger(dmin) || !Number.isInteger(dmax) || dmin < 0 || dmax < dmin)
+    return mal("Los días hábiles deben ser enteros de 0 o más, y el máximo no puede ser menor que el mínimo. No se guardó nada.");
+  D.envio = {...montos, hora_corte:hora, dias_min:dmin, dias_max:dmax, nota:$("#envNota").value.trim()};
+  guardar(); pintarEnvio();
+  if(typeof recalc === "function") recalc();
+  $("#envMsg").innerHTML = `<div class="aviso a-ok">Envío guardado. Aplica de inmediato a los pedidos nuevos.</div>`;
+  setTimeout(()=>{ if($("#envMsg")) $("#envMsg").innerHTML=""; }, 4000);
 }
 
 /* -------------------------------------------------------------- CLIENTES */
 function pintarClientes(){
   const q = ($("#filtroCli").value||"").toLowerCase();
-  const r = D.clientes.filter(c=>!q||c.nombre.toLowerCase().includes(q)||c.telefono.includes(q)||
-    String((c.dicosa||{}).codigo||"").includes(q));
+  // Fase 1f: filtro por zona de envío («sin» son los que todavía no la tienen).
+  const fz = ($("#filtroCliZona")||{}).value || "";
+  const r = D.clientes.filter(c=>(!q||c.nombre.toLowerCase().includes(q)||c.telefono.includes(q)||
+    String((c.dicosa||{}).codigo||"").includes(q)) &&
+    (!fz || (fz === "sin" ? !zonaCliente(c) : zonaCliente(c) === fz)));
   // Código, Especialidad, Municipio y Generador vienen de DICOSA (fase 1c); lat y lon no se muestran.
   // Responsable (fase A): asignado_a que manda la base, con el nombre del equipo si lo
   // tiene; solo para admin y coordinador.
@@ -2859,10 +3173,19 @@ function pintarClientes(){
       <div class="auto"><button class="b" id="cliListaAplicar" onclick="aplicarListaVarios()"${CLI_SEL.size?"":" disabled"}>Poner lista a ${CLI_SEL.size} marcado(s)</button></div>
       <div class="auto mini" style="padding-bottom:8px">${sinLista ? `<strong>${sinLista}</strong> cliente(s) sin lista de precios: no se les puede confirmar un pedido.`
         : "Todos los clientes tienen lista de precios."}</div></div>` : "";
-  $("#tablaClientes").innerHTML = avisoNo + barra + (r.length ? `<div class="tabla-wrap"><table>
+  // Fase 1f: zona de envío de los marcados (la misma selección), para quien puede ponerla.
+  const sinZona = D.clientes.filter(c => !zonaCliente(c)).length;
+  const barraZona = puedeZona() && r.length ? `<div class="fila noprint" id="cliZonaBarra" style="align-items:flex-end;margin-bottom:10px">
+      <div class="auto"><label>Zona de envío para los marcados</label><select id="cliZonaVarios">
+        ${Object.entries(ZONAS).map(([k, t]) => `<option value="${k}"${CLI_ZONA===k?" selected":""}>${t}</option>`).join("")}
+        <option value=""${CLI_ZONA===""?" selected":""}>Sin zona</option></select></div>
+      <div class="auto"><button class="b" id="cliZonaAplicar" onclick="aplicarZonaVarios()"${CLI_SEL.size?"":" disabled"}>Poner zona a ${CLI_SEL.size} marcado(s)</button></div>
+      <div class="auto mini" style="padding-bottom:8px">${sinZona ? `<strong>${sinZona}</strong> cliente(s) sin zona de envío: no se les puede confirmar un pedido.`
+        : "Todos los clientes tienen zona de envío."}</div></div>` : "";
+  $("#tablaClientes").innerHTML = avisoNo + barra + barraZona + (r.length ? `<div class="tabla-wrap"><table>
     <thead><tr>${conLista?`<th class="noprint"><input type="checkbox" id="cliSelTodos" style="width:auto" title="Marcar los que se ven"
         ${r.every(c => CLI_SEL.has(c.id))?"checked":""} onchange="marcarClientesVisibles(this.checked)"></th>`:''}
-      <th>Código</th><th>Nombre</th><th>Tipo</th><th>Lista de precios</th><th>Teléfono</th><th>Dirección</th>
+      <th>Código</th><th>Nombre</th><th>Tipo</th><th>Lista de precios</th><th>Envío</th><th>Teléfono</th><th>Dirección</th>
       <th>Especialidad</th><th>Municipio</th><th>Generador</th>${conResp?'<th>Responsable</th>':''}
       <th class="num">Pedidos</th><th class="num">Ticket prom.</th><th>Cobro</th><th class="noprint"></th></tr></thead><tbody>
     ${r.map(c=>{
@@ -2874,6 +3197,7 @@ function pintarClientes(){
         <td>${esc(dk.codigo||"—")}</td><td><strong>${esc(c.nombre)}</strong>
         ${dk.no_vino?'<br><span class="pill p-med">no vino en la última importación</span>':''}</td><td>${esc(c.tipo)}</td>
         <td>${listaCliente(c) ? `<span class="pill p-ok">${LISTAS[listaCliente(c)]}</span>` : '<span class="pill p-mal">sin lista</span>'}</td>
+        <td>${zonaCliente(c) ? `<span class="pill ${zonaCliente(c)==="foraneo"?"p-med":"p-ok"}">${ZONAS[zonaCliente(c)]}</span>` : '<span class="pill p-mal">sin zona</span>'}</td>
         <td>${esc(c.telefono)}</td><td>${esc(c.direccion||"—")}<br>
         <span class="mini">${esc(c.referencia||"")}</span></td>
         <td>${esc(dk.especialidad||"—")}</td><td>${esc(dk.municipio||"—")}</td><td>${esc(dk.generador||"—")}</td>
@@ -2884,19 +3208,40 @@ function pintarClientes(){
         <td>${c.credito?'<span class="pill p-ok">crédito</span>':'<span class="pill p-gris">depósito</span>'}</td>
         <td class="noprint"><button class="s" onclick="abrirNuevoCliente('${c.id}')">Editar</button></td></tr>`;
     }).join("")}</tbody></table></div>`
-    : `<div class="vacio">Todavía no hay clientes registrados.</div>`);
+    : `<div class="vacio">${D.clientes.length ? "No hay clientes que coincidan." : "Todavía no hay clientes registrados."}</div>`);
 }
 $("#filtroCli").oninput = pintarClientes;
+$("#filtroCliZona").onchange = pintarClientes;
 
 // Fase 1e: asignación de la lista de precios a varios clientes a la vez (C1a).
 // Las marcas (CLI_SEL, declarada junto a P) viven en memoria y se limitan a los clientes que se ven.
 function marcarCliente(id, si){
   if(si) CLI_SEL.add(id); else CLI_SEL.delete(id);
   CLI_LISTA = ($("#cliListaVarios")||{}).value ?? CLI_LISTA;
+  CLI_ZONA = ($("#cliZonaVarios")||{}).value ?? CLI_ZONA;
   pintarClientes();
+}
+// Fase 1f (13a): zona de envío a varios clientes a la vez, con la misma selección de
+// la lista de precios. Se asigna a mano; el filtro «Sin zona» deja ver los que faltan.
+function aplicarZonaVarios(){
+  if(!puedeZona() || !CLI_SEL.size) return;
+  const zona = $("#cliZonaVarios").value, n = CLI_SEL.size;
+  CLI_ZONA = zona;
+  CLI_LISTA = ($("#cliListaVarios")||{}).value ?? CLI_LISTA;
+  if(!confirm((ZONAS[zona] ? "Poner la zona de envío «"+ZONAS[zona]+"» a " : "Quitar la zona de envío a ") + n + " cliente(s).\n\n" +
+    "Decide el cargo de envío de sus pedidos nuevos; los pedidos ya hechos no cambian.\n\n¿Continuar?")) return;
+  D.clientes.forEach(c => {
+    if(!CLI_SEL.has(c.id) || zonaCliente(c) === zona) return;
+    if(ZONAS[zona]) c.envio_zona = zona; else delete c.envio_zona;
+  });
+  CLI_SEL.clear();
+  guardar();
+  pintarClientes();
+  if(typeof recalc === "function") recalc();
 }
 function marcarClientesVisibles(si){
   CLI_LISTA = ($("#cliListaVarios")||{}).value ?? CLI_LISTA;
+  CLI_ZONA = ($("#cliZonaVarios")||{}).value ?? CLI_ZONA;
   document.querySelectorAll("#tablaClientes input.cliSel").forEach(x => { if(si) CLI_SEL.add(x.dataset.id); else CLI_SEL.delete(x.dataset.id); });
   pintarClientes();
 }
@@ -2904,6 +3249,7 @@ function aplicarListaVarios(){
   if(!puedeLista() || !CLI_SEL.size) return;
   const lista = $("#cliListaVarios").value, n = CLI_SEL.size;
   CLI_LISTA = lista;
+  CLI_ZONA = ($("#cliZonaVarios")||{}).value ?? CLI_ZONA;
   if(!confirm((LISTAS[lista] ? "Poner la lista «"+LISTAS[lista]+"» a " : "Quitar la lista de precios a ") + n + " cliente(s).\n\n" +
     "Decide el precio de sus pedidos nuevos; los pedidos ya hechos no cambian.\n\n¿Continuar?")) return;
   D.clientes.forEach(c => {
@@ -2980,6 +3326,14 @@ function abrirNuevoCliente(id){
       <p class="mini" style="margin-top:5px">Decide el precio de cada producto en sus pedidos. La importación de Clientes no la toca.</p>`
     : `<p class="mini" id="cListaTxt" style="margin:0">Lista de precios: <strong>${listaCliente(c) ? LISTAS[listaCliente(c)]
         : "sin lista"}</strong>${listaCliente(c) ? "" : ". Sin lista no se le puede confirmar un pedido; la asigna el administrador o el coordinador."}</p>`}
+    ${puedeZona() ? `<div style="margin-top:10px"><label>Zona de envío</label><select id="cEnvioZona">
+        <option value="">Sin zona (no se le puede confirmar un pedido)</option>
+        ${Object.entries(ZONAS).map(([k, t]) => `<option value="${k}"${zonaCliente(c)===k?" selected":""}>${t}</option>`).join("")}
+      </select></div>
+      <p class="mini" style="margin-top:5px">Decide el cargo de envío de sus pedidos: local por mensajería, foráneo por Expreco.
+        No es la «Zona o cluster» de arriba. La importación de Clientes no la toca.</p>`
+    : `<p class="mini" id="cEnvioZonaTxt" style="margin:6px 0 0">Zona de envío: <strong>${zonaCliente(c) ? ZONAS[zonaCliente(c)]
+        : "sin zona"}</strong>${zonaCliente(c) ? "" : ". Sin zona no se le puede confirmar un pedido; la pone el administrador o el coordinador."}</p>`}
     ${fichaResponsable(c)}
     <div id="cErr"></div><hr>
     <button class="b" onclick="guardarCliente('${id||""}')">Guardar</button>
@@ -3007,7 +3361,12 @@ function guardarCliente(id){
   // Lista de precios (fase 1e): solo admin y coordinador la ponen; los demás conservan
   // la que tenía el cliente (uno nuevo, sin lista). La base hace lo mismo.
   const lista = puedeLista() && $("#cLista") ? $("#cLista").value : listaCliente(actual);
-  const ponerListaEn = cl => { if(LISTAS[lista]) cl.tipo_precio = lista; else delete cl.tipo_precio; };
+  // Zona de envío (fase 1f): la misma regla que la lista de precios.
+  const zonaEnvio = puedeZona() && $("#cEnvioZona") ? $("#cEnvioZona").value : zonaCliente(actual);
+  const ponerListaEn = cl => {
+    if(LISTAS[lista]) cl.tipo_precio = lista; else delete cl.tipo_precio;
+    if(ZONAS[zonaEnvio]) cl.envio_zona = zonaEnvio; else delete cl.envio_zona;
+  };
   // B3: responsable elegido en la ficha (solo admin y coordinador). Cambiarlo marca
   // al cliente como asignado a mano y lo apunta para el envío de siempre
   // (nubeSubirAsignar); la casilla quita la marca sin cambiar el responsable.
@@ -4165,7 +4524,9 @@ function pintarPreviaClientes(){
     marca(id, `<span class="pill p-med">cambia de responsable: ${esc(nombreEquipo(r) || r)}</span>`));
   respetados.forEach(id => marca(id, '<span class="pill p-gris">asignado a mano: se respeta</span>'));
   const enTabla = Object.keys(marcas);
-  $("#cliPrevia").innerHTML = `<div class="aviso a-info"><strong>Vista previa: todavía no cambió nada.</strong>
+  // Fase 1f: cuántos clientes del archivo quedan sin zona de envío (los nuevos y los que no la tienen).
+  const sinZonaArchivo = Object.keys(a.cli).filter(id => !zonaCliente(D.clientes.find(c => c.id === id))).length;
+  $("#cliPrevia").innerHTML =`<div class="aviso a-info"><strong>Vista previa: todavía no cambió nada.</strong>
     <br>Archivo ${esc(archivo)} · filas <strong id="cliFilas">${a.filas}</strong>
     · nuevos <strong id="cliNuevos">${nuevos.length}</strong>
     · se actualizan <strong id="cliActualizan">${cambian.length}</strong>
@@ -4190,6 +4551,9 @@ function pintarPreviaClientes(){
         <td><span class="pill p-mal">no vino, se marca</span></td></tr>`).join("")}
       </tbody></table></div>` : `<p class="mini">Ningún cliente cambia.</p>`}
     <p class="mini">Crédito, referencia, tipo y zona de la app no se tocan. Un cliente nuevo entra como tipo Otro, sin crédito.</p>
+    <div class="aviso ${sinZonaArchivo ? "a-med" : "a-info"}">Clientes de este archivo sin zona de envío
+      <strong id="cliSinZona">${sinZonaArchivo}</strong>${sinZonaArchivo ? ": la importación no la pone ni la cambia. " +
+        "Sin zona no se les puede confirmar un pedido; se pone después en Clientes, con el filtro «Sin zona»." : "."}</div>
     <p><label><input type="checkbox" id="cliCasilla" style="width:auto"
       onchange="$('#cliConfirmar').disabled=!this.checked"> Revisé la vista previa: se crean ${nuevos.length},
       se actualizan ${cambian.length}, se marcan ${d.noVinieron.length} y cambian de responsable ${nAsig} cliente(s)</label></p>
@@ -4391,9 +4755,9 @@ function marcarAvisado(i){
 
 /* ---------------------------------------------------------------- AJUSTES */
 function pintarAjustes(){
-  const b = D.banco || {};
-  if($("#bkBanco")){ $("#bkBanco").value=b.banco||""; $("#bkCuenta").value=b.cuenta||"";
-    $("#bkTitular").value=b.titular||""; $("#bkTipo").value=b.tipo||""; }
+  // Fase 1f: la lista de cuentas y las reglas de envío (la tarjeta de una sola cuenta ya no está).
+  pintarCuentas();
+  pintarEnvio();
   if($("#letraDisp")) $("#letraDisp").value = letraDispositivo();
   pintarCorte();
   pintarTipoCambio();
@@ -4551,13 +4915,13 @@ function cargarEjemplo(){
   const cs = [
     {id:"ej1", nombre:"Dr. Ramírez — Odontología", telefono:"+504-9988-7766",
      tipo:"Odontólogo", zona:"Torre Médica 1", direccion:"Torre Médica 1, local 302",
-     referencia:"Frente al ascensor", credito:false, tipo_precio:"particular", ejemplo:true, alta:new Date().toISOString()},
+     referencia:"Frente al ascensor", credito:false, tipo_precio:"particular", envio_zona:"local", ejemplo:true, alta:new Date().toISOString()},
     {id:"ej2", nombre:"Clínica Santa Rosa", telefono:"+504-2233-4455",
      tipo:"Clínica", zona:"Bulevar Morazán", direccion:"Bulevar Morazán, edificio Plaza, 2.º nivel",
-     referencia:"Contiguo a la farmacia", credito:true, tipo_precio:"particular", ejemplo:true, alta:new Date().toISOString()},
+     referencia:"Contiguo a la farmacia", credito:true, tipo_precio:"particular", envio_zona:"local", ejemplo:true, alta:new Date().toISOString()},
     {id:"ej3", nombre:"Dra. Fonseca — Pediatría", telefono:"+504-3344-5566",
      tipo:"Médico especialista", zona:"Col. Palmira", direccion:"Col. Palmira, casa 45",
-     referencia:"Portón verde", credito:false, tipo_precio:"particular", ejemplo:true, alta:new Date().toISOString()}
+     referencia:"Portón verde", credito:false, tipo_precio:"particular", envio_zona:"local", ejemplo:true, alta:new Date().toISOString()}
   ];
   cs.forEach(c=>{ if(!D.clientes.some(x=>x.telefono===c.telefono)) D.clientes.push(c); });
 
@@ -5104,6 +5468,7 @@ async function confirmarFotos(){
   const casilla = $("#fotCasilla"), casillaQuitan = $("#fotCasillaQuitan");
   if(!casilla || !casilla.checked) return;
   if(casillaQuitan && !casillaQuitan.checked) return;
+  fotInfo("Revisando que la sincronización esté al día…");
   const pre = await fotListo();
   if(pre) return fotMal(pre);
   const {prep} = FOT, p = fotPlan(FOT.a, prep);
@@ -5115,13 +5480,17 @@ async function confirmarFotos(){
   FOT = null;
   $("#fotPrevia").innerHTML = "";
   const producto = c => D.skus.find(s => s.codigo === c);
-  let subidas = 0, quitadas = 0, viejas = 0;
+  let subidas = 0, quitadas = 0, viejas = 0, trabadas = 0;
   try{
     for(const t of p.subir){
       fotInfo("Subiendo fotos: " + (subidas + 1) + " de " + p.subir.length + "… No cierres esta pantalla.");
       const ruta = fotRuta(t.codigo, t.n, t.h);
       // Siempre a una ruta nueva: primero se sube, después el producto apunta a ella.
-      await nubeStorage("POST", ruta, prep[t.media].blob);
+      // 1F-R3 (decisión 3a): si la ruta ya existe (una importación anterior se cortó después
+      // de subirla), es la misma imagen, porque la ruta lleva su huella: se da por subida.
+      // Cualquier otro rechazo sigue deteniendo la importación.
+      try{ await nubeStorage("POST", ruta, prep[t.media].blob); }
+      catch(e){ if(!e.yaExiste) throw e; trabadas++; }
       const s = producto(t.codigo), antes = fotosDe(s).find(f => f.n === t.n);
       s.fotos = fotosDe(s).filter(f => f.n !== t.n).concat({n:t.n, ruta, h:t.h}).sort((x, y) => x.n - y.n);
       guardarLocal();
@@ -5151,6 +5520,7 @@ async function confirmarFotos(){
     ${p.iguales.length} ya estaban iguales, ${quitadas} quitada(s). ${p.conFoto.length} producto(s) con foto.
     ${p.noExisten.length ? p.noExisten.length + " código(s) del archivo no existen en la base. " : ""}
     ${p.ilegibles.length ? p.ilegibles.length + " imagen(es) no se pudieron leer. " : ""}
+    ${trabadas ? trabadas + " ya estaba(n) en el depósito por una importación que se cortó; los productos ya apuntan a ella(s). " : ""}
     ${viejas ? viejas + " foto(s) vieja(s) quedaron en el depósito (no se pudieron borrar; los productos ya usan las nuevas). " : ""}
     Se ven en «Mostrar catálogo».</div>`;
 }
@@ -5359,8 +5729,8 @@ function exportarPedidosCSV(){
   bajar("pedidos-"+hoy()+".csv", csv(f));
 }
 function exportarClientesCSV(){
-  const f = [["nombre","tipo","telefono","zona","direccion","referencia","alta"]];
-  D.clientes.forEach(c=>f.push([c.nombre,c.tipo,c.telefono,c.zona,c.direccion,c.referencia,c.alta]));
+  const f = [["nombre","tipo","telefono","zona","direccion","referencia","alta","envio_zona"]];
+  D.clientes.forEach(c=>f.push([c.nombre,c.tipo,c.telefono,c.zona,c.direccion,c.referencia,c.alta,zonaCliente(c)]));
   bajar("clientes-"+hoy()+".csv", csv(f));
 }
 function exportarCatalogoCSV(){
@@ -5841,6 +6211,18 @@ const nubeRpc = (fn, args) => nubeFetch("/rest/v1/rpc/" + fn, {method:"POST", bo
 //   DELETE ruta        -> la borra (solo admin y coordinador).
 // La ruta es la de dentro del depósito: productos/<código>/<n>-<huella>.jpg (ver fotRuta).
 const NUBE_DEPOSITO = "catalogo-fotos";
+// 1F-R3 (decisión 3a): ¿el depósito rechazó la subida porque la ruta ya existe? Se decide por
+// el cuerpo y no solo por el código: un 400 también puede ser tipo o tamaño no permitido.
+// [sin comprobar] Storage contesta 400 (o 409, según la versión) con un cuerpo como
+// {"statusCode":"409","error":"Duplicate","message":"The resource already exists"};
+// la remota G10 de g1.spec.js lo mira en akxhq.
+function fotoYaExiste(status, txt){
+  if(status !== 400 && status !== 409) return false;
+  let j = null;
+  try{ j = JSON.parse(txt); }catch(e){ return false; }
+  if(!j || typeof j !== "object") return false;
+  return j.error === "Duplicate" || /already exists/i.test(String(j.message || ""));
+}
 async function nubeStorage(metodo, ruta, cuerpo){
   const tk = await nubeToken();
   const partes = String(ruta).split("/").map(encodeURIComponent).join("/");
@@ -5863,6 +6245,8 @@ async function nubeStorage(metodo, ruta, cuerpo){
     const txt = await r.text().catch(() => "");
     const err = new Error("El depósito de fotos respondió " + r.status + (txt ? ": " + txt.slice(0, 160) : ""));
     err.status = r.status;
+    // 1F-R3: una subida rechazada porque la ruta ya existe (ver fotoYaExiste).
+    err.yaExiste = metodo === "POST" && fotoYaExiste(r.status, txt);
     throw err;
   }
   return metodo === "GET" ? r.blob() : null;
@@ -5917,6 +6301,7 @@ function nubeCambiosLocales(noBorrar){
     if(!nubeEscribe(c.t)) return;
     const esp = NUBE.espejo[c.t] = NUBE.espejo[c.t] || {};
     const filas = [];
+    const firmas = {};
     const vivos = {};
     (D[c.campo] || []).forEach(item => {
       const k = item[c.clave];
@@ -5935,9 +6320,12 @@ function nubeCambiosLocales(noBorrar){
         // 186: la fila que la base rechazó no se reenvía sola mientras siga igual.
         const m = nubeMarcada(c.t, k);
         if(m && m.firma === f) return;
-        const datos = c.t === "skus" && !conCostos ? nubeSinCosto(item)
-                    : c.t === "pedidos" && !conCostos ? nubePedidoSinCosto(item) : item;
-        filas.push({[c.clave]: String(k), datos: datos}); n++;
+        // 1F-R4: se sube una copia, no la fila viva, y el espejo anota la firma de lo
+        // que se envía (f, calculada aquí, antes del envío). Si la fila cambia mientras
+        // viaja, queda pendiente y sube en la vuelta siguiente.
+        const datos = structuredClone(c.t === "skus" && !conCostos ? nubeSinCosto(item)
+                    : c.t === "pedidos" && !conCostos ? nubePedidoSinCosto(item) : item);
+        filas.push({[c.clave]: String(k), datos: datos}); firmas[k] = f; n++;
       }else nubeDesmarcar(c.t, k);     // volvió a quedar igual que la base
     });
     // Una fila anotada que ya no existe aquí deja de estar anotada.
@@ -5947,7 +6335,7 @@ function nubeCambiosLocales(noBorrar){
     // que se baje todo otra vez (ver nubeQuitarSinClave).
     const borrar = c.t === "movimientos" || (noBorrar || []).includes(c.t) ? []
                  : Object.keys(esp).filter(k => !vivos[k]);
-    if(filas.length || borrar.length) lotes[c.t] = {c, filas, borrar};
+    if(filas.length || borrar.length) lotes[c.t] = {c, filas, borrar, firmas};
     n += borrar.length;
   });
   // Responsables de clientes importados (fase 1c): solo admin y coordinador
@@ -5957,17 +6345,23 @@ function nubeCambiosLocales(noBorrar){
   // Parámetros y cuenta bancaria: solo admin escribe config.
   if(!nubeEscribe("config")) return {lotes, n, asignar};
   const esp = NUBE.espejo.config = NUBE.espejo.config || {};
-  const cfgFilas = [];
+  const cfgFilas = [], cfgFirmas = {};
   // Tipo de cambio (fase 1b): la lista entera, como una fila más de config.
   // Responsables por generador (fase 1c): también una fila de config.
+  // Fase 1f: lista de cuentas bancarias y reglas de envío, una fila cada una. La fila
+  // banco sigue viajando como siempre, sin cambios.
   [["params", D.params], ["banco", D.banco], ["tipo_cambio", D.tipo_cambio || []],
-   ["generadores", D.generadores || {}]].forEach(([k, v]) => {
+   ["generadores", D.generadores || {}], ["cuentas", D.cuentas || []],
+   ["envio", D.envio || {...ENVIO_DEF}]].forEach(([k, v]) => {
+    // Recién llegado de la versión de antes: cuentas y envio no se suben hasta bajarlas.
+    if(D.pend_1f && (k === "cuentas" || k === "envio")) return;
     const f = nubeFirma(v);
     const m = nubeMarcada("config", k);
-    if(esp[k] !== f){ if(m && m.firma === f) return; cfgFilas.push({clave:k, datos:v}); n++; }
+    // 1F-R4: igual que las colecciones, una copia y su firma (params se cambia en su lugar).
+    if(esp[k] !== f){ if(m && m.firma === f) return; cfgFilas.push({clave:k, datos:structuredClone(v)}); cfgFirmas[k] = f; n++; }
     else nubeDesmarcar("config", k);
   });
-  if(cfgFilas.length) lotes.config = {c:{t:"config", clave:"clave"}, filas:cfgFilas, borrar:[]};
+  if(cfgFilas.length) lotes.config = {c:{t:"config", clave:"clave"}, filas:cfgFilas, borrar:[], firmas:cfgFirmas};
   return {lotes, n, asignar};
 }
 
@@ -6005,7 +6399,7 @@ async function nubeSubir(noBorrar){
   const {lotes, n, asignar} = nubeCambiosLocales(noBorrar);
   if(!n) return 0;
   for(const t of Object.keys(lotes)){
-    const {c, filas, borrar} = lotes[t];
+    const {c, filas, borrar, firmas} = lotes[t];
     if(filas.length){
       const enviar = parte => nubeFetch("/rest/v1/" + t, {
         method:"POST",
@@ -6029,12 +6423,12 @@ async function nubeSubir(noBorrar){
               try{ await enviar([f]); }
               catch(e2){ if(!nubeEsRechazo(e2)) throw e2; error = e2; }
             }
-            if(error) nubeMarcar(t, f[c.clave], nubeFirmaFila(t, f.datos), error);
+            if(error) nubeMarcar(t, f[c.clave], firmas[f[c.clave]], error);
             else subieron.push(f);
           }
         }
         subieron.forEach(f => {
-          NUBE.espejo[t][f[c.clave]] = nubeFirmaFila(t, f.datos);
+          NUBE.espejo[t][f[c.clave]] = firmas[f[c.clave]];   // 1F-R4: la de lo enviado
           nubeDesmarcar(t, f[c.clave]);
           if(t === "skus" && f.datos.costo !== undefined) NUBE.espejo.costos[f[c.clave]] = f.datos.costo;
           if(t === "skus" && f.datos.costo_usd !== undefined) NUBE.espejo.costos_usd[f[c.clave]] = f.datos.costo_usd;
@@ -6148,6 +6542,9 @@ async function nubeBajar(){
     if(f.k === "params") D.params = f.d;
     if(f.k === "banco")  D.banco  = f.d;
     if(f.k === "tipo_cambio") D.tipo_cambio = Array.isArray(f.d) ? f.d : [];
+    // Fase 1f: cuentas bancarias y reglas de envío (las leen todos los roles).
+    if(f.k === "cuentas") D.cuentas = Array.isArray(f.d) ? f.d : [];
+    if(f.k === "envio") D.envio = f.d && typeof f.d === "object" && !Array.isArray(f.d) ? f.d : {...ENVIO_DEF};
     // 180 (fase A): solo admin y coordinador usan los responsables por generador.
     if(f.k === "generadores") D.generadores = puedeAsignar() && f.d && typeof f.d === "object" && !Array.isArray(f.d) ? f.d : {};
     NUBE.espejo.config[f.k] = fi;
@@ -6238,11 +6635,29 @@ async function nubeSincronizar(forzar){
     // 1g-R2: filas sin clave guardadas por la versión de antes.
     const quitadas = nubeQuitarSinClave();
     // 186: tras Descartar se baja todo otra vez.
+    // Fase 1f: este navegador viene de la versión de antes (pend_1f, ver migrar). Sus
+    // filas cuentas y envio no se suben en esta vuelta; se olvida lo que el espejo
+    // anotó de ellas y se baja todo otra vez, para tomar las de la base. Las que la
+    // base no tenga se quedan aquí sin subirse, como en la primera conexión.
+    const estrena1f = !!D.pend_1f;
+    if(estrena1f){
+      NUBE.espejo.config = NUBE.espejo.config || {};
+      delete NUBE.espejo.config.cuentas; delete NUBE.espejo.config.envio;
+    }
     const rebajar = !!D.rebajar;
-    if(rebajar) NUBE.desde = "1970-01-01T00:00:00Z";
+    if(rebajar || estrena1f) NUBE.desde = "1970-01-01T00:00:00Z";
     const subidos = await nubeSubir(D.sin_clave || []);
     let bajados = await nubeBajar() + quitadas;
     if(rebajar){ delete D.rebajar; delete D.sin_clave; bajados++; }
+    if(estrena1f){
+      [["cuentas", D.cuentas], ["envio", D.envio]].forEach(([k, v]) => {
+        if(NUBE.espejo.config[k] === undefined) NUBE.espejo.config[k] = nubeFirma(v);
+      });
+      delete D.pend_1f; bajados++;
+      // 1F-R3 (Q8a): las tarjetas Cuentas y Envío se habilitan solas, aunque haya una
+      // ventana abierta y nubeRepintar no vuelva a pintar Ajustes.
+      pintarEspera1f();
+    }
     NUBE.vueltas++;
     const completa = forzar || quitadas > 0 || NUBE.vueltas % 8 === 1;
     if(completa) bajados += await nubeReconciliar();
@@ -6366,12 +6781,15 @@ async function nubePrimeraVez(){
   D.skus = [];
   // El tipo de cambio también lo manda la base: uno local de otra isla no vale.
   D.tipo_cambio = [];
+  // Fase 1f: las cuentas y las reglas de envío también las manda la base. Si la base
+  // todavía no tiene esas filas, quedan la lista vacía y los valores de C7a, sin subirse.
+  D.cuentas = []; D.envio = {...ENVIO_DEF};
   // Responsables (fase 1c): los manda la base; lo anotado aquí es de otra isla.
   D.generadores = {}; D.asignar = {}; D.asignado = {};
   // Fase A: rechazados y responsables también son de la base.
   D.rechazado = {}; D.responsables = {};
   // 186: las anotaciones de filas rechazadas eran de la sesión anterior.
-  D.sin_subir = {}; delete D.rebajar; delete D.sin_clave;
+  D.sin_subir = {}; delete D.rebajar; delete D.sin_clave; delete D.pend_1f;
   const n = await nubeBajar();
   // B1: lo rescatado vuelve a su sitio si la base no lo trajo ya. Queda sin
   // espejo, o sea «creado aquí, aún sin subir»: la reconciliación no lo quita y
@@ -6391,7 +6809,7 @@ async function nubePrimeraVez(){
   });
   // Parámetros y cuenta que la base no trae se quedan aquí, pero no se suben.
   [["params", D.params], ["banco", D.banco], ["tipo_cambio", D.tipo_cambio],
-   ["generadores", D.generadores]].forEach(([k, v]) => {
+   ["generadores", D.generadores], ["cuentas", D.cuentas], ["envio", D.envio]].forEach(([k, v]) => {
     if(NUBE.espejo.config[k] === undefined) NUBE.espejo.config[k] = nubeFirma(v);
   });
   await nubeReconciliar();
