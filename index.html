@@ -336,7 +336,7 @@ button.grande{font-size:16px;padding:13px 20px;min-height:48px}
     <div class="fila noprint">
       <div><label>Buscar</label><input id="filtroPed" placeholder="Cliente, número…"></div>
       <div><label>Estado</label><select id="filtroEst">
-        <option value="">Todos</option><option>confirmado</option><option>en_ruta</option>
+        <option value="">Todos</option><option>confirmado</option><option>preparando</option><option>listo</option><option>en_ruta</option>
         <option>entregado</option><option>cancelado</option></select></div>
       <div class="auto" data-costos><button class="s" onclick="exportarPedidosCSV()">Exportar CSV</button></div>
     </div>
@@ -390,7 +390,7 @@ button.grande{font-size:16px;padding:13px 20px;min-height:48px}
   <div class="card" id="cdkCard" data-importa="catalogo">
     <h3>Importar Catálogo DICOSA</h3>
     <p class="mini">Archivo del Catálogo (.xlsx, primera hoja). Primero se ve una vista previa; nada cambia hasta confirmar.
-      Formato del Catálogo nuevo de DICOSA: costo en lempiras sin IVA, IVA y tres listas de precios por inner (cliente particular,
+      Formato del Catálogo nuevo de DICOSA: costo en lempiras sin ISV, ISV (columna IVA del archivo) y tres listas de precios por inner (cliente particular,
       cadenas y sub-distribuidor). DICOSA manda en nombre, códigos, categoría, costo y precios; el peso inner (kg) solo se toma
       si el producto no tiene peso escrito. Existencia, mínimo de existencia, oferta y restricción no se tocan. Un código nuevo
       entra con existencia 0. Un producto de la app que no venga en el archivo queda fuera de catálogo: no se borra y no se puede pedir.</p>
@@ -476,7 +476,7 @@ button.grande{font-size:16px;padding:13px 20px;min-height:48px}
 <!-- ==================================================== MOSTRAR CATALOGO (1g) -->
 <section class="panel" id="p-mostrar">
   <h2>Mostrar catálogo</h2>
-  <p class="sub2">Para enseñar los productos a médicos y clientes. Precios de la lista particular, sin IVA. Esta pantalla solo muestra: no cambia nada.</p>
+  <p class="sub2">Para enseñar los productos a médicos y clientes. Precios de la lista particular, sin ISV. Esta pantalla solo muestra: no cambia nada.</p>
   <div class="fila noprint">
     <div><label>Buscar</label><input id="mosBuscar" placeholder="Descripción o código…" style="font-size:16px;padding:12px"></div>
     <div class="auto"><button class="s grande" id="mosBajar" onclick="mosDescargarTodas()">Descargar fotos para usar sin conexión</button></div>
@@ -566,7 +566,7 @@ button.grande{font-size:16px;padding:13px 20px;min-height:48px}
   <!-- Fase 1f: mínimos y cargos de envío por zona (fila «envio» de config). -->
   <div class="card" id="envCard">
     <h3>Envío</h3>
-    <p class="mini">El pedido lleva cargo de envío si su subtotal (sin IVA) no llega al mínimo de la zona del cliente.
+    <p class="mini">El pedido lleva cargo de envío si su subtotal (sin ISV) no llega al mínimo de la zona del cliente.
       La base vuelve a calcular el cargo al recibir el pedido. Los cargos son provisionales hasta tener la cotización
       de Expreco. La hora de corte es la de Honduras: un pedido foráneo confirmado antes sale el mismo día hábil;
       después, el siguiente (lunes a viernes, sin feriados).</p>
@@ -587,12 +587,51 @@ button.grande{font-size:16px;padding:13px 20px;min-height:48px}
     <div id="envMsg"></div>
   </div>
 
+  <!-- Fase Cotización: textos, RTN, logo y WhatsApp de la cotización (fila «cotizacion» de config). -->
+  <div class="card" id="cotCard">
+    <h3>Cotización DICOSA</h3>
+    <p class="mini">Lo que la app pone en la cotización con el formato de DICOSA, que se genera desde Despacho. El RTN y
+      el logo se copian de un documento de DICOSA; lo que quede vacío sale en blanco. Se guarda en la base y lo leen
+      todos los dispositivos del equipo.</p>
+    <div id="cotEspera"></div>
+    <div class="grid g2" style="margin-top:10px">
+      <div><label>Sitio web («Visítanos en:»)</label><input id="cotSitio"></div>
+      <div><label>RTN de DICOSA</label><input id="cotRtn"></div>
+      <div><label>Forma de pago</label><input id="cotPago"></div>
+      <div><label>Validez de la cotización</label><input id="cotValidez" placeholder="Ej: 5 días"></div>
+      <div><label>WhatsApp de facturación DICOSA (solo dígitos, con código de país)</label>
+        <input id="cotWhatsapp" inputmode="numeric" placeholder="Código de país y número, sin espacios ni signos"></div>
+      <div><label>Logo de DICOSA (PNG o JPEG, hasta 150 kB)</label>
+        <input type="file" id="cotLogoArchivo" accept="image/png,image/jpeg" onchange="cotLogoElegido(this)">
+        <div id="cotLogoVista" style="margin-top:6px"></div></div>
+    </div>
+    <div class="fila" style="margin-top:12px">
+      <div class="auto"><button class="b" id="cotGuardar" onclick="guardarCotizacionCfg()">Guardar cotización</button></div>
+      <div class="auto"><button class="s" id="cotLogoQuitar" onclick="cotLogoQuitar()">Quitar logo</button></div>
+    </div>
+    <div id="cotMsg"></div>
+  </div>
+
+  <!-- Fase Cotización (Q1a): agente de DICOSA de cada Generador de Demanda (fila «agentes» de config). -->
+  <div class="card" id="agCard">
+    <h3>Agentes de DICOSA</h3>
+    <p class="mini">Por cada Generador de Demanda del archivo de Clientes: el código, el nombre y el teléfono del agente
+      que salen en la cotización (AGENTE, NOMBRE AGENTE y CONTACTO AGENTE). El pedido los copia cuando se confirma;
+      un cambio aquí vale para los pedidos nuevos.</p>
+    <div id="agEspera"></div>
+    <div id="agTabla" style="margin-top:10px"></div>
+    <div class="fila" style="margin-top:12px">
+      <div class="auto"><button class="b" id="agGuardar" onclick="guardarAgentes()">Guardar agentes</button></div>
+    </div>
+    <div id="agMsg"></div>
+  </div>
+
   <div class="card" id="tcCard">
     <h3>Tipo de cambio</h3>
     <p class="mini">Solo historial (desde el Catálogo nuevo de DICOSA, que trae el costo en lempiras, ya no se registran
       tipos de cambio). Lempiras por dólar. Se conserva para los pedidos ya confirmados, que guardan el costo y el tipo de
       cambio con que se hicieron, y para algún producto viejo que siga con precio DICOSA en dólares: su costo es
-      precio en $ (sin IVA) × el tipo de cambio de fecha más reciente que no pase de hoy.</p>
+      precio en $ (sin ISV) × el tipo de cambio de fecha más reciente que no pase de hoy.</p>
     <div id="tcHistorial" style="margin-top:10px"></div>
   </div>
 
@@ -1547,6 +1586,17 @@ const ENVIO_DEF = {minimo_local:500, minimo_foraneo:1000, cargo_local:100, cargo
 const ZONAS = {local:"Local", foraneo:"Foráneo"};
 const NIVEL_FORANEO = "Foráneo por Expreco", CANAL_FORANEO = "Expreco (foráneo)";
 const ZONA_HN = "America/Tegucigalpa";
+/* Cotización DICOSA (fase Cotización, 2026-11-15, decisiones Q1a, Q5a y C11b). Dos filas
+   nuevas de config, que escribe solo el Admin y leen todos los roles:
+     · cotizacion: textos del formato de DICOSA, su RTN, el logo (data URL, tope 150 kB)
+       y el WhatsApp de facturación de DICOSA;
+     · agentes: por cada Generador de Demanda, el código, el nombre y el teléfono del agente.
+   Los valores de entrada (sitio y validez) son los del formato de cotización que describió
+   Daniel en el encargo; el RTN, la forma de pago, el WhatsApp y el logo entran vacíos y los
+   escribe el Admin a partir de un documento de DICOSA. */
+const COT_DEF = {sitio:"www.dicosa.net", forma_pago:"", validez:"5 días", rtn:"", logo:"", whatsapp:""};
+const COT_LOGO_MAX = 150 * 1024;      // bytes del archivo del logo
+const COT_FILAS = 20;                 // filas de la tabla en cada hoja
 
 let D = null;              // datos
 let P = {cliente:null, lineas:[], override:null};   // pedido en curso
@@ -1696,6 +1746,41 @@ function salidaForanea(d){
 }
 function fechaCorta(f){ const [y, m, d] = String(f || "").split("-"); return d && m && y ? d + "/" + m + "/" + y : "—"; }
 function esForaneo(p){ return !!p && (p.nivel === "foraneo" || (p.envio || {}).zona === "foraneo"); }
+
+/* ------------------------------------------------- IVA del pedido (fase B2, D6c)
+   El pedido guarda iva y total_con_iva. La base los vuelve a calcular al recibir
+   el pedido nuevo (sql/facturacion-b2.sql, pedido_iva_b2) e ignora los del
+   navegador; aquí va la misma regla para mostrarlos antes de confirmar:
+     · un producto NO lleva IVA solo si su dato del Catálogo (dicosa.iva) es el
+       número 0; con 0.15, 15, otro valor o sin dato, lleva IVA (no cobrar de menos);
+     · IVA de la línea = cantidad × precio × IVA_TASA / 100, a 2 decimales (el medio
+       centavo sube, como round() de la base);
+     · el cargo de envío no lleva IVA (provisional); el mínimo de envío gratis se
+       mide contra el subtotal sin IVA; costos y margen siguen sin IVA. */
+const IVA_TASA = 15;      // por ciento. La misma constante está en sql/facturacion-b2.sql.
+function llevaIva(s){
+  const v = s && s.dicosa && typeof s.dicosa === "object" ? s.dicosa.iva : undefined;
+  return !(typeof v === "number" && v === 0);
+}
+// toFixed(6) quita el ruido binario antes de redondear (0.7 × 15 da 10.499999999999998).
+function ivaLinea(l){
+  if(!l || !llevaIva(D.skus.find(x => x.codigo === l.codigo))) return 0;
+  const n = Number(l.cantidad) * Number(l.precio) * IVA_TASA;
+  return isFinite(n) ? Math.round(Number(n.toFixed(6))) / 100 : 0;
+}
+function ivaPedido(lineas){
+  return Math.round((Array.isArray(lineas) ? lineas : []).reduce((a, l) => a + ivaLinea(l), 0) * 100) / 100;
+}
+// Lo que se cobra de un pedido. Uno de antes de B2 no tiene total_con_iva: se cobra su total, como siempre.
+function conIva(p){ return !!p && esNum(p.total_con_iva); }
+function montoCobro(p){ return conIva(p) ? p.total_con_iva : p.total; }
+// «Subtotal sin ISV L.x · Envío L.x · ISV L.x · Total con ISV L.x», con el separador y los dos puntos que se pidan.
+function desgloseCobro(p, sep, puntos, envio){
+  const d = puntos ? ": " : " ";
+  return ["Subtotal sin ISV" + d + L(p.subtotal)]
+    .concat(Number(p.cargo) > 0 ? [(envio || "Envío") + d + L(p.cargo)] : [])
+    .concat(["ISV" + d + L(esNum(p.iva) ? p.iva : 0), "Total con ISV" + d + L(p.total_con_iva)]).join(sep);
+}
 // «de 1 a 5 días hábiles» con los días guardados en el pedido.
 function textoDiasEnvio(v){
   const a = Number((v || {}).dias_min), b = Number((v || {}).dias_max);
@@ -1735,6 +1820,7 @@ function cargar(){
     clientes: [], pedidos: [], movimientos: [], avisos: [],
     banco: {banco:"", cuenta:"", titular:"", tipo:""},
     cuentas: [], envio: {...ENVIO_DEF},
+    cotizacion: {...COT_DEF}, agentes: {},
     ultimoRespaldo: null
   };
   migrar();          // deriva unidad/contenido también en instalación nueva
@@ -1767,6 +1853,19 @@ function migrar(){
     let usaBase = false;
     try{ usaBase = !!(localStorage.getItem("sdim_sesion") || localStorage.getItem("sdim_espejo")); }catch(e){}
     if(usaBase) D.pend_1f = true;
+  }
+  // Fase Cotización: filas cotizacion y agentes de config. La misma guarda que pend_1f: un
+  // navegador con base compartida que viene de la versión de antes no las sube hasta
+  // bajarlas una vez (pend_cot), para no pisar con los valores de entrada lo que otro
+  // dispositivo ya escribió.
+  const esObj = v => !!v && typeof v === "object" && !Array.isArray(v);
+  const estrenaCot = !esObj(D.cotizacion) || !esObj(D.agentes);
+  if(!esObj(D.cotizacion)) D.cotizacion = {...COT_DEF};
+  if(!esObj(D.agentes)) D.agentes = {};
+  if(estrenaCot){
+    let usaBase = false;
+    try{ usaBase = !!(localStorage.getItem("sdim_sesion") || localStorage.getItem("sdim_espejo")); }catch(e){}
+    if(usaBase) D.pend_cot = true;
   }
   D.pedidos.forEach(p => {
     if(p.pago_estado === undefined) p.pago_estado = "pendiente";
@@ -2043,8 +2142,11 @@ function calcularPedido(){
   const margen = cost===null ? null : sub - cost + cargo;
   const contrib = margen===null ? null : margen - m.costo;
 
+  // B2 (D6c): IVA por línea y total con IVA. El cargo no lleva IVA; margen y contribución, sin IVA.
+  const iva = ivaPedido(P.lineas);
   return {sub, cost, peso, nivel, cargo, minimo, zona, margen, contrib, sinCosto,
-          canal:m.canal, costoEnt:m.costo, motivo:m.motivo, total:sub+cargo};
+          canal:m.canal, costoEnt:m.costo, motivo:m.motivo, total:sub+cargo,
+          iva, totalIva: Number((sub + cargo + iva).toFixed(6))};
 }
 // Fase 1f (8a): un cliente foráneo solo tiene el nivel «Foráneo por Expreco»; con un
 // cliente local (o sin cliente) vuelven los tres niveles y el que estaba elegido.
@@ -2079,6 +2181,10 @@ function sinListaPedido(){ return !!P.cliente && !listaPedido(); }
 function lineasSinPrecio(){ return P.lineas.filter(l => !(Number(l.precio) > 0)); }
 
 function recalc(){
+  // Hallazgo 7 (7a): si una casilla de #lineas tiene el foco, se le quita antes de redibujar.
+  // Así su cambio pendiente se confirma ahora y no a media escritura de #lineas.innerHTML.
+  const enfocado = document.activeElement;
+  if(enfocado && enfocado.closest && enfocado.closest("#lineas")) enfocado.blur();
   repreciar();
   pintarNivel();
   const c = calcularPedido();
@@ -2123,10 +2229,14 @@ function recalc(){
       `«${esc(l.nombre)}» no tiene costo registrado.`).join("<br>")}
       El margen y la contribución no se pueden calcular; el pedido se puede confirmar igual.</div>` : ""}
     ${c.zona && c.cargo ? `<div class="aviso a-med" data-cargo-envio>Envío ${c.zona==="foraneo"?"foráneo":"local"}: el subtotal es de ${L(c.sub)}
-      y el envío es gratis desde ${L0(c.minimo)}. Se agrega un cargo de envío de ${L(c.cargo)}.
-      <strong>Total a pagar: ${L(c.total)}.</strong></div>` : ""}
+      y el envío es gratis desde ${L0(c.minimo)} (sin ISV). Se agrega un cargo de envío de ${L(c.cargo)}.
+      <strong>Total sin ISV: ${L(c.total)}.</strong></div>` : ""}
     ${c.zona && !c.cargo ? `<div class="aviso a-ok" data-envio-gratis>Envío ${c.zona==="foraneo"?"foráneo":"local"} sin cargo:
       el subtotal llega al mínimo de ${L0(c.minimo)}.</div>` : ""}
+    <div class="aviso a-info" data-iva>Subtotal sin ISV: ${L(c.sub)}${c.cargo ? ` · Cargo de envío: ${L(c.cargo)}` : ""}
+      · ISV ${IVA_TASA}%: ${L(c.iva)} · <strong>Total con ISV: ${L(c.totalIva)}</strong>
+      <br><span class="mini">El ISV se calcula por producto, según el Catálogo de DICOSA; el cargo de envío no lleva ISV.
+      El monto definitivo lo pone la base al guardar el pedido.</span></div>
     ${c.zona==="foraneo" ? (() => { const s = salidaForanea(new Date()); return `<div class="aviso a-info" data-salida-foranea>
       Cliente foráneo: va por Expreco. Si se confirma ahora, sale el ${fechaCorta(s.sale)} y la entrega es
       ${textoDiasEnvio(s)} desde la salida.</div>`; })() : ""}
@@ -2183,7 +2293,7 @@ function kpi(v,l,est){
 function pintarLineas(){
   if(!P.lineas.length){ $("#lineas").innerHTML = `<div class="vacio">Aún no has agregado productos.</div>`; return; }
   $("#lineas").innerHTML = `<div class="tabla-wrap"><table>
-    <thead><tr><th>Producto</th><th class="num" title="La unidad de venta es el inner">Inners</th><th class="num" title="Precio por inner, sin IVA">Precio</th>
+    <thead><tr><th>Producto</th><th class="num" title="La unidad de venta es el inner">Inners</th><th class="num" title="Precio por inner, sin ISV">Precio</th>
     <th class="num">Peso</th><th class="num">Importe</th><th></th></tr></thead><tbody>
     ${P.lineas.map((l,i)=>`<tr>
       <td>${esc(l.nombre)}<br><span class="mini">${esc(l.codigo)}</span></td>
@@ -2482,9 +2592,15 @@ function confirmarPedido(){
     id: uid(), numero: letra + "-" + (D.pedidos.reduce((m,p)=>Math.max(m, parteNumerica(p.numero)), 1000) + 1),
     fecha: new Date().toISOString(), cliente_id: P.cliente.id, cliente: P.cliente.nombre,
     telefono: P.cliente.telefono, direccion: P.cliente.direccion,
-    lineas: JSON.parse(JSON.stringify(P.lineas)),
+    // Fase Cotización: cada línea guarda su unidad y su marca (si el Catálogo las trae) y su
+    // ISV, y el pedido guarda la copia del cliente y de su agente (cot), porque quien arma
+    // la cotización (facturación) no lee clientes. El ISV de la línea lo vuelve a poner la base.
+    lineas: JSON.parse(JSON.stringify(P.lineas)).map(lineaCotizada),
+    cot: cotDeCliente(P.cliente),
     nivel: c.nivel, canal: c.canal, estado: "confirmado",
     subtotal: c.sub, costo_prod: c.cost, cargo: c.cargo, total: c.total, envio,
+    // B2 (D6c): IVA y total con IVA con que se calculó (la base los vuelve a poner).
+    iva: c.iva, total_con_iva: c.totalIva,
     peso: c.peso, margen: c.margen,
     // Tipo de cambio con que se fijó el costo de las líneas en dólares (nota de origen).
     tipo_cambio: (P.lineas.find(l => l.tc) || {}).tc || null,
@@ -2492,7 +2608,7 @@ function confirmarPedido(){
     costo_entrega_real: null, contribucion_real: null,
     hecho_por: ($("#hechoPor")||{value:"El médico"}).value,
     pago_estado: P.cliente.credito ? "credito" : "pendiente",
-    pago: null,
+    pago: null, factura: null,
     prometido: foranea ? foranea.limite : new Date(Date.now() + sla*60000).toISOString(),
     entregado: null,
     override: motivo, override_fecha: motivo ? ahora : null, override_letra: motivo ? letra : null,
@@ -2511,7 +2627,8 @@ function confirmarPedido(){
         "Canal: " + ped.canal + (foranea
           ? "\nSale: " + fechaCorta(foranea.sale) + "\nEntrega: " + textoDiasEnvio(foranea) + " desde la salida"
           : "\nProme­tido para: " + fecha(ped.prometido)) +
-        (ped.cargo ? "\nCargo de envío: " + L(ped.cargo) + " · Total: " + L(ped.total) : ""));
+        (ped.cargo ? "\nCargo de envío: " + L(ped.cargo) + " · Total sin ISV: " + L(ped.total) : "") +
+        "\nISV: " + L(ped.iva) + " · Total con ISV: " + L(ped.total_con_iva));
   ir("pedidos");
 }
 </script>
@@ -2575,6 +2692,11 @@ function pintarInicio(){
   const negativos = D.skus.filter(s=>existencia(s)<0);
   const repo = calcularReposicion();
   const espPago = D.pedidos.filter(p=>p.estado==="listo" && !pagoLibera(p));
+  // B2: todo pedido necesita factura antes del transporte, también a crédito.
+  const espFactura = D.pedidos.filter(p=>p.estado==="listo" && !facturaEmitida(p));
+  // Cotización DICOSA (Q9a): pedidos empacados, sin factura, a los que nadie les generó la
+  // cotización. Solo para quien la genera. Siempre son parte de los que esperan factura.
+  const sinCot = puedeCotizar() ? espFactura.filter(p => conIva(p) && !(p.cotizacion && p.cotizacion.generada_en)) : [];
   // Mismo número en dos o más pedidos activos (por ejemplo, dos dispositivos con la misma letra).
   const porNum = {};
   D.pedidos.filter(p=>p.estado!=="entregado" && p.estado!=="cancelado")
@@ -2604,7 +2726,11 @@ function pintarInicio(){
       <br>Revisa que cada dispositivo tenga una letra distinta en Ajustes.</div>`:""}
     ${negativos.length ? `<div class="aviso a-mal">${negativos.length} producto(s) con existencia negativa: se entregó más de lo registrado.
       Revisa los ingresos o registra un ajuste. <button class="s" onclick="ir('inventario')">Ver</button></div>`:""}
-    ${espPago.length ? `<div class="aviso a-med">${espPago.length} pedido(s) empacados esperando depósito.
+    ${espPago.length ? `<div class="aviso a-med" data-espera-pago>${espPago.length} pedido(s) empacados esperando depósito.
+      <button class="s" onclick="ir('despacho')">Ver</button></div>`:""}
+    ${espFactura.length ? `<div class="aviso a-med" data-espera-factura>${espFactura.length} pedido(s) empacados esperando factura.
+      <button class="s" onclick="ir('despacho')">Ver</button></div>`:""}
+    ${sinCot.length ? `<div class="aviso a-med" data-sin-cotizacion>${sinCot.length} pedido(s) empacados sin cotización generada para DICOSA.
       <button class="s" onclick="ir('despacho')">Ver</button></div>`:""}
     ${tarde.length ? `<div class="aviso a-mal">${tarde.length} pedido(s) pasaron su hora prometida.
       <button class="s" onclick="ir('pedidos')">Ver</button></div>`:""}
@@ -2613,7 +2739,7 @@ function pintarInicio(){
     ${repo.length ? `<div class="aviso a-info">${repo.length} cliente(s) por quedarse sin producto.
       <button class="s" onclick="ir('reposicion')">Ver avisos</button></div>`:""}
     ${(!tarde.length && !sinStock.length && !repetidos.length && !repo.length && !negativos.length &&
-       !revisar.length && !sinSubir)
+       !revisar.length && !sinSubir && !espPago.length && !espFactura.length)
       ? `<div class="vacio">Todo en orden. Nada pendiente.</div>`:""}`;
 
   // serie de 14 días
@@ -2675,7 +2801,7 @@ function pintarPedidos(){
     <thead><tr><th>#</th><th>Fecha</th><th>Cliente</th><th>Canal</th>
       <th class="num">Total</th><th class="num">Peso</th>
       ${conCostos?'<th class="num">Contrib. est.</th><th class="num">Contrib. real</th>':''}
-      <th>Estado</th><th>Pago</th><th class="noprint"></th></tr></thead><tbody>
+      <th>Estado</th><th>Pago</th><th>Factura</th><th class="noprint"></th></tr></thead><tbody>
     ${r.map(p=>`<tr>
       <td><strong>${p.numero}</strong>${p.ejemplo?' <span class="pill p-gris">ejemplo</span>':''}${(p.override||p.override_existencia)?' <span class="pill p-mal" title="'+esc(textoForzado(p))+'">forzado</span>':''}${pedidoPorRevisar(p)?' <span class="pill p-mal" title="'+esc(textoPedidoPorRevisar(p))+'">por revisar</span>':''}${(typeof nubeMarcada==="function"&&nubeMarcada("pedidos",p.id))?' <span class="pill p-mal" title="La base no aceptó este pedido; sigue guardado en este navegador">sin subir</span>':''}</td>
       <td>${fecha(p.fecha)}</td>
@@ -2687,10 +2813,14 @@ function pintarPedidos(){
       <td class="num" style="color:${(p.contribucion_real??0)<0?'var(--rojo)':''}">
         ${p.contribucion_real==null?"—":L0(p.contribucion_real)}</td>`:''}
       <td>${pill(p.estado)}</td>
-      <td>${badgePago(p)}</td>
+      <td>${badgePago(p)}${porDevolver(p)?' <span class="pill p-mal" title="Pedido cancelado con depósito verificado: hay que devolverlo">por devolver</span>':''}${quienRegistro(p.pago)}</td>
+      <td>${facturaEmitida(p) ? esc(p.factura.numero) + (p.factura.fecha ? `<br><span class="mini">${esc(fechaCorta(p.factura.fecha))}</span>` : "") +
+            (facturaRepetida(p).length ? ' <span class="pill p-med" title="Otro pedido tiene este mismo número de factura">repetida</span>' : "") +
+            quienRegistro(p.factura)
+          : `<span class="mini">sin factura</span>`}</td>
       <td class="noprint">${["confirmado","preparando","listo","en_ruta"].includes(p.estado)
         ? `<button class="s" onclick="ir('despacho')">Despacho</button>
-           ${lectura?'':`<button class="s d" onclick="cancelarPedido('${p.id}')">Cancelar</button>`}`
+           ${lectura || !puedeCancelar(p) ? '' : `<button class="s d" onclick="cancelarPedido('${p.id}')">Cancelar</button>`}`
         : p.estado==="entregado" ? `<button class="s" onclick="verPedido('${p.id}')">Ver</button>` : ""}</td>
     </tr>`).join("")}</tbody></table></div>`
     : `<div class="vacio">No hay pedidos que coincidan.</div>`;
@@ -2719,7 +2849,10 @@ function confirmarEntrega(id){
   const cr = parseFloat($("#mCosto").value)||0;
   p.costo_entrega_real = cr;
   // Sin margen guardado (faltaba un costo) no hay contribución real: null, no -cr.
-  p.contribucion_real = esNum(p.margen) ? p.margen - cr : null;
+  // B2-R2: un rol que no ve costos no guarda ninguna clave de costo en su copia
+  // (antes quedaba contribucion_real: null; no subía, pero se quedaba aquí).
+  if(veCostos()) p.contribucion_real = esNum(p.margen) ? p.margen - cr : null;
+  else delete p.contribucion_real;
   p.entregado = new Date($("#mHora").value).toISOString();
   p.estado = "entregado";
   // La existencia física baja aquí, cuando el producto realmente sale de bodega.
@@ -2740,8 +2873,21 @@ function confirmarEntrega(id){
 function cancelarPedido(id){
   // B1: quien tiene Pedidos en solo lectura (rol pedidos) no cancela.
   if(panelSoloLectura("pedidos")) return;
-  if(!confirm("¿Cancelar este pedido?\n\nEl producto comprometido vuelve a quedar disponible.")) return;
-  const p = D.pedidos.find(x=>x.id===id);
+  const p = D.pedidos.find(x=>x.id===id); if(!p) return;
+  // B2 (D2 a y b): un pedido con depósito o con factura solo lo cancelan administración
+  // o coordinación, con una confirmación que dice qué hay que devolver y anular. Nada se borra.
+  const cobrado = tieneDeposito(p), facturado = facturaEmitida(p);
+  if(!puedeCancelar(p)){
+    alert("El pedido "+p.numero+" ya tiene "+[cobrado?"depósito":"", facturado?"factura":""].filter(Boolean).join(" y ")+
+      ".\n\nSolo lo cancela administración o coordinación.");
+    return;
+  }
+  const extra = (cobrado || facturado) ? "\n\nATENCIÓN: este pedido tiene " +
+    [cobrado ? "un depósito de " + L(p.pago && esNum(p.pago.monto) ? p.pago.monto : montoCobro(p)) : "",
+     facturado ? "la factura n.º " + p.factura.numero : ""].filter(Boolean).join(" y ") + ". Al cancelarlo hay que " +
+    [cobrado ? "devolver el depósito" : "", facturado ? "anular la factura en DICOSA" : ""].filter(Boolean).join(" y ") +
+    ". Aquí no se borra nada: queda anotado en el pedido." : "";
+  if(!confirm("¿Cancelar este pedido?\n\nEl producto comprometido vuelve a quedar disponible." + extra)) return;
   p.estado="cancelado"; guardar(); pintarPedidos(); pintarInventario(); pintarDespacho();
 }
 function verPedido(id){
@@ -2776,7 +2922,7 @@ function verPedido(id){
 const FLUJO = [
   {e:"confirmado", t:"Pedido recibido",     sig:"preparando", btn:"Preparar"},
   {e:"preparando", t:"Preparando en bodega",sig:"listo",      btn:"Listo"},
-  {e:"listo",      t:"Empacado · espera pago", sig:"en_ruta", btn:"Solicitar transporte"},
+  {e:"listo",      t:"Empacado · espera pago y factura", sig:"en_ruta", btn:"Solicitar transporte"},
   {e:"en_ruta",    t:"En ruta al consultorio", sig:"entregado", btn:"Marcar entregado"}
 ];
 
@@ -2786,9 +2932,14 @@ function pintarDespacho(){
   const activos = D.pedidos.filter(p=>FLUJO.some(f=>f.e===p.estado));
   const tarde = activos.filter(p=>p.prometido && p.prometido < new Date().toISOString());
   const esperando = D.pedidos.filter(p=>p.estado==="listo" && !pagoLibera(p));
-  const avisoPago = esperando.length
-    ? `<div class="aviso a-med noprint"><strong>${esperando.length} pedido(s) empacados esperando depósito.</strong>
-       Ya están listos: solo falta verificar el pago para solicitar el transporte.</div>` : "";
+  // B2: dos avisos; un mismo pedido puede estar en los dos.
+  const sinFactura = D.pedidos.filter(p=>p.estado==="listo" && !facturaEmitida(p));
+  const avisoPago = (esperando.length
+    ? `<div class="aviso a-med noprint" data-espera-pago><strong>${esperando.length} pedido(s) empacados esperando depósito.</strong>
+       Ya están listos: falta verificar el pago para solicitar el transporte.</div>` : "") +
+    (sinFactura.length
+    ? `<div class="aviso a-med noprint" data-espera-factura><strong>${sinFactura.length} pedido(s) empacados esperando factura.</strong>
+       Sin el número de factura registrado no se solicita el transporte, tampoco a crédito.</div>` : "");
   $("#despachoAvisos").innerHTML = avisoPago + (tarde.length
     ? `<div class="aviso a-mal noprint"><strong>${tarde.length} pedido(s) pasaron su hora prometida.</strong>
        Aparecen con la barra roja.</div>`
@@ -2818,21 +2969,34 @@ function tarjetaPedido(p, f){
   // En solo lectura no hay ningún botón de acción (160, fase A): ni avanzar,
   // ni depósito, ni courier, ni imprimir, ni avisar al cliente.
   const lectura = panelSoloLectura("despacho");
+  // B2: depósito y factura los usa quien cobra (facturación, administración, coordinación
+  // o el modo local). Despacho ve los botones apagados, con el título que dice quién.
+  const cobra = puedeCobrar(), apagado = `disabled title="${QUIEN_COBRA}"`;
+  // Cotización DICOSA: facturación, administración, coordinación y el modo local. Apagados
+  // con su motivo si el pedido no la puede generar (o si falta el WhatsApp de DICOSA).
+  const cotiza = puedeCotizar(), noCot = cotiza ? cotBloqueo(p) : "";
   return `<div class="ped ${cls}">
     <div class="t"><span class="num2">#${p.numero}</span>
       <span class="cro" style="color:${colCro}">${cro}</span></div>
     <div class="cli">${esc(p.cliente)}</div>
     <div class="dir">${esc(p.direccion||"")}<br>${esc(p.telefono)}</div>
     <ul>${p.lineas.map(l=>`<li><strong>${l.cantidad}×</strong> ${esc(l.nombre)}</li>`).join("")}</ul>
-    <div class="dir">${L0(p.total)} · ${p.peso.toFixed(2)} kg · <strong>${esc(p.canal)}</strong></div>
-    <div style="margin-top:6px">${badgePago(p)}</div>
+    ${conIva(p) ? `<div class="dir" data-cobro>${desgloseCobro(p, " · ", false)}</div>
+    <div class="dir">${p.peso.toFixed(2)} kg · <strong>${esc(p.canal)}</strong></div>`
+      : `<div class="dir">${L0(p.total)} · ${p.peso.toFixed(2)} kg · <strong>${esc(p.canal)}</strong></div>`}
+    <div style="margin-top:6px">${badgePago(p)} ${badgeFactura(p)}</div>
     ${lectura ? "" : `<div class="acc noprint">
-      <button class="b" ${f.e==="listo" && !pagoLibera(p) ? "disabled title='Falta verificar el depósito'":""}
+      <button class="b" ${f.e==="listo" && !puedeSalir(p) ? `disabled title="Falta ${esc(faltaParaSalir(p).join(" y "))}"`:""}
         onclick="avanzar('${p.id}')">${f.btn}</button>
-      ${!pagoLibera(p) ? `<button class="s" onclick="registrarDeposito('${p.id}')">Registrar depósito</button>
-        <button class="s" onclick="pedirDeposito('${p.id}')">Pedir depósito</button>`:""}
-      ${f.e==="listo" ? `<button class="s" onclick="copiarCourier('${p.id}')">Datos al courier</button>`:""}
+      ${!pagoLibera(p) ? `<button class="s" ${cobra ? "" : apagado} onclick="registrarDeposito('${p.id}')">Registrar depósito</button>
+        <button class="s" ${cobra ? "" : apagado} onclick="pedirDeposito('${p.id}')">Pedir depósito</button>`:""}
+      ${!facturaEmitida(p) ? `<button class="s" ${cobra ? "" : apagado} onclick="registrarFactura('${p.id}')">Registrar factura</button>`
+        : puedeCorregirFactura() ? `<button class="s" onclick="registrarFactura('${p.id}')">Corregir factura</button>` : ""}
+      ${f.e==="listo" && puedeSalir(p) ? `<button class="s" onclick="copiarCourier('${p.id}')">Datos al courier</button>`:""}
       ${f.e==="preparando" ? `<button class="s" onclick="imprimirPicking('${p.id}')">Imprimir</button>`:""}
+      ${cotiza ? `<button class="s" ${noCot ? `disabled title="${esc(noCot)}"` : ""} onclick="imprimirCotizacion('${p.id}')">Cotización DICOSA</button>
+        <button class="s" ${noCot ? `disabled title="${esc(noCot)}"` : cotCfg().whatsapp ? "" : `disabled title="${esc(COT_SIN_WA)}"`}
+          onclick="enviarCotizacionWhatsapp('${p.id}')">Enviar por WhatsApp</button>` : ""}
       <button class="s" onclick="avisarCliente('${p.id}')">Avisar al cliente</button>
     </div>`}</div>`;
 }
@@ -2840,12 +3004,17 @@ function tarjetaPedido(p, f){
 function avanzar(id){
   const p = D.pedidos.find(x=>x.id===id); if(!p) return;
   const f = FLUJO.find(x=>x.e===p.estado); if(!f) return;
-  // COMPUERTA: sin depósito verificado no se solicita el transporte
-  if(f.sig === "en_ruta" && !pagoLibera(p)){
+  // COMPUERTA (solo de pantalla): sin depósito verificado (o crédito) y sin factura
+  // registrada no se solicita el transporte. B2: la factura también hace falta a crédito.
+  if(f.sig === "en_ruta" && !puedeSalir(p)){
+    const falta = faltaParaSalir(p);
     alert("No se puede solicitar el transporte del pedido "+p.numero+".\n\n"+
-          "Falta verificar el depósito. El pedido ya está empacado y listo; "+
-          "en cuanto registres el comprobante, sale.\n\n"+
-          "Usa «Registrar depósito» o «Pedir depósito» en la tarjeta.");
+          "Falta "+falta.join(" y ")+". El pedido ya está empacado y listo; "+
+          "en cuanto quede registrado, sale.\n\n"+
+          (puedeCobrar()
+            ? "Usa "+[pagoLibera(p) ? "" : "«Registrar depósito»", facturaEmitida(p) ? "" : "«Registrar factura»"]
+                .filter(Boolean).join(" y ")+" en la tarjeta."
+            : QUIEN_COBRA+"."));
     return;
   }
   if(f.sig === "entregado"){ marcarEntregado(id); return; }
@@ -2860,8 +3029,12 @@ function avanzar(id){
 const MENSAJES = {
   preparando: p => `Buen día, Dr(a). ${p.cliente}. Recibimos su pedido #${p.numero} por ${L0(p.total)}. `+
     `Ya lo estamos preparando y le avisamos apenas salga.`,
-  listo: p => `Dr(a). ${p.cliente}, su pedido #${p.numero} está listo y sale en camino en breve. `+
-    `Llega a ${p.direccion}.`,
+  // B2 (D3a): con el pago pendiente no se promete una salida que la compuerta no deja. Las
+  // cuentas las manda «Pedir depósito»; la factura no se le menciona al cliente.
+  listo: p => pagoLibera(p)
+    ? `Dr(a). ${p.cliente}, su pedido #${p.numero} está listo y sale en camino en breve. `+
+      `Llega a ${p.direccion}.`
+    : `Dr(a). ${p.cliente}, su pedido #${p.numero} está listo. Sale en cuanto confirmemos su depósito.`,
   // Fase 1f: un pedido foráneo va por Expreco y no promete una hora, sino días hábiles.
   en_ruta: p => esForaneo(p)
     ? `Dr(a). ${p.cliente}, su pedido #${p.numero} va en camino con Expreco. `+
@@ -2929,6 +3102,259 @@ function imprimirPicking(id){
   w.document.close(); w.print();
 }
 
+/* ============================================================================
+   COTIZACIÓN DICOSA (fase Cotización, 2026-11-15)
+   La app arma la cotización con el formato de DICOSA en una ventana para imprimir
+   («Guardar como PDF»), carta horizontal, 20 filas por hoja. Sin paquetes ni red.
+     · Quién: facturación, administración, coordinación y el modo local (Q8a: el rol
+       pedidos no). Es una barrera de pantalla: el documento solo lleva lo que ese rol
+       ya puede leer.
+     · El documento se arma con una LISTA CERRADA de campos (datosCotizacion), nunca
+       con el pedido entero: ningún costo, margen ni contribución puede llegar a él.
+     · Los datos del cliente y del agente salen de la copia que el pedido guardó al
+       confirmarse (p.cot), porque facturación y despacho no leen clientes. Un pedido
+       de antes de esta fase usa los datos de hoy, si este rol los tiene.
+     · El ISV de cada línea es el que guardó la línea (l.iva; la base lo pone, Q2b). En
+       un pedido de antes sale del Catálogo de hoy, y si no suma el ISV del pedido no
+       se genera.
+     · El cargo de envío va como una fila más, sin ISV: el TOTAL es total_con_iva.
+     · No hay descuentos: 0 %, L 0.00 y el mismo precio.
+     · Todo texto que viene de datos pasa por esc(). El logo solo se usa si es una
+       imagen PNG o JPEG en data URL: nunca una dirección de internet.
+   ============================================================================ */
+const COT_LOGO_RE = /^data:image\/(png|jpeg);base64,[A-Za-z0-9+\/]+=*$/;
+const COT_WA_RE = /^\d{8,15}$/;
+const COT_SIN_WA = "Falta el WhatsApp de facturación DICOSA: lo escribe el administrador en Ajustes, en la tarjeta «Cotización DICOSA»";
+function puedeCotizar(){ return ["local","admin","coordinador","facturacion"].includes(rolPantalla()); }
+// La fila cotizacion, campo por campo: lo que no sea un texto válido queda vacío.
+function cotCfg(){
+  const c = (D && D.cotizacion && typeof D.cotizacion === "object" && !Array.isArray(D.cotizacion)) ? D.cotizacion : {};
+  const t = k => typeof c[k] === "string" ? c[k].trim() : "";
+  const logo = t("logo"), wa = t("whatsapp");
+  return {sitio:t("sitio"), forma_pago:t("forma_pago"), validez:t("validez"), rtn:t("rtn"),
+          logo: COT_LOGO_RE.test(logo) ? logo : "", whatsapp: COT_WA_RE.test(wa) ? wa : ""};
+}
+// Por qué un pedido no genera cotización, o "" si puede.
+function cotBloqueo(p){
+  if(!p) return "El pedido no está en este dispositivo";
+  if(p.estado === "cancelado") return "Un pedido cancelado no genera cotización";
+  if(!conIva(p)) return "Pedido de antes del ISV: no tiene total con ISV y no genera cotización";
+  return "";
+}
+// Copia de los datos del cliente y de su agente que el pedido guarda al confirmarse.
+function cotDeCliente(c){
+  const t = v => String(v == null ? "" : v).trim();
+  const d = c && c.dicosa && typeof c.dicosa === "object" ? c.dicosa : {};
+  const ags = D.agentes && typeof D.agentes === "object" && !Array.isArray(D.agentes) ? D.agentes : {};
+  const a = (d.generador && ags[d.generador] && typeof ags[d.generador] === "object") ? ags[d.generador] : {};
+  return {codigo:t(d.codigo), contacto:t(d.contacto), rtn:t(d.rtn),
+          agente:{codigo:t(a.codigo), nombre:t(a.nombre), telefono:t(a.telefono)}};
+}
+// La línea como queda en el pedido confirmado: unidad y marca del Catálogo de ese momento
+// (solo si traen dato: sin dato, en blanco) y el ISV de la línea, con la regla de ivaLinea.
+function lineaCotizada(l){
+  const t = v => String(v == null ? "" : v).trim();
+  const s = D.skus.find(x => x.codigo === l.codigo), d = s && s.dicosa && typeof s.dicosa === "object" ? s.dicosa : {};
+  const {unidad, marca, iva, ...resto} = l;
+  return {...resto, ...(t(d.unidad) ? {unidad:t(d.unidad)} : {}), ...(t(d.marca) ? {marca:t(d.marca)} : {}), iva: ivaLinea(l)};
+}
+// Fecha dd/mm/aaaa y hora «06:11 p. m.» de Honduras, sea cual sea el reloj del dispositivo.
+function cotFechaHora(iso){
+  const d = new Date(iso);
+  if(!iso || isNaN(d)) return {fecha:"", hora:""};
+  const a = ahoraHN(d), h = Math.floor(a.min / 60), p = n => String(n).padStart(2, "0");
+  return {fecha: fechaCorta(a.fecha), hora: p(h % 12 || 12) + ":" + p(a.min % 60) + (h < 12 ? " a. m." : " p. m.")};
+}
+const cotR2 = x => Math.round(Number((Number(x) * 100).toFixed(6))) / 100;
+const cotMonto = n => (Number(n) || 0).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
+// Lo que lleva la cotización de un pedido: la lista cerrada. No cambia nada.
+function datosCotizacion(p){
+  const cfg = cotCfg(), t = v => String(v == null ? "" : v).trim();
+  const nueva = !!(p.cot && typeof p.cot === "object");
+  const cot = nueva ? p.cot : cotDeCliente(D.clientes.find(c => c.id === p.cliente_id));
+  const ag = cot.agente && typeof cot.agente === "object" ? cot.agente : {};
+  const idc = String(p.cliente_id || ""), fh = cotFechaHora(p.fecha);
+  let sumaIva = 0;
+  const filas = (Array.isArray(p.lineas) ? p.lineas : []).filter(l => l && typeof l === "object").map((l, i) => {
+    // Pedido de antes de la fase: unidad y marca del Catálogo de hoy, si este rol lo tiene.
+    const s = nueva ? null : D.skus.find(x => x.codigo === l.codigo);
+    const ds = s && s.dicosa && typeof s.dicosa === "object" ? s.dicosa : {};
+    const precio = Number(l.precio) || 0, cantidad = Number(l.cantidad) || 0, subtotal = cotR2(cantidad * precio);
+    const iva = esNum(l.iva) ? l.iva : ivaLinea(l);
+    sumaIva += iva;
+    return {n:i + 1, codigo:t(l.codigo), cantidad, unidad:t(l.unidad ?? ds.unidad), marca:t(l.marca ?? ds.marca),
+            descripcion:t(l.nombre), precio, subtotal, iva, isv: iva > 0 ? "S" : "N", total: cotR2(subtotal + iva)};
+  });
+  const cargo = Number(p.cargo) || 0;
+  if(cargo > 0) filas.push({n:filas.length + 1, codigo:"", cantidad:1, unidad:"", marca:"", descripcion:"Cargo de envío",
+    precio:cargo, subtotal:cotR2(cargo), iva:0, isv:"N", total:cotR2(cargo), envio:true});
+  const isv = esNum(p.iva) ? p.iva : 0, total = conIva(p) ? p.total_con_iva : 0;
+  let problema = cotBloqueo(p);
+  if(!problema && Math.abs(cotR2(sumaIva) - isv) > 0.005)
+    problema = "El ISV de las líneas (L " + cotMonto(sumaIva) + ") no suma el ISV del pedido (L " + cotMonto(isv) +
+      "): el Catálogo cambió después de confirmarlo. Revísalo con administración.";
+  const cuentas = cuentasValidas().map(c => t(c.banco).toUpperCase() + ": " + t(c.numero));
+  return {numero:t(p.numero), cliente:t(p.cliente),
+    titulo:"COTIZACIÓN - " + t(p.cliente).toUpperCase() + " " + total.toFixed(2),
+    sitio:cfg.sitio, logo:cfg.logo, rtn_dicosa:cfg.rtn, forma_pago:cfg.forma_pago, validez:cfg.validez,
+    agente:t(ag.codigo), nombre_agente:t(ag.nombre), contacto_agente:t(ag.telefono),
+    codigo: t(cot.codigo) || (idc.startsWith(CLI_PREFIJO) ? idc.slice(CLI_PREFIJO.length) : ""),
+    rtn:t(cot.rtn), condicion: p.pago_estado === "credito" ? "CRÉDITO" : "CONTADO",
+    contacto:t(cot.contacto), direccion:t(p.direccion), telefono:t(p.telefono), hora:fh.hora, fecha:fh.fecha,
+    filas, subtotal: esNum(p.total) ? p.total : (Number(p.subtotal) || 0), isv, total,
+    observaciones:"Pedido " + t(p.numero),
+    copia: facturaEmitida(p) ? "COPIA – factura n.º " + t(p.factura.numero) : "",
+    cuentas,
+    avisos: cuentas.length ? [] : ["Todavía no hay cuentas bancarias de DICOSA en la lista: la cotización sale sin ellas. " +
+      "El administrador las escribe en Ajustes. (Este aviso no se imprime.)"],
+    problema};
+}
+// El documento completo, como texto. No abre ninguna ventana ni cambia nada.
+function htmlCotizacion(p){
+  const d = datosCotizacion(p), e = esc;
+  const m = n => `<span>L</span> <span>${cotMonto(n)}</span>`, mv = `<span>L</span> <span>-</span>`;
+  const td = (c, v, cls) => `<td data-c="${c}"${cls ? ` class="${cls}"` : ""}>${v}</td>`;
+  const fila = f => `<tr data-fila="${f.n}">` + td("fila", "N°" + f.n) + td("codigo", e(f.codigo)) + td("cant", e(f.cantidad)) +
+    td("unidad", e(f.unidad)) + td("marca", e(f.marca)) + td("descripcion", e(f.descripcion), "i") + td("precio", m(f.precio), "m") +
+    td("dscto_pct", "0%") + td("dscto", m(0), "m") + td("precio_dscto", m(f.precio), "m") + td("subtotal", m(f.subtotal), "m") +
+    td("isv", f.isv) + td("total", m(f.total), "m") + `</tr>`;
+  const vacia = `<tr data-vacia>` + td("fila", "") + td("codigo", "") + td("cant", "") + td("unidad", "") + td("marca", "") +
+    td("descripcion", "", "i") + td("precio", mv, "m") + td("dscto_pct", "") + td("dscto", mv, "m") + td("precio_dscto", mv, "m") +
+    td("subtotal", mv, "m") + td("isv", "") + td("total", mv, "m") + `</tr>`;
+  const grupos = [];
+  for(let i = 0; i < Math.max(1, d.filas.length); i += COT_FILAS) grupos.push(d.filas.slice(i, i + COT_FILAS));
+  const enc = (clase, cols) => `<table class="${clase}"><thead><tr>${cols.map(c => `<th>${c[0]}</th>`).join("")}</tr></thead>
+    <tbody><tr>${cols.map(c => `<td data-e="${c[1]}">${e(d[c[1]])}</td>`).join("")}</tr></tbody></table>`;
+  const pie = `<div class="pie">
+      <div class="p-izq"><div class="pago">Forma de Pago: ${e(d.forma_pago)}</div>
+        <div class="validez">Validez de Cotización: ${e(d.validez)}</div><div class="sello"></div></div>
+      <div class="p-cen"><div class="nota-roja">ISV aplicado / descuento aplicado</div>
+        <div class="obs">Observaciones: ${e(d.observaciones)}</div></div>
+      <table class="tot"><tbody><tr><th>SUBTOTAL</th><td data-t="subtotal" class="m">${m(d.subtotal)}</td></tr>
+        <tr><th>I.S.V</th><td data-t="isv" class="m">${m(d.isv)}</td></tr>
+        <tr class="gran"><th>TOTAL</th><td data-t="total" class="m">${m(d.total)}</td></tr></tbody></table>
+    </div>
+    <div class="dep">Puede realizar sus depósitos y/o transferencias a las cuentas bancarias de Distribuidora Comercial S.A. - DICOSA</div>
+    <div class="cuentas">${d.cuentas.map(c => `<span>${e(c)}</span>`).join(" &nbsp; ")}</div>`;
+  const hoja = (g, i) => `<section class="hoja">
+    ${d.logo ? `<img class="agua" src="${d.logo}" alt="">` : ""}
+    <div class="cab">
+      <div class="c-izq"><div class="titulo">${e(d.titulo)}</div>
+        ${d.copia ? `<div class="copia">${e(d.copia)}</div>` : ""}
+        <div class="sitio">Visítanos en: ${e(d.sitio)}</div></div>
+      <div class="c-der">${d.logo ? `<img class="logo" src="${d.logo}" alt="">` : `<div class="sin-logo"></div>`}
+        <div class="rtn-dicosa">R.T.N. ${e(d.rtn_dicosa)}</div></div>
+    </div>
+    ${enc("enc1", [["AGENTE","agente"],["NOMBRE AGENTE","nombre_agente"],["CONTACTO AGENTE","contacto_agente"],["CÓDIGO","codigo"],
+                   ["NOMBRE CLIENTE","cliente"],["RTN","rtn"],["CONDICIÓN","condicion"]])}
+    ${enc("enc2", [["CONTACTO","contacto"],["DIRECCIÓN","direccion"],["TELÉFONO","telefono"],["HORA","hora"],["FECHA","fecha"]])}
+    <table class="lineas"><thead><tr><th>FILA</th><th>CÓDIGO</th><th>CANT.</th><th>UNIDAD</th><th>MARCA</th>
+      <th>DESCRIPCIÓN ARTÍCULO</th><th>PRECIO</th><th>DSCTO (%)</th><th>DSCTO (L)</th><th>PRECIO CON DSCTO</th>
+      <th>SUBTOTAL</th><th>ISV</th><th>TOTAL + ISV</th></tr></thead>
+      <tbody>${g.map(fila).join("")}${vacia.repeat(COT_FILAS - g.length)}</tbody></table>
+    ${i === grupos.length - 1 ? pie : `<div class="sigue">Hoja ${i + 1} de ${grupos.length}. Sigue en la hoja siguiente.</div>`}
+  </section>`;
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Cotización ${e(d.numero)}</title>
+<style>@page{size:letter landscape;margin:7mm}
+@media print{.aviso-pantalla{display:none}body{background:#fff}.hoja{margin:0}}
+*{box-sizing:border-box}
+body{font-family:Arial,Helvetica,sans-serif;font-size:7.5pt;color:#000;margin:0;background:#eee;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.aviso-pantalla{background:#FCF3CF;border:1px solid #B7950B;padding:8px 12px;margin:8px auto;width:264mm;font-size:10pt}
+.hoja{position:relative;width:264mm;height:200mm;margin:6mm auto;padding:4mm;border:1px solid #000;background:#fff;overflow:hidden;page-break-after:always;break-after:page}
+.hoja:last-of-type{page-break-after:auto;break-after:auto}
+.agua{position:absolute;left:50%;top:50%;width:150mm;max-height:150mm;object-fit:contain;transform:translate(-50%,-50%);opacity:.08;pointer-events:none}
+.cab{display:flex;justify-content:space-between;align-items:flex-start;min-height:21mm}
+.titulo{font-size:17pt;font-weight:bold;color:#1F3864;text-transform:uppercase;line-height:1.1;max-width:200mm;overflow-wrap:anywhere}
+.copia{color:#C0392B;font-weight:bold;font-size:10pt;margin-top:1mm}
+.sitio{font-weight:bold;font-size:7.5pt;margin-top:1.5mm}
+.c-der{text-align:right}
+.logo,.sin-logo{height:15mm;max-width:55mm;object-fit:contain;display:inline-block}
+.rtn-dicosa{font-size:7pt;margin-top:1mm}
+table{width:100%;border-collapse:collapse;position:relative}
+th,td{border:1px solid #000;padding:.6mm 1mm;text-align:center;overflow-wrap:anywhere}
+.enc1,.enc2{margin-top:1.5mm}
+.enc1 th,.enc2 th{background:#1F3864;color:#fff;font-size:7pt}
+.enc1 td,.enc2 td{font-size:7pt;height:5mm}
+.lineas{margin-top:1.5mm;table-layout:fixed}
+.lineas th{background:#2E75B6;color:#fff;font-size:6.5pt}
+.lineas td{font-size:7pt;height:4.6mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lineas th:nth-child(1){width:4%}.lineas th:nth-child(2){width:7%}.lineas th:nth-child(3){width:4%}
+.lineas th:nth-child(4){width:6%}.lineas th:nth-child(5){width:8%}.lineas th:nth-child(6){width:23%}
+.lineas th:nth-child(8){width:5%}.lineas th:nth-child(12){width:3.5%}
+td.i{text-align:left}
+td.m{text-align:right}
+td.m span:first-child{float:left}
+.pie{display:flex;gap:4mm;margin-top:2mm;align-items:stretch;position:relative}
+.p-izq{width:70mm}
+.pago,.validez{font-weight:bold;font-size:7pt}
+.sello{border:1px solid #000;height:17mm;margin-top:1.5mm}
+.p-cen{flex:1}
+.nota-roja{color:#C0392B;font-size:7pt;text-align:center}
+.obs{border:1px solid #000;border-radius:3mm;min-height:19mm;margin-top:1.5mm;padding:1.5mm 2mm;font-size:7.5pt;overflow-wrap:anywhere}
+.tot{width:70mm;align-self:flex-start}
+.tot th,.tot td{background:#DDEBF7;font-size:8.5pt;padding:1.2mm 1.5mm}
+.tot th{text-align:left}
+.tot .gran th,.tot .gran td{font-size:11pt;font-weight:bold}
+.dep,.cuentas,.sigue{text-align:center;font-size:7pt;margin-top:1.2mm;position:relative}
+.cuentas{overflow-wrap:anywhere}</style></head><body>
+${d.avisos.map(a => `<div class="aviso-pantalla">${e(a)}</div>`).join("")}
+${grupos.map(hoja).join("")}
+</body></html>`;
+}
+// Ventana con la cotización, lista para «Guardar como PDF». La ventana se abre con el clic
+// (antes de cualquier espera), para que el navegador no la bloquee.
+function imprimirCotizacion(id){
+  if(!puedeCotizar() || panelSoloLectura("despacho")) return;
+  const p = D.pedidos.find(x => x.id === id); if(!p) return;
+  const d = datosCotizacion(p);
+  if(d.problema){ alert("No se generó la cotización del pedido " + p.numero + ".\n\n" + d.problema); return; }
+  const w = window.open("", "_blank", "width=1100,height=820");
+  if(!w){ alert("El navegador no dejó abrir la ventana de la cotización.\n\nPermite las ventanas emergentes de esta página y vuelve a pulsar."); return; }
+  w.document.write(htmlCotizacion(p));
+  w.document.close();
+  // Un respiro para que el logo termine de pintarse antes de imprimir.
+  setTimeout(() => { try{ w.focus(); w.print(); }catch(e){} }, 300);
+  registrarCotizacion(id, "generada");
+}
+// C11b: texto y dirección de WhatsApp para avisar a facturación de DICOSA. Lista cerrada:
+// número del pedido, cliente y total con ISV. El PDF lo adjunta la persona.
+function textoWhatsappCotizacion(p){
+  return "Cotización del pedido " + p.numero + " · " + p.cliente + " · Total L " + cotMonto(montoCobro(p)) + ". Adjunto el PDF.";
+}
+function urlWhatsappCotizacion(p){
+  const n = cotCfg().whatsapp;
+  return n ? "https://wa.me/" + n + "?text=" + encodeURIComponent(textoWhatsappCotizacion(p)) : "";
+}
+function enviarCotizacionWhatsapp(id){
+  if(!puedeCotizar() || panelSoloLectura("despacho")) return;
+  const p = D.pedidos.find(x => x.id === id); if(!p) return;
+  const d = datosCotizacion(p);
+  if(d.problema){ alert("No se envió la cotización del pedido " + p.numero + ".\n\n" + d.problema); return; }
+  const u = urlWhatsappCotizacion(p);
+  if(!u){ alert(COT_SIN_WA + "."); return; }
+  window.open(u, "_blank", "noopener");
+  registrarCotizacion(id, "enviada");
+}
+// Q9a: registro en el pedido, p.cotizacion = {generada_en, veces, enviada_en, veces_enviada,
+// letra}. Con base compartida primero se deja la sincronización al día (como D9a), para
+// anotar sobre la copia más reciente del pedido. Es solo un registro: no frena nada, y si
+// no hay conexión se anota igual.
+async function registrarCotizacion(id, que){
+  if(!puedeCotizar()) return;
+  if(typeof nubeActiva === "function" && nubeActiva()){
+    for(let i = 0; NUBE.ocupado && i < 200; i++) await new Promise(r => setTimeout(r, 50));
+    await nubeSincronizar(true);
+  }
+  const p = D.pedidos.find(x => x.id === id); if(!p) return;
+  const c = p.cotizacion && typeof p.cotizacion === "object" ? {...p.cotizacion} : {}, ahora = new Date().toISOString();
+  if(que === "enviada"){ c.enviada_en = ahora; c.veces_enviada = (Number(c.veces_enviada) || 0) + 1; }
+  else { c.generada_en = ahora; c.veces = (Number(c.veces) || 0) + 1; }
+  c.letra = letraDispositivo() || null;
+  p.cotizacion = c;
+  guardar();
+  if(!document.querySelector("#modal.on")){ pintarDespacho(); pintarInicio(); }
+}
+
 
 /* ============================================================================
    COBRO POR DEPÓSITO BANCARIO
@@ -2939,58 +3365,239 @@ function imprimirPicking(id){
 function pagoLibera(p){
   return p.pago_estado === "verificado" || p.pago_estado === "credito";
 }
+/* ------------------------------------------- facturación (fase B2, pendiente 169)
+   Permisos por acción, no por panel. Pedir depósito, Registrar depósito y Registrar
+   factura los usa quien cobra: facturación, administración, coordinación o el modo
+   local. Despacho ve los botones apagados. Todo pedido necesita factura antes del
+   transporte, también a crédito. Un número ya registrado solo lo corrigen
+   administración y coordinación, y se guarda el anterior. La base protege pago y
+   factura por campo (sql/facturacion-b2.sql, t_pago); la compuerta de salida sigue
+   siendo solo de pantalla. */
+const QUIEN_COBRA = "Lo registra facturación, administración o coordinación";
+function puedeCobrar(){ return ["local","admin","coordinador","facturacion"].includes(rolPantalla()); }
+function puedeCorregirFactura(){ return ["local","admin","coordinador"].includes(rolPantalla()); }
+function facturaEmitida(p){ return !!(p && p.factura && typeof p.factura === "object" && String(p.factura.numero || "").trim()); }
+// Ajustes DICOSA (F1a, DC1b): número de factura con el formato de la SAR, tres, tres, dos y
+// ocho dígitos separados por guiones. Se acepta con los guiones o con los 18 dígitos seguidos
+// y se devuelve siempre con guiones; si no cumple, "". Lo ya registrado con otra forma sigue
+// contando como factura (DC3a): esto solo se exige al registrar o corregir.
+const FACTURA_SAR = "El número de factura debe tener el formato de la SAR: 3, 3, 2 y 8 dígitos separados por guiones.";
+function facturaSar(n){
+  const t = String(n ?? "").trim();
+  if(/^\d{3}-\d{3}-\d{2}-\d{8}$/.test(t)) return t;
+  const m = /^(\d{3})(\d{3})(\d{2})(\d{8})$/.exec(t);
+  return m ? m.slice(1).join("-") : "";
+}
+function puedeSalir(p){ return pagoLibera(p) && facturaEmitida(p); }
+function faltaParaSalir(p){
+  return [pagoLibera(p) ? "" : "verificar el depósito", facturaEmitida(p) ? "" : "registrar la factura"].filter(Boolean);
+}
+// Otros pedidos de este navegador con el mismo número de factura (sin mayúsculas ni espacios).
+const facturaClave = n => String(n || "").replace(/\s+/g, "").toLowerCase();
+function pedidosConFactura(numero, salvoId){
+  const k = facturaClave(numero);
+  return k ? D.pedidos.filter(x => x.id !== salvoId && facturaEmitida(x) && facturaClave(x.factura.numero) === k) : [];
+}
+function facturaRepetida(p){ return facturaEmitida(p) ? pedidosConFactura(p.factura.numero, p.id) : []; }
+function badgeFactura(p){
+  if(!facturaEmitida(p)) return `<span class="pill p-mal">SIN FACTURA</span>`;
+  return `<span class="pill p-ok">FACTURA n.º ${esc(p.factura.numero)}</span>` +
+    (facturaRepetida(p).length ? ` <span class="pill p-med" title="Otro pedido tiene este mismo número de factura">repetida</span>` : "");
+}
+// D2: con depósito o con factura, cancelar es de administración o coordinación.
+function tieneDeposito(p){ return !!p && (p.pago_estado === "verificado" || (!!p.pago && typeof p.pago === "object")); }
+function puedeCancelar(p){
+  return !(tieneDeposito(p) || facturaEmitida(p)) || ["local","admin","coordinador"].includes(rolPantalla());
+}
+function porDevolver(p){ return !!p && p.estado === "cancelado" && tieneDeposito(p); }
+// D11a y B2-R1 (E1a): quién registró el depósito o la factura. La base pone en pago.por y
+// factura.por el identificador interno del usuario (auth.uid()), nunca su correo. Solo lo
+// ven administración y coordinación: identificador → usuario (equipo_ids_b2) → nombre
+// (equipo_lista); sin nombre, el usuario; si no está en la lista, «otro usuario». El
+// identificador no se muestra nunca. Más la letra del dispositivo. "" si no hay nada.
+function usuarioDeId(id){
+  const l = (typeof NUBE !== "undefined" && Array.isArray(NUBE.ids)) ? NUBE.ids : [];
+  const e = l.find(x => x.id === String(id || ""));
+  return e ? e.email : "";
+}
+function quienRegistro(x){
+  if(!x || typeof x !== "object" || !["admin","coordinador"].includes(rolPantalla())) return "";
+  const u = x.por ? usuarioDeId(x.por) : "";
+  const n = x.por ? (u ? (nombreEquipo(u) || u) : "otro usuario") : "";
+  const t = [n, x.letra ? "dispositivo " + x.letra : ""].filter(Boolean).join(", ");
+  return t ? `<br><span class="mini" data-quien>registró: ${esc(t)}</span>` : "";
+}
+// D9a: antes de guardar un depósito o una factura se deja la sincronización al día, para
+// no escribir sobre una copia vieja del pedido. Devuelve el pedido como quedó (la bajada
+// puede reemplazar el objeto) o null si no se debe guardar. firma: la del pedido cuando
+// se abrió la ventana; si cambió, se avisa en msg y hay que volver a pulsar.
+let COBRO = null;          // {id, firma} del pedido de la ventana abierta
+let COBRO_OCUPADO = false;
+async function cobroAlDia(id, msg){
+  const aviso = (c, t) => { const x = $(msg); if(x) x.innerHTML = t ? `<div class="aviso ${c}">${t}</div>` : ""; };
+  if(typeof nubeActiva === "function" && nubeActiva()){
+    aviso("a-info", "Revisando que la sincronización esté al día…");
+    for(let i = 0; NUBE.ocupado && i < 200; i++) await new Promise(r => setTimeout(r, 50));
+    await nubeSincronizar(true);
+    aviso("", "");
+    if(NUBE.estado !== "en_linea" && !confirm("No se pudo revisar la sincronización (sin conexión o con error).\n\n"+
+        "El pedido pudo cambiar en otro dispositivo. ¿Guardar de todos modos?")) return null;
+  }
+  const p = D.pedidos.find(x => x.id === id);
+  if(!p){ aviso("a-mal", "Este pedido ya no está en este dispositivo. No se guardó."); return null; }
+  if(COBRO && COBRO.id === id && COBRO.firma !== nubeFirmaPedido(p)){
+    COBRO.firma = nubeFirmaPedido(p);
+    pintarDespacho(); pintarPedidos();
+    aviso("a-med", "El pedido cambió en otro dispositivo mientras tenías esta ventana abierta (ahora: "+
+      esc(p.estado)+", "+(pagoLibera(p) ? "pago liberado" : "pago pendiente")+", "+
+      (facturaEmitida(p) ? "factura n.º "+esc(p.factura.numero) : "sin factura")+"). No se guardó: revisa y vuelve a pulsar.");
+    return null;
+  }
+  return p;
+}
+function nubeFirmaPedido(p){ return typeof nubeFirma === "function" ? nubeFirma(p) : JSON.stringify(p); }
 function badgePago(p){
   if(p.pago_estado === "credito")
     return `<span class="pill p-ok">CRÉDITO AUTORIZADO</span>`;
   if(p.pago_estado === "verificado")
     return `<span class="pill p-ok">DEPÓSITO VERIFICADO</span>` +
       (p.pago && p.pago.diferencia ? ` <span class="pill p-med">difiere ${L0(p.pago.diferencia)}</span>` : "");
+  // Hallazgo 9 (9a): un cancelado sin pago registrado no se cobra. Con pago sigue el estado real.
+  if(p.estado === "cancelado" && !tieneDeposito(p)) return `<span class="pill p-gris">NO SE COBRA</span>`;
   const min = minutosDesde(p.fecha);
   return `<span class="pill p-mal">PAGO PENDIENTE</span>` +
     (min > 60 ? ` <span class="mini">esperando ${Math.floor(min/60)} h</span>` : "");
 }
 
 function registrarDeposito(id){
+  if(!puedeCobrar()) return;      // B2: el botón apagado no basta (consola, pruebas)
   const p = D.pedidos.find(x=>x.id===id); if(!p) return;
+  COBRO = {id, firma: nubeFirmaPedido(p)};
+  // B2 (decisión 7 y D10a): cuenta de destino, de la lista de cuentas de DICOSA. Mientras
+  // dura la primera bajada de la 1f la lista puede estar vacía solo porque no ha bajado.
+  const cs = cuentasValidas(), espera = espera1f();
+  const cobro = montoCobro(p);
   modal(`<h3 style="margin-top:0">Verificar depósito — pedido ${p.numero}</h3>
     <p class="mini">Confirma el depósito en tu banca en línea antes de registrarlo aquí.
-    Al guardarlo, el pedido queda liberado para solicitar el transporte.</p>
-    <div class="aviso a-info">Total del pedido: <strong>${L0(p.total)}</strong></div>
+    Al guardarlo, el pago del pedido queda verificado; para solicitar el transporte hace falta además la factura.</p>
+    ${espera ? `<div class="aviso a-med" id="dpEspera">${ESPERA_1F}</div>` : ""}
+    ${conIva(p) ? `<div class="aviso a-info" id="dpTotal">${desgloseCobro(p, " · ", true, "Cargo de envío")
+        .replace(/Total con ISV: (.*)$/, "<strong>Total con ISV: $1</strong>")}</div>`
+      : `<div class="aviso a-info" id="dpTotal">Total del pedido: <strong>${L0(p.total)}</strong></div>`}
     <div class="grid g2" style="margin:12px 0">
       <div><label>Monto depositado (L.)</label>
-        <input id="dpMonto" type="number" step="0.01" value="${p.total.toFixed(2)}"></div>
+        <input id="dpMonto" type="number" step="0.01" value="${cobro.toFixed(2)}"></div>
       <div><label>Banco de origen</label><input id="dpBanco" placeholder="Ej: Banco Atlántida"></div>
       <div><label>N.º de referencia o boleta</label><input id="dpRef"></div>
       <div><label>Fecha del depósito</label>
         <input id="dpFecha" type="date" value="${hoy()}"></div>
     </div>
+    ${cs.length ? `<div style="margin-bottom:12px"><label>Cuenta de destino (cuenta de DICOSA donde entró el depósito)</label>
+        <select id="dpCuenta"><option value="">Elige la cuenta…</option>${cs.map(c =>
+          `<option value="${esc(c.id)}">${esc(c.banco)} · n.º ${esc(c.numero)}${c.tipo ? " · " + esc(c.tipo) : ""}</option>`).join("")}</select></div>`
+      : `<div class="aviso a-med" id="dpSinCuenta">No hay cuentas bancarias de DICOSA en la lista: el depósito se registra
+          sin cuenta de destino. El administrador las escribe en Ajustes.</div>`}
     <div><label>Nota (opcional)</label><input id="dpNota" placeholder="Ej: depositó la asistente"></div>
     <div id="dpMsg"></div><hr>
-    <button class="b" onclick="confirmarDeposito('${id}')">Verificar y liberar despacho</button>
+    <button class="b" id="dpGuardar" ${espera ? "disabled" : ""} onclick="confirmarDeposito('${id}')">Verificar y liberar despacho</button>
     <button class="s" onclick="cerrarModal()">Cancelar</button>`);
 }
-function confirmarDeposito(id){
-  const p = D.pedidos.find(x=>x.id===id);
+async function confirmarDeposito(id){
+  if(!puedeCobrar() || COBRO_OCUPADO) return;
+  const dpMal = t => { const x = $("#dpMsg"); if(x) x.innerHTML = `<div class="aviso a-mal">${t}</div>`; };
+  if(espera1f()){ dpMal(NO_GUARDO_1F); return; }
   const monto = parseFloat($("#dpMonto").value)||0;
   const ref = $("#dpRef").value.trim();
-  if(monto <= 0){ $("#dpMsg").innerHTML =
-    `<div class="aviso a-mal">Escribe el monto depositado.</div>`; return; }
-  if(!ref){ $("#dpMsg").innerHTML =
-    `<div class="aviso a-mal">La referencia o número de boleta es obligatoria: es el respaldo del cobro.</div>`; return; }
-  const dif = +(monto - p.total).toFixed(2);
+  if(monto <= 0){ dpMal("Escribe el monto depositado."); return; }
+  if(!ref){ dpMal("La referencia o número de boleta es obligatoria: es el respaldo del cobro."); return; }
+  // D10a: con cuentas en la lista, la de destino es obligatoria. Se guarda una copia
+  // (id, banco y número), porque la lista se puede editar o quitar después.
+  const cs = cuentasValidas(), sel = $("#dpCuenta");
+  const cta = sel ? cs.find(c => String(c.id) === sel.value) : null;
+  if(cs.length && !cta){ dpMal("Elige la cuenta de destino: la cuenta de DICOSA donde entró el depósito."); return; }
+  const banco = $("#dpBanco").value.trim(), fechaDep = $("#dpFecha").value, nota = $("#dpNota").value.trim();
+  COBRO_OCUPADO = true;
+  let p;
+  try{ p = await cobroAlDia(id, "#dpMsg"); } finally { COBRO_OCUPADO = false; }
+  if(!p) return;
+  // B2 (D6c): la diferencia se mide contra el total con IVA; un pedido de antes de B2, contra su total.
+  const cobro = montoCobro(p);
+  const dif = +(monto - cobro).toFixed(2);
   if(Math.abs(dif) > 0.5 && !confirm(
-      `El depósito es de ${L0(monto)} y el pedido es de ${L0(p.total)}.\n\n`+
+      `El depósito es de ${L0(monto)} y el pedido es de ${L0(cobro)}${conIva(p) ? " (con ISV)" : ""}.\n\n`+
       `Diferencia: ${dif>0?"sobra":"falta"} ${L0(Math.abs(dif))}.\n\n¿Registrarlo de todos modos?`)) return;
-  p.pago = {monto, banco:$("#dpBanco").value.trim(), referencia:ref,
-            fecha:$("#dpFecha").value, nota:$("#dpNota").value.trim(),
+  // Regla 167: la hora en que se verificó no se mueve si el pedido ya la tiene (la base hace lo mismo).
+  const antes = p.pago && p.pago.verificado_en;
+  p.pago = {monto, banco, referencia:ref, fecha:fechaDep, nota,
             diferencia: Math.abs(dif) > 0.5 ? dif : 0,
-            verificado_en: new Date().toISOString()};
+            cuenta: cta ? {id:cta.id, banco:cta.banco, numero:cta.numero} : null,
+            letra: letraDispositivo() || null,      // quién lo registró lo pone la base (pago.por, identificador interno)
+            verificado_en: antes || new Date().toISOString()};
   p.pago_estado = "verificado";
-  guardar(); cerrarModal(); pintarDespacho(); pintarInicio();
+  COBRO = null;
+  guardar(); cerrarModal(); pintarDespacho(); pintarPedidos(); pintarInicio();
+}
+
+/* ----------------------------------------------- factura (fase B2, pendiente 169) */
+function registrarFactura(id){
+  if(!puedeCobrar()) return;
+  const p = D.pedidos.find(x=>x.id===id); if(!p) return;
+  const corrige = facturaEmitida(p);
+  if(corrige && !puedeCorregirFactura()) return;      // D1a
+  COBRO = {id, firma: nubeFirmaPedido(p)};
+  const f = corrige ? p.factura : {};
+  modal(`<h3 style="margin-top:0">${corrige ? "Corregir" : "Registrar"} factura — pedido ${p.numero}</h3>
+    <p class="mini">Escribe el número de la factura que DICOSA emitió para este pedido. Sin factura registrada
+    no se solicita el transporte, tampoco a crédito.${corrige ? " Al corregir, el número anterior queda guardado." : ""}</p>
+    <div class="aviso a-info">${conIva(p) ? desgloseCobro(p, " · ", true, "Cargo de envío") : "Total del pedido: " + L0(p.total)}</div>
+    <div class="grid g2" style="margin:12px 0">
+      <div><label>Número de factura</label><input id="fcNumero" value="${esc(f.numero || "")}" inputmode="numeric"
+        placeholder="3, 3, 2 y 8 dígitos con guiones">
+        <p class="mini" style="margin:4px 0 0">Con el formato de la SAR: 3, 3, 2 y 8 dígitos separados por guiones.
+        También se puede escribir con los 18 dígitos seguidos: los guiones se ponen solos.</p></div>
+      <div><label>Fecha de emisión</label><input id="fcFecha" type="date" value="${esc(f.fecha || fechaLocal())}"></div>
+    </div>
+    <div id="fcMsg"></div><hr>
+    <button class="b" onclick="confirmarFactura('${id}')">Guardar factura</button>
+    <button class="s" onclick="cerrarModal()">Cancelar</button>`);
+}
+async function confirmarFactura(id){
+  if(!puedeCobrar() || COBRO_OCUPADO) return;
+  const fcMal = t => { const x = $("#fcMsg"); if(x) x.innerHTML = `<div class="aviso a-mal">${t}</div>`; };
+  const escrito = $("#fcNumero").value.trim(), fechaFac = $("#fcFecha").value;
+  if(!escrito){ fcMal("Escribe el número de factura."); return; }
+  const numero = facturaSar(escrito);
+  if(!numero){ fcMal(FACTURA_SAR); return; }
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(fechaFac)){ fcMal("Escribe la fecha de emisión de la factura."); return; }
+  COBRO_OCUPADO = true;
+  let p;
+  try{ p = await cobroAlDia(id, "#fcMsg"); } finally { COBRO_OCUPADO = false; }
+  if(!p) return;
+  const corrige = facturaEmitida(p);
+  if(corrige && !puedeCorregirFactura()){ fcMal("Este pedido ya tiene la factura n.º "+esc(p.factura.numero)+
+    ". Un número ya registrado solo lo corrige administración o coordinación."); return; }
+  // Número repetido: se avisa y no se bloquea (D1a). Se compara con los pedidos de este navegador.
+  const otros = pedidosConFactura(numero, id);
+  if(otros.length && !confirm("El número de factura "+numero+" ya está en "+
+      otros.map(x => "el pedido #"+x.numero+" ("+x.cliente+")").join(" y en ")+".\n\n¿Guardarlo de todos modos?")) return;
+  const nueva = {numero, fecha:fechaFac, registrada_en:new Date().toISOString(),
+                 letra: letraDispositivo() || null};     // quién la registró lo pone la base (factura.por, identificador interno)
+  if(corrige){
+    // D1a: al corregir se guarda lo anterior (la base lo vuelve a armar con lo que ella tenía).
+    const {anteriores, ...vieja} = p.factura;
+    nueva.anteriores = (Array.isArray(anteriores) ? anteriores : []).concat(
+      String(vieja.numero || "").trim() === numero && vieja.fecha === fechaFac ? [] : [vieja]);
+    if(!nueva.anteriores.length) delete nueva.anteriores;
+  }
+  p.factura = nueva;
+  COBRO = null;
+  guardar(); cerrarModal(); pintarDespacho(); pintarPedidos(); pintarInicio();
 }
 
 function pedirDeposito(id){
-  const p = D.pedidos.find(x=>x.id===id);
+  // B2: el botón solo está activo para quien cobra. La función no se cierra por rol: solo
+  // arma un texto y no guarda nada (y la prueba F13b de la 1f la llama con el rol pedidos).
+  const p = D.pedidos.find(x=>x.id===id); if(!p) return;
   // Fase 1f: todas las cuentas de la lista (fila cuentas de config), una debajo de otra.
   // El total es p.total, que ya incluye el cargo de envío.
   const cs = cuentasValidas();
@@ -3001,7 +3608,8 @@ function pedirDeposito(id){
       cs.map(c => `\n\n${c.banco}\nCuenta ${c.tipo ? c.tipo + " " : ""}n.º ${c.numero}` +
         (c.titular ? `\nA nombre de: ${c.titular}` : "")).join("");
   const t = `Dr(a). ${p.cliente}, su pedido #${p.numero} ya está en preparación.\n\n`+
-    `Total: ${L0(p.total)}${datos}\n\n`+
+    // B2 (D6c): con IVA, los tres montos; un pedido de antes de B2, su total, como siempre.
+    `${conIva(p) ? desgloseCobro(p, "\n", true, "Cargo de envío") : "Total: " + L0(p.total)}${datos}\n\n`+
     (esForaneo(p) ? `En cuanto nos comparta el comprobante, sale por Expreco hacia su consultorio.`
                   : `En cuanto nos comparta el comprobante, sale de inmediato hacia su consultorio.`);
   modal(`<h3 style="margin-top:0">Solicitud de depósito — pedido ${p.numero}</h3>
@@ -3108,6 +3716,95 @@ function pasarBancoALista(){
                 numero:String(b.cuenta).trim(), titular:String(b.titular || "").trim()}, ...D.cuentas];
   guardar(); pintarCuentas();
   ctaMensaje("a-ok", "La cuenta de antes ya está en la lista.");
+}
+
+/* ------------------- Ajustes: Cotización DICOSA y Agentes (fase Cotización)
+   Filas cotizacion y agentes de config: las escribe solo el Admin (o el modo local).
+   Mientras dura la primera bajada de un navegador que viene de la versión de antes
+   (pend_cot) no dejan guardar, como las tarjetas Cuentas y Envío con pend_1f. */
+let COT_LOGO = null;        // logo elegido y todavía sin guardar: data URL, "" (quitar) o null (sin cambio)
+function esperaCot(){ return !!(typeof D === "object" && D && D.pend_cot); }
+function pintarEsperaCot(){
+  const e = esperaCot();
+  ["#cotEspera", "#agEspera"].forEach(s => { const x = $(s); if(x) x.innerHTML = e ? `<div class="aviso a-med">${ESPERA_1F}</div>` : ""; });
+  ["#cotGuardar", "#cotLogoQuitar", "#agGuardar"].forEach(s => { const x = $(s); if(x) x.disabled = e; });
+}
+function cotMensaje(clase, texto){ $("#cotMsg").innerHTML = texto ? `<div class="aviso ${clase}">${texto}</div>` : ""; }
+function cotPintarLogo(){
+  const l = COT_LOGO !== null ? COT_LOGO : cotCfg().logo;
+  $("#cotLogoVista").innerHTML = l
+    ? `<img src="${esc(l)}" alt="Logo" style="max-height:48px;max-width:200px;border:1px solid var(--borde,#ccc)">` +
+      (COT_LOGO ? ` <span class="mini">sin guardar</span>` : "")
+    : `<span class="mini">Sin logo: el espacio sale en blanco.</span>`;
+}
+function pintarCotizacionCfg(){
+  if(!$("#cotSitio")) return;
+  const c = cotCfg();
+  COT_LOGO = null;
+  $("#cotSitio").value = c.sitio; $("#cotRtn").value = c.rtn; $("#cotPago").value = c.forma_pago;
+  $("#cotValidez").value = c.validez; $("#cotWhatsapp").value = c.whatsapp;
+  cotPintarLogo(); pintarEsperaCot();
+}
+// Logo: solo PNG o JPEG, con tope de tamaño; se guarda como data URL al pulsar Guardar.
+function cotLogoElegido(input){
+  const f = input.files[0]; input.value = "";
+  if(!f) return;
+  if(!["image/png","image/jpeg"].includes(f.type)){ cotMensaje("a-mal", "El logo debe ser una imagen PNG o JPEG. No se tomó."); return; }
+  if(f.size > COT_LOGO_MAX){ cotMensaje("a-mal", "El logo pesa más de 150 kB. Usa una imagen más pequeña. No se tomó."); return; }
+  const r = new FileReader();
+  r.onload = () => {
+    const u = String(r.result || "");
+    if(!COT_LOGO_RE.test(u)){ cotMensaje("a-mal", "No se pudo leer esa imagen como PNG o JPEG. No se tomó."); return; }
+    COT_LOGO = u; cotPintarLogo();
+    cotMensaje("a-info", "Logo listo. Pulsa «Guardar cotización» para guardarlo.");
+  };
+  r.onerror = () => cotMensaje("a-mal", "No se pudo leer el archivo del logo.");
+  r.readAsDataURL(f);
+}
+function cotLogoQuitar(){
+  if(esperaCot()){ cotMensaje("a-mal", NO_GUARDO_1F); pintarEsperaCot(); return; }
+  COT_LOGO = ""; cotPintarLogo();
+  cotMensaje("a-info", "Logo quitado. Pulsa «Guardar cotización» para guardarlo.");
+}
+function guardarCotizacionCfg(){
+  if(!["local","admin"].includes(rolPantalla())) return;
+  if(esperaCot()){ cotMensaje("a-mal", NO_GUARDO_1F); pintarEsperaCot(); return; }
+  const wa = $("#cotWhatsapp").value.trim();
+  if(wa && !COT_WA_RE.test(wa)){
+    cotMensaje("a-mal", "El WhatsApp va con solo dígitos y con código de país, sin espacios ni signos (de 8 a 15 dígitos). No se guardó nada.");
+    return;
+  }
+  // Se reemplaza el objeto (no se cambia en sitio) para que la firma de la fila cambie siempre.
+  D.cotizacion = {sitio:$("#cotSitio").value.trim(), forma_pago:$("#cotPago").value.trim(), validez:$("#cotValidez").value.trim(),
+                  rtn:$("#cotRtn").value.trim(), logo: COT_LOGO !== null ? COT_LOGO : cotCfg().logo, whatsapp:wa};
+  guardar(); pintarCotizacionCfg(); pintarDespacho();
+  cotMensaje("a-ok", "Datos de la cotización guardados. Aplican a las cotizaciones que se generen desde ahora.");
+}
+function pintarAgentes(){
+  if(!$("#agTabla")) return;
+  const a = D.agentes && typeof D.agentes === "object" && !Array.isArray(D.agentes) ? D.agentes : {}, n = {};
+  D.clientes.filter(esClienteDicosa).forEach(c => { const k = (c.dicosa || {}).generador; if(k) n[k] = (n[k] || 0) + 1; });
+  const lista = [...new Set([...Object.keys(n), ...Object.keys(a)])].sort();
+  const campo = (k, c, ph) => `<input data-ag="${esc(k)}" data-campo="${c}" value="${esc((a[k] || {})[c] || "")}" placeholder="${ph}">`;
+  $("#agTabla").innerHTML = lista.length ? `<div class="tabla-wrap"><table><thead><tr><th>Generador de Demanda</th>
+    <th class="num">Clientes</th><th>Código del agente</th><th>Nombre del agente</th><th>Teléfono del agente</th></tr></thead><tbody>
+    ${lista.map(k => `<tr><td>${esc(k)}</td><td class="num">${n[k] || 0}</td><td>${campo(k, "codigo", "código")}</td>
+      <td>${campo(k, "nombre", "nombre")}</td><td>${campo(k, "telefono", "teléfono")}</td></tr>`).join("")}
+    </tbody></table></div>`
+    : `<p class="mini">Todavía no hay clientes de DICOSA: los generadores aparecen después de la primera importación de Clientes.</p>`;
+  pintarEsperaCot();
+}
+function guardarAgentes(){
+  if(!["local","admin"].includes(rolPantalla())) return;
+  const msg = (c, t) => { $("#agMsg").innerHTML = `<div class="aviso ${c}">${t}</div>`; };
+  if(esperaCot()){ msg("a-mal", NO_GUARDO_1F); pintarEsperaCot(); return; }
+  const a = {};
+  $$("#agTabla input[data-ag]").forEach(i => { const v = i.value.trim(); if(v) (a[i.dataset.ag] = a[i.dataset.ag] || {})[i.dataset.campo] = v; });
+  Object.values(a).forEach(x => ["codigo","nombre","telefono"].forEach(k => { if(x[k] === undefined) x[k] = ""; }));
+  D.agentes = a;
+  guardar(); pintarAgentes();
+  msg("a-ok", "Agentes guardados. Salen en la cotización de los pedidos que se confirmen desde ahora.");
+  setTimeout(() => { if($("#agMsg")) $("#agMsg").innerHTML = ""; }, 6000);
 }
 
 /* ------------------------------------------ reglas de envío (fase 1f, C7a) */
@@ -3450,36 +4147,36 @@ function fichaDicosa(s){
         No se puede pedir. Vuelve solo si viene en un Catálogo posterior.</div>` : ""}
       <div class="grid g3 mini">
         <div>Código de barras: ${v(d.barras)}</div><div>Código interno DKT: ${v(d.dkt)}</div>
-        <div>IVA: ${d.iva === undefined ? "—" : r4(iva*100)+"%"}</div>
+        <div>ISV: ${d.iva === undefined ? "—" : r4(iva*100)+"%"}</div>
         <div>Categoría DICOSA: ${v(d.categoria)}</div><div>Subcategoría: ${v(d.subcategoria)}</div>
       </div>
       <div class="aviso a-info" id="sPrecios" data-particular="${pr.particular ?? ""}" data-cadena="${pr.cadena ?? ""}"
            data-subdistribuidor="${pr.subdistribuidor ?? ""}">
-        <strong>Precio de venta por inner, sin IVA (lo manda DICOSA):</strong><br>
+        <strong>Precio de venta por inner, sin ISV (lo manda DICOSA):</strong><br>
         ${Object.entries(LISTAS).map(([k, t]) => `${t}: ${Number(pr[k]) > 0 ? L(pr[k]) : "sin precio"}`).join(" · ")}
         <br><span class="mini">Cada pedido usa la lista de su cliente. La oferta no cambia estos precios.</span></div>
       ${!veCostos() ? "" : co !== null
         ? `<div class="aviso a-info" id="sDicosaCosto" data-l="${co}" data-iva="${iva}" data-l-iva="${r4(co * (1 + iva))}">
-             <strong>Costo DICOSA por inner:</strong> ${L(co)} sin IVA · IVA ${r4(iva*100)}% · con IVA ${L(r4(co * (1 + iva)))}
-             <br><span class="mini">El costo con IVA es informativo: el costo y el margen usan el costo sin IVA.</span></div>`
+             <strong>Costo DICOSA por inner:</strong> ${L(co)} sin ISV · ISV ${r4(iva*100)}% · con ISV ${L(r4(co * (1 + iva)))}
+             <br><span class="mini">El costo con ISV es informativo: el costo y el margen usan el costo sin ISV.</span></div>`
         : `<div class="aviso a-med" id="sDicosaCosto">El Catálogo DICOSA no trae costo para este producto: queda sin costo.</div>`}`;
   }
   const ci = veCostos() ? costoConIva(s) : null;
   const costo = !veCostos() ? "" : ci
     ? `<div class="aviso a-info" id="sDicosaCosto" data-usd="${ci.usd}" data-iva="${ci.iva}" data-usd-iva="${ci.usd_iva}"
          data-l="${ci.l ?? ""}" data-l-iva="${ci.l_iva ?? ""}">
-         <strong>Costo DICOSA:</strong> ${USD(ci.usd)} sin IVA · IVA ${r4(ci.iva*100)}% ·
-         sell in con IVA ${USD(ci.usd_iva)}<br>
-         ${ci.tc ? `En lempiras: ${L(ci.l)} sin IVA · ${L(ci.l_iva)} con IVA, con tipo de cambio L. ${esc(String(ci.tc.valor))}
+         <strong>Costo DICOSA:</strong> ${USD(ci.usd)} sin ISV · ISV ${r4(ci.iva*100)}% ·
+         sell in con ISV ${USD(ci.usd_iva)}<br>
+         ${ci.tc ? `En lempiras: ${L(ci.l)} sin ISV · ${L(ci.l_iva)} con ISV, con tipo de cambio L. ${esc(String(ci.tc.valor))}
            del ${esc(ci.tc.fecha)}${ci.tc.fuente?" ("+esc(ci.tc.fuente)+")":""}.`
            : "Sin tipo de cambio registrado: el costo en lempiras no está disponible."}
-         <br><span class="mini">El costo con IVA es informativo: el costo y el margen usan el precio sin IVA.</span></div>`
+         <br><span class="mini">El costo con ISV es informativo: el costo y el margen usan el precio sin ISV.</span></div>`
     : `<div class="aviso a-med" id="sDicosaCosto">El Catálogo DICOSA no trae precio en $ para este producto: queda sin costo DICOSA.</div>`;
   return `<hr><p class="mini" style="margin:0 0 8px"><strong>Datos del Catálogo DICOSA</strong>
       (importado el ${v(d.importado)}; no se editan aquí)</p>
     <div class="grid g3 mini">
       <div>Código de barras: ${v(d.barras)}</div><div>Código interno DKT: ${v(d.dkt)}</div>
-      <div>IVA: ${d.iva === undefined ? "—" : r4(Number(d.iva)*100)+"%"}</div>
+      <div>ISV: ${d.iva === undefined ? "—" : r4(Number(d.iva)*100)+"%"}</div>
       <div>Categoría DICOSA: ${v(d.categoria)}</div><div>Subcategoría: ${v(d.subcategoria)}</div>
       <div>Mínimo de pedido: ${v(d.min_unidades)} unidades · ${v(d.min_cajas)} cajas</div>
     </div>${costo}`;
@@ -3502,9 +4199,9 @@ function abrirNuevoSku(cod){
       ${veCostos() && !hayCosto(s?.costo_usd) && !conListas ? `<div><label>Costo por inner (L.)</label><input id="sCo" type="number" step="0.01"
         value="${hayCosto(s?.costo) ? esc(String(s.costo)) : ""}" placeholder="Sin costo"></div>` : ''}
       ${conListas ? '' : `<div><label>Precio de venta por inner (L.)</label><input id="sPr" type="number" step="0.01" value="${s?.precio||0}"></div>`}
-      ${puedeFactor() ? `<div><label>Unidades por inner (para el Inventario DICOSA)</label>
+      ${puedeFactor() ? `<div><label>Unidades por inner (DICOSA ya manda el Inventario en inners: déjalo en 1)</label>
         <input id="sFac" type="number" min="1" step="1" value="${factorInner(s)}"
-          title="Si la Cantidad del Inventario DICOSA viene en unidades, cuántas hacen un inner. Con 1 no se convierte nada."></div>` : ''}
+          title="DICOSA confirmó que la Cantidad del Inventario viene en inners: lo normal es 1, que no convierte nada. Otro número divide la Cantidad del archivo entre ese número."></div>` : ''}
       <div><label>Existencia</label><input id="sE" type="number" value="${s?existencia(s):0}"
         ${s&&corteInv()?'readonly title="Se corrige con «Ajuste» en Inventario"':''}></div>
       <div><label>Mínimo</label><input id="sMin" type="number" value="${s?.minimo||0}"></div>
@@ -3606,7 +4303,7 @@ function pintarInventario(){
     (conCostos && vPago>0 ? `<div class="aviso a-med"><strong>${L0(vPago)} en producto apartado esperando depósito.</strong>
        Está físicamente en bodega pero ya tiene dueño: no se puede vender a otro cliente.
        Si este número crece, conviene revisar la política de cobro.</div>`:"") +
-    (!conCostos && uPago>0 ? `<div class="aviso a-med"><strong>${uPago} unidad(es) apartadas esperando depósito.</strong>
+    (!conCostos && uPago>0 ? `<div class="aviso a-med"><strong>${uPago} inner(s) apartados esperando depósito.</strong>
        Están físicamente en bodega pero ya tienen dueño: no se pueden vender a otro cliente.</div>`:"") +
     (nCero ? `<div class="aviso a-mal">${nCero} producto(s) sin disponibilidad.</div>`:"") +
     (nBajo ? `<div class="aviso a-med">${nBajo} producto(s) por debajo del mínimo.</div>`:"");
@@ -3836,8 +4533,10 @@ async function leerXlsx(archivo){
 
 /* ------------------------------------------------- columnas por encabezado */
 // Sin mayúsculas, tildes ni espacios: « Número de  Material» = «numerodematerial».
+// Ajustes DICOSA: tampoco el «_x000D_» con que Excel guarda el retorno de un salto de línea
+// dentro de la celda (solo en el encabezado; el valor de las celdas no se toca).
 function normalizarEncabezado(s){
-  return String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, "");
+  return String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/_x000d_/g, "").replace(/\s+/g, "");
 }
 const INV_COLS = {codigo:["numerodematerial"], descripcion:["descripcion","descripciondematerial",
   "descripciondelmaterial","textobrevedematerial","textobrevematerial","textobreve","denominacion"],
@@ -3962,6 +4661,8 @@ async function impListo(){
   if(!(D.bodegas||[]).length) return "Primero carga el archivo de bodegas.";
   if(enEquipo()){
     if(!nubeActiva()) return "Entra con tu usuario antes de importar.";
+    // Hallazgo 8 (8A): espera hasta 10 s a que termine la vuelta en curso; si sigue, rechaza como antes.
+    for(let i = 0; i < 200 && NUBE.ocupado; i++) await new Promise(r => setTimeout(r, 50));
     if(NUBE.ocupado) return "Se está sincronizando. Intenta de nuevo en unos segundos.";
     await nubeSincronizar(true);
     if(NUBE.estado !== "en_linea" || NUBE.pendiente)
@@ -4063,11 +4764,12 @@ function pintarPreviaInv(){
     <br>Filas por tipo de bodega: <span id="impTipos">${Object.entries(a.tipos).map(([t,n]) =>
       `<span data-tipo="${esc(t)}" data-n="${n}">${esc(t||"(sin tipo)")}: ${n}</span>`).join(" · ")}</span></div>
     ${a.noMultiplo.length ? `<div class="aviso a-med"><strong><span id="impNoMultiplo">${a.noMultiplo.length}</span> fila(s)
-      traen una cantidad que no es múltiplo de las unidades por inner del producto.</strong> Se pasa a inners hacia abajo
+      traen una cantidad que no es múltiplo del factor de unidades por inner del producto.</strong>
+      DICOSA manda la Cantidad en inners: un factor distinto de 1 no corresponde; ponlo en 1 en «Unidades por inner»,
+      en la ficha del producto. Mientras tanto la Cantidad se divide entre el factor, se pasa a inners hacia abajo
       y el resto no se cuenta:
-      <ul>${a.noMultiplo.map(x => `<li>Fila ${x.n}: ${esc(x.codigo)} en ${esc(x.bodega)}, ${x.cantidad} unidades entre ${x.factor}
-        = ${x.inners} inner(s), sobran ${redondear(x.cantidad - x.inners * x.factor)}</li>`).join("")}</ul>
-      Si la Cantidad de DICOSA ya viene en inners, pon 1 en «Unidades por inner» en la ficha del producto.</div>` : ""}
+      <ul>${a.noMultiplo.map(x => `<li>Fila ${x.n}: ${esc(x.codigo)} en ${esc(x.bodega)}, Cantidad ${x.cantidad} entre el factor ${x.factor}
+        = ${x.inners} inner(s), sobran ${redondear(x.cantidad - x.inners * x.factor)}</li>`).join("")}</ul></div>` : ""}
     ${cambian.length ? `<div class="tabla-wrap"><table><thead><tr><th>Código</th><th>Producto</th>
       <th class="num">Existencia ahora</th><th class="num">Vendible DICOSA</th><th class="num">Ajuste</th></tr></thead><tbody>
       ${cambian.map(x => `<tr><td>${esc(x.codigo)}</td><td>${esc(x.nombre)}${x.nuevo?' <span class="pill p-med">nuevo, por completar</span>':''}${x.aCero?' <span class="pill p-mal">no viene en el archivo, pasa a 0</span>':''}</td>
@@ -4084,7 +4786,10 @@ async function confirmarImportacion(){
   if(!IMP) return;
   const casilla = $("#impConfirmaCero");
   if(casilla && !casilla.checked) return;
+  // Hallazgo 8: impListo puede esperar; si otro clic ya importó o se canceló mientras, no se sigue.
+  const mio = IMP;
   const pre = await impListo();
+  if(IMP !== mio) return;
   if(pre){ $("#impMsg").innerHTML = `<div class="aviso a-mal">${esc(pre)}</div>`; return; }
   const {a} = IMP;
   // Se recalcula con lo que hay ahora (la sincronización pudo traer movimientos).
@@ -4140,19 +4845,26 @@ async function confirmarImportacion(){
 // precios; el peso solo se toma si el producto no tiene uno escrito (6a). Los
 // productos de la app que no vienen en el archivo quedan fuera de catálogo
 // (fuera_catalogo, con fecha): no se borran y no se pueden pedir (C4a).
+// Ajustes DICOSA (2026-11-16, DA1a): se aceptan los nombres del Catálogo nuevo de DICOSA
+// (con kg, cm y cm³ en el encabezado y «Sub-Distribuidor» sin «Sin IVA») y los de antes.
 const CAT_COLS = {codigo:["codigointernodicosa"], dkt:["codigointernodkt","codigointernodkt:"],
   barras:["codigodebarras(inner)"], categoria:["categoria:","categoria"], subcategoria:["subcategoria:","subcategoria"],
-  registro:["reg.sanitario"], peso:["pesoinner"], largo:["largocaja(inner)"], ancho:["anchocaja(inner)"],
-  alto:["altocaja(inner)"], volumen:["volumen(inner)"], cyp:["cyp"], nombre:["descripciondematerial"], iva:["iva"],
+  registro:["reg.sanitario"], peso:["pesoinner","pesoinner(kg)"], largo:["largocaja(inner)","largocaja(inner)cm"],
+  ancho:["anchocaja(inner)","anchocaja(inner)cm"], alto:["altocaja(inner)","altocaja(inner)cm"],
+  volumen:["volumen(inner)","volumen(inner)cm³","volumen(inner)cm3"], cyp:["cyp"], nombre:["descripciondematerial"], iva:["iva"],
   costo:["costohnldicosasiniva"], particular:["listadepreciosdicosa>clienteparticularsiniva"],
-  cadena:["listadepreciosdicosa>cadenassiniva"], subdistribuidor:["listadepreciosdicosa>sub-distribuidorsiniva"]};
-const CAT_OPCIONALES = {};
+  cadena:["listadepreciosdicosa>cadenassiniva"],
+  subdistribuidor:["listadepreciosdicosa>sub-distribuidorsiniva","listadepreciosdicosa>sub-distribuidor"]};
+// Fase Cotización (Q3a): Marca y Unidad se leen si vienen, sin exigirlas. Si la columna no
+// viene, el producto conserva lo que tenía (ver camposCatalogo). El nombre de estos dos
+// encabezados es un supuesto hasta que DICOSA mande un archivo con ellos.
+const CAT_OPCIONALES = {marca:["marca"], unidad:["unidad"]};
 const CAT_NOMBRES = {codigo:"Código Interno Dicosa", dkt:"Código Interno DKT", barras:"Codigo de Barras (INNER)",
-  categoria:"Categoría:", subcategoria:"Subcategoría:", registro:"Reg. Sanitario", peso:"Peso inner",
-  largo:"Largo Caja (inner)", ancho:"Ancho Caja (inner)", alto:"Alto Caja (inner)", volumen:"Volumen (inner)", cyp:"CYP",
+  categoria:"Categoría:", subcategoria:"Subcategoría:", registro:"Reg. Sanitario", peso:"Peso inner (kg)",
+  largo:"Largo Caja (inner) cm", ancho:"Ancho Caja (inner) cm", alto:"Alto Caja (inner) cm", volumen:"Volumen (inner) cm³", cyp:"CYP",
   nombre:"Descripción de Material", iva:"IVA", costo:"Costo HNL Dicosa Sin IVA",
   particular:"Lista de Precios Dicosa > Cliente Particular Sin IVA", cadena:"Lista de Precios Dicosa > Cadenas Sin IVA",
-  subdistribuidor:"Lista de Precios Dicosa > Sub-Distribuidor Sin IVA"};
+  subdistribuidor:"Lista de Precios Dicosa > Sub-Distribuidor"};
 const CAT_NUMEROS = ["peso","largo","ancho","alto","volumen","cyp","costo","particular","cadena","subdistribuidor"];
 // Encabezado que solo tiene el formato anterior (1b): ese archivo ya no se acepta (8a).
 const CAT_VIEJO = "precioen$(siniva)";
@@ -4201,13 +4913,19 @@ function analizarCatalogo(filas){
       dicosa: {dkt: codigoMaterial(v("dkt")), barras: codigoMaterial(v("barras")),
         categoria: v("categoria"), subcategoria: v("subcategoria"), registro: v("registro"),
         peso_inner: val("peso"), largo: val("largo"), ancho: val("ancho"), alto: val("alto"), volumen: val("volumen"),
-        cyp: val("cyp"), iva: tasa, precios}};
+        cyp: val("cyp"), iva: tasa, precios,
+        // Solo si el archivo trae la columna (una celda vacía sí cuenta: DICOSA manda).
+        ...(u.idx.marca !== undefined ? {marca: v("marca")} : {}),
+        ...(u.idx.unidad !== undefined ? {unidad: v("unidad")} : {})}};
   });
   return {filas: u.datos.length, sinCodigo, sinCosto, sinPrecio, iva, prod, malas};
 }
 // Los campos del Catálogo que tendría el producto después de importar.
 function camposCatalogo(s, p){
   const n = {nombre: p.nombre || (s ? s.nombre : ""), costo: p.costo, costo_usd: null, dicosa: p.dicosa};
+  // Q3a: marca y unidad se conservan si el archivo no trae esa columna.
+  const antes = s && s.dicosa && typeof s.dicosa === "object" ? s.dicosa : {};
+  ["marca","unidad"].forEach(k => { if(!(k in p.dicosa) && antes[k] !== undefined) n.dicosa = {...n.dicosa, [k]: antes[k]}; });
   // El precio de venta del producto es el de cliente particular (5a); cada pedido usa su lista.
   n.precio = p.dicosa.precios.particular || 0;
   // 6a: el peso inner pasa a ser el peso solo si el producto no tiene uno escrito.
@@ -4248,6 +4966,8 @@ async function catListo(){
   if(!puedeImportar("catalogo")) return "Tu rol no importa el Catálogo.";
   if(enEquipo()){
     if(!nubeActiva()) return "Entra con tu usuario antes de importar.";
+    // Hallazgo 8 (8A): espera hasta 10 s a que termine la vuelta en curso; si sigue, rechaza como antes.
+    for(let i = 0; i < 200 && NUBE.ocupado; i++) await new Promise(r => setTimeout(r, 50));
     if(NUBE.ocupado) return "Se está sincronizando. Intenta de nuevo en unos segundos.";
     await nubeSincronizar(true);
     if(NUBE.estado !== "en_linea" || NUBE.pendiente)
@@ -4296,7 +5016,7 @@ function pintarPreviaCatalogo(){
     · no vienen y salen de catálogo <strong id="cdkSalen">${salen.length}</strong>
     <br>Sin costo <strong id="cdkSinCosto">${a.sinCosto}</strong>
     · sin precio en alguna lista <strong id="cdkSinPrecio">${a.sinPrecio}</strong> (no se pueden pedir con esa lista)
-    · IVA: ${Object.entries(a.iva).map(([t, n]) =>
+    · ISV: ${Object.entries(a.iva).map(([t, n]) =>
       `<span data-iva="${esc(t)}" data-n="${n}">${r4(Number(t)*100)}%: ${n}</span>`).join(" · ")}</div>
     ${nuevos.length || cambian.length || salen.length ? `<div class="tabla-wrap"><table><thead><tr><th>Código</th><th>Producto</th><th></th></tr></thead><tbody>
       ${nuevos.concat(cambian).map(x => `<tr><td>${esc(x.codigo)}</td><td>${esc(x.nombre)}</td>
@@ -4320,7 +5040,10 @@ async function confirmarCatalogo(){
   const casilla = $("#cdkCasilla"), casillaSalen = $("#cdkCasillaSalen");
   if(!casilla || !casilla.checked) return;
   if(casillaSalen && !casillaSalen.checked) return;
+  // Hallazgo 8: catListo puede esperar; si otro clic ya importó o se canceló mientras, no se sigue.
+  const mio = CDK;
   const pre = await catListo();
+  if(CDK !== mio) return;
   if(pre){ $("#cdkMsg").innerHTML = `<div class="aviso a-mal">${esc(pre)}</div>`; return; }
   const {a} = CDK;
   // Se recalcula con lo que hay ahora (la sincronización pudo traer productos).
@@ -4376,6 +5099,13 @@ const CLI_NOMBRES = {codigo:"Código de Cliente", nombre:"Nombre de Cliente", co
   zona:"Descr. Zona de Venta", departamento:"Departamento", municipio:"Municipio", lat:"lat", lon:"lon",
   direccion:"Dirección", generador:"Generador de Demanda"};
 const CLI_PREFIJO = "dicosa-";
+// Fase Cotización: el RTN se lee si viene, sin exigirlo; si la columna no viene, el cliente
+// conserva el que tenía (misma regla que Q3a). El nombre del encabezado es un supuesto.
+const CLI_OPCIONALES = {rtn:["rtn"]};
+function dicosaImportado(c, n){
+  const antes = c && c.dicosa && typeof c.dicosa === "object" ? c.dicosa : {};
+  return !("rtn" in n.dicosa) && antes.rtn !== undefined ? {...n.dicosa, rtn: antes.rtn} : n.dicosa;
+}
 function esClienteDicosa(c){ return !!c && String(c.id).startsWith(CLI_PREFIJO); }
 // Teléfono para comparar: solo dígitos y sin el 504 del país al inicio.
 function telComparable(t){
@@ -4384,11 +5114,11 @@ function telComparable(t){
 }
 // Lee las filas de Clientes. No cambia nada.
 function analizarClientes(filas){
-  const u = ubicarColumnas(filas, CLI_COLS, CLI_NOMBRES);
+  const u = ubicarColumnas(filas, CLI_COLS, CLI_NOMBRES, CLI_OPCIONALES);
   if(u.error) return {error: u.error};
   const cli = {}, malas = [], porTel = {};
   u.datos.forEach(f => {
-    const v = k => String(f.celdas[u.idx[k]] ?? "").trim();
+    const v = k => u.idx[k] === undefined ? "" : String(f.celdas[u.idx[k]] ?? "").trim();
     const codigo = codigoMaterial(v("codigo"));
     const mal = txt => malas.push({n:f.n, codigo, txt});
     if(!codigo) return mal("sin «"+CLI_NOMBRES.codigo+"»");
@@ -4402,7 +5132,8 @@ function analizarClientes(filas){
     cli[id] = {nombre:v("nombre"), telefono, direccion:v("direccion"),
       dicosa:{codigo, contacto:v("contacto"), grupo:v("grupo"), especialidad:v("especialidad"),
         zona:v("zona"), departamento:v("departamento"), municipio:v("municipio"),
-        lat: la.vacio ? null : la.n, lon: lo.vacio ? null : lo.n, generador:v("generador")}};
+        lat: la.vacio ? null : la.n, lon: lo.vacio ? null : lo.n, generador:v("generador"),
+        ...(u.idx.rtn !== undefined ? {rtn: codigoMaterial(v("rtn"))} : {})}};
     const t = telComparable(telefono);
     (porTel[t] = porTel[t] || []).push(id);
   });
@@ -4418,7 +5149,7 @@ function diferenciasClientes(a){
     const c = D.clientes.find(x => x.id === id), n = a.cli[id];
     if(!c) return {id, nombre:n.nombre, nuevo:true, cambia:true};
     const antes = nubeFirma({nombre:c.nombre, telefono:c.telefono, direccion:c.direccion, dicosa:sinMarcasDicosa(c.dicosa)});
-    const despues = nubeFirma({nombre:n.nombre, telefono:n.telefono, direccion:n.direccion, dicosa:n.dicosa});
+    const despues = nubeFirma({nombre:n.nombre, telefono:n.telefono, direccion:n.direccion, dicosa:dicosaImportado(c, n)});
     return {id, nombre:n.nombre, nuevo:false, cambia: antes !== despues || !!(c.dicosa && c.dicosa.no_vino)};
   });
   const noVinieron = D.clientes.filter(c => esClienteDicosa(c) && !a.cli[c.id] && !(c.dicosa && c.dicosa.no_vino));
@@ -4478,6 +5209,8 @@ async function cliListo(){
   if(!puedeImportar("clientes")) return "Tu rol no importa Clientes.";
   if(enEquipo()){
     if(!nubeActiva()) return "Entra con tu usuario antes de importar.";
+    // Hallazgo 8 (8A): espera hasta 10 s a que termine la vuelta en curso; si sigue, rechaza como antes.
+    for(let i = 0; i < 200 && NUBE.ocupado; i++) await new Promise(r => setTimeout(r, 50));
     if(NUBE.ocupado) return "Se está sincronizando. Intenta de nuevo en unos segundos.";
     await nubeSincronizar(true);
     if(NUBE.estado !== "en_linea" || NUBE.pendiente)
@@ -4564,7 +5297,10 @@ async function confirmarClientes(){
   if(!CLI) return;
   const casilla = $("#cliCasilla");
   if(!casilla || !casilla.checked) return;
+  // Hallazgo 8: cliListo puede esperar; si otro clic ya importó o se canceló mientras, no se sigue.
+  const mio = CLI;
   const pre = await cliListo();
+  if(CLI !== mio) return;
   if(pre){ $("#cliMsg").innerHTML = `<div class="aviso a-mal">${esc(pre)}</div>`; return; }
   const {a} = CLI;
   // Se recalcula con lo que hay ahora (la sincronización pudo traer clientes).
@@ -4590,7 +5326,7 @@ async function confirmarClientes(){
     if(!x.cambia) return;
     const c = D.clientes.find(y => y.id === x.id);
     c.nombre = n.nombre; c.telefono = n.telefono; c.direccion = n.direccion;
-    c.dicosa = {...n.dicosa, importado:fecha};
+    c.dicosa = {...dicosaImportado(c, n), importado:fecha};
   });
   d.noVinieron.forEach(c => { c.dicosa = {...(c.dicosa || {}), no_vino:fecha}; });
   // Responsables por enviar: los sube la sincronización (solo admin y coordinador).
@@ -4758,6 +5494,9 @@ function pintarAjustes(){
   // Fase 1f: la lista de cuentas y las reglas de envío (la tarjeta de una sola cuenta ya no está).
   pintarCuentas();
   pintarEnvio();
+  // Fase Cotización: textos de la cotización y agentes de DICOSA.
+  pintarCotizacionCfg();
+  pintarAgentes();
   if($("#letraDisp")) $("#letraDisp").value = letraDispositivo();
   pintarCorte();
   pintarTipoCambio();
@@ -5060,7 +5799,7 @@ const mosCat = s => String((s.dicosa || {}).categoria || "").trim();
 const mosSub = s => String((s.dicosa || {}).subcategoria || "").trim();
 function mosPrecio(s){
   const n = tieneListas(s) ? Number(s.dicosa.precios.particular) : NaN;
-  return n > 0 ? `${L(n)} <small>sin IVA</small>` : `<span class="mos-sinp">Precio: consultar</span>`;
+  return n > 0 ? `${L(n)} <small>sin ISV</small>` : `<span class="mos-sinp">Precio: consultar</span>`;
 }
 function mosTarjeta(s){
   const f = fotosDe(s)[0];
@@ -5400,6 +6139,8 @@ async function fotListo(){
   if(!puedeImportar("fotos")) return "Tu rol no importa las fotos.";
   if(typeof nubeActiva !== "function" || !nubeActiva())
     return "Las fotos se guardan en la base compartida: entra con tu usuario para importarlas.";
+  // Hallazgo 8 (8A): espera hasta 10 s a que termine la vuelta en curso; si sigue, rechaza como antes.
+  for(let i = 0; i < 200 && NUBE.ocupado; i++) await new Promise(r => setTimeout(r, 50));
   if(NUBE.ocupado) return "Se está sincronizando. Intenta de nuevo en unos segundos.";
   await nubeSincronizar(true);
   if(NUBE.estado !== "en_linea" || NUBE.pendiente)
@@ -5469,7 +6210,10 @@ async function confirmarFotos(){
   if(!casilla || !casilla.checked) return;
   if(casillaQuitan && !casillaQuitan.checked) return;
   fotInfo("Revisando que la sincronización esté al día…");
+  // Hallazgo 8: fotListo puede esperar; si otro clic ya importó o se canceló mientras, no se sigue.
+  const mio = FOT;
   const pre = await fotListo();
+  if(FOT !== mio) return;
   if(pre) return fotMal(pre);
   const {prep} = FOT, p = fotPlan(FOT.a, prep);
   // Se recalcula con lo que hay ahora (la sincronización pudo traer cambios).
@@ -5718,14 +6462,18 @@ function exportarPedidosCSV(){
   const f = [["numero","fecha","cliente","telefono","canal","nivel","hecho_por","estado","total","peso_kg",
     "margen","costo_entrega_est","contribucion_est","costo_entrega_real","contribucion_real","entregado","forzado",
     "pago_estado","pago_monto","pago_referencia","pago_banco","pago_fecha",
-    "forzado_fecha","forzado_letra","forzado_existencia","forzado_existencia_fecha","forzado_existencia_letra"]];
+    "forzado_fecha","forzado_letra","forzado_existencia","forzado_existencia_fecha","forzado_existencia_letra",
+    // B2 (D4a): columnas nuevas al final, sin mover las de antes.
+    "factura_numero","factura_fecha","pago_cuenta"]];
   D.pedidos.forEach(p=>f.push([p.numero,p.fecha,p.cliente,p.telefono,p.canal,p.nivel,p.hecho_por??"",p.estado,
     // Margen y contribuciones: celda vacía si no son número, nunca NaN.
     p.total,p.peso,esNum(p.margen)?p.margen:"",p.costo_entrega_est,esNum(p.contribucion_est)?p.contribucion_est:"",
     p.costo_entrega_real??"",esNum(p.contribucion_real)?p.contribucion_real:"",p.entregado??"",p.override??"",
     p.pago_estado??"",p.pago?.monto??"",p.pago?.referencia??"",p.pago?.banco??"",p.pago?.fecha??"",
     p.override_fecha??"",p.override_letra??"",p.override_existencia??"",
-    p.override_existencia_fecha??"",p.override_existencia_letra??""]));
+    p.override_existencia_fecha??"",p.override_existencia_letra??"",
+    facturaEmitida(p)?p.factura.numero:"",facturaEmitida(p)?(p.factura.fecha??""):"",
+    p.pago?.cuenta ? [p.pago.cuenta.banco, p.pago.cuenta.numero].filter(Boolean).join(" ") : ""]));
   bajar("pedidos-"+hoy()+".csv", csv(f));
 }
 function exportarClientesCSV(){
@@ -5771,7 +6519,7 @@ function borrarTodo(){
   // borrar el espejo, al reconectar el sistema creería que el equipo borró todo
   // y arrastraría ese borrado a los demás dispositivos.
   try{ localStorage.removeItem("sdim_espejo"); localStorage.removeItem("sdim_sesion");
-       localStorage.removeItem("sdim_rol"); }catch(e){}
+       localStorage.removeItem("sdim_rol"); localStorage.removeItem("sdim_correo_fijo"); }catch(e){}
   localStorage.removeItem(CLAVE); location.reload();
 }
 
@@ -5813,13 +6561,18 @@ const NUBE_CFG  = "sdim_nube";      // dirección y llave pública del proyecto
 const NUBE_SES  = "sdim_sesion";    // sesión del usuario en este navegador
 const NUBE_MARK = "sdim_espejo";    // última foto conocida de la base
 const NUBE_ROL  = "sdim_rol";       // último rol leído con mi_rol()
+// B4 (D3 a, decisión de Daniel sobre el correo fijo): correo del usuario cuya sesión venció.
+// Se guarda al vencer y se lee al cargar; se borra solo al entrar con éxito, con
+// «Soy otra persona» y en borrarTodo.
+const NUBE_FIJO = "sdim_correo_fijo";
 
 /* ------------------------------------------------------------------ roles
    El rol se guarda en este navegador SOLO para dibujar la pantalla (menú,
    tarjetas de Ajustes, columnas de costo) y no perderla sin internet. No es
    un control de acceso: quien decide qué se lee y qué se escribe es la base,
    con sus reglas por rol. Cambiar este valor a mano no da ningún permiso. */
-const ROLES = ["admin","coordinador","administrativo","despacho","pedidos"];
+// B2 (169): facturación, con los mismos paneles y la misma subida que despacho.
+const ROLES = ["admin","coordinador","administrativo","despacho","pedidos","facturacion"];
 // Paneles de cada rol: "e" se usa completo, "l" solo lectura. Ajustes se abre
 // siempre desde el indicador de conexión; ahí cada rol ve solo sus tarjetas.
 const ROL_PANELES = {
@@ -5830,18 +6583,20 @@ const ROL_PANELES = {
                    catalogo:"e", inventario:"e", reposicion:"e", mostrar:"e", medicos:"e"},
   administrativo: {catalogo:"e", inventario:"e"},
   despacho:       {despacho:"e", pedidos:"e"},
+  facturacion:    {despacho:"e", pedidos:"e"},
   pedidos:        {inicio:"e", nuevo:"e", clientes:"e", reposicion:"e",
                    despacho:"l", pedidos:"l", catalogo:"l", inventario:"l", mostrar:"e", medicos:"e"},
   sin_rol:        {}
 };
 const ROL_ENTRADA = {admin:"inicio", coordinador:"inicio", administrativo:"catalogo",
-                     despacho:"despacho", pedidos:"inicio", sin_rol:"ajustes"};
+                     despacho:"despacho", facturacion:"despacho", pedidos:"inicio", sin_rol:"ajustes"};
 // Tablas que cada rol sube. Lo demás solo se baja.
 const ROL_ESCRIBE = {
   admin:          ["skus","clientes","pedidos","movimientos","avisos","config","bodegas","inv_detalle","medicos"],
   coordinador:    ["skus","clientes","pedidos","movimientos","avisos","bodegas","inv_detalle","medicos"],
   administrativo: ["skus","movimientos","avisos","inv_detalle"],
   despacho:       ["pedidos","movimientos","avisos"],
+  facturacion:    ["pedidos","movimientos","avisos"],
   // 162 (fase A): pedidos no crea movimientos (la base tampoco lo deja).
   // Fase 1g: pedidos registra médicos (la base solo le deja los suyos).
   pedidos:        ["clientes","pedidos","avisos","medicos"]
@@ -5851,7 +6606,7 @@ const ROL_ESCRIBE = {
 function nubeSubeMovimiento(m){
   const r = nubeRolPantalla();
   if(r === "admin" || r === "coordinador") return true;
-  if(r === "despacho") return !!m && m.tipo === "despacho";
+  if(r === "despacho" || r === "facturacion") return !!m && m.tipo === "despacho";
   if(r === "administrativo") return !!m && m.tipo !== "despacho";
   return false;
 }
@@ -5883,7 +6638,12 @@ const NUBE = {
   rol: undefined,            // undefined: sin usuario (local); null: usuario sin rol
   rolLeido: false,           // ya se preguntó mi_rol() en esta carga de la página
   equipo: [],                // fase A: [{email, nombre, rol}] de equipo_lista (admin y coordinador)
-  saliendo: false            // fase A: se está desconectando; nada se vuelve a guardar
+  ids: [],                   // B2-R1: [{id, email}] de equipo_ids_b2 (admin y coordinador), solo en memoria
+  saliendo: false,           // fase A: se está desconectando; nada se vuelve a guardar
+  // B4 (161): solo en memoria, por carga de la página.
+  localElegido: false,       // eligió «Seguir solo» o Cancelar (solo donde el modo local se permite)
+  vencida: false,            // la sesión venció en esta carga: la app queda bloqueada hasta entrar
+  correoFijo: ""             // D3 a: tras vencer, solo vuelve a entrar el mismo usuario
 };
 
 /* ------------------------------------------------------------- utilidades */
@@ -5911,7 +6671,10 @@ function nubeLeerSesion(){
 }
 function nubeGuardarSesion(s){
   NUBE.sesion = s;
+  // B4: con sesión nueva se olvidan el vencimiento y la elección de modo local.
+  if(s){ NUBE.localElegido = false; NUBE.vencida = false; NUBE.correoFijo = ""; }
   try{ s ? localStorage.setItem(NUBE_SES, JSON.stringify(s)) : localStorage.removeItem(NUBE_SES); }catch(e){}
+  nubeAplicarBloqueo();
 }
 function nubeLeerEspejo(){
   try{
@@ -6168,7 +6931,16 @@ async function nubeToken(){
     body: JSON.stringify({refresh_token: s.refresh_token})
   });
   if(r.status === 400 || r.status === 401 || r.status === 403){
-    nubeGuardarSesion(null); throw new Error("La sesión venció. Vuelve a entrar.");
+    // B4 (D2 a y D3 a): la app se bloquea enseguida y sale sola la ventana de entrar, con
+    // el correo del usuario que tenía la sesión. Lo no subido se conserva en el navegador
+    // y sube al volver a entrar (rescate de B1 en nubePrimeraVez).
+    NUBE.correoFijo = s.email || NUBE.correoFijo || "";
+    NUBE.vencida = true;
+    // Sobrevive a una recarga: el rescate no debe subir a nombre de otro usuario.
+    try{ if(NUBE.correoFijo) localStorage.setItem(NUBE_FIJO, NUBE.correoFijo); }catch(e){}
+    nubeGuardarSesion(null);
+    nubeVencida();
+    throw new Error("La sesión venció. Vuelve a entrar.");
   }
   if(!r.ok) throw new Error(aviso);
   let j;
@@ -6261,6 +7033,8 @@ async function nubeEntrar(email, clave){
   });
   const j = await r.json().catch(()=>({}));
   if(!r.ok) throw new Error(j.error_description || j.msg || j.message || "Usuario o contraseña incorrectos.");
+  // B4: entró con éxito; el correo fijo ya no hace falta.
+  try{ localStorage.removeItem(NUBE_FIJO); }catch(e){}
   nubeGuardarSesion({access_token:j.access_token, refresh_token:j.refresh_token,
                      expira: Date.now() + (j.expires_in||3600)*1000, email: email});
 }
@@ -6268,17 +7042,20 @@ async function nubeEntrar(email, clave){
 // 161 (fase A): desconectar limpia de este navegador lo que vino de la base
 // (datos, espejo, sesión y rol) y vuelve a empezar. Se conservan la conexión
 // guardada (dirección y llave) y la letra. En la base no se borra nada.
-function nubeSalir(){
+// B4 (D3 a): otra = «Soy otra persona» tras un vencimiento; siempre avisa de la pérdida.
+function nubeSalir(otra){
   const aviso = "Se va a desconectar este navegador.\n\n" +
     "Se borran de aquí los datos que vinieron de la base (en la base quedan) y este navegador vuelve a empezar." +
-    (NUBE.pendiente || nubeListaSinSubir().length
+    (otra
+      ? "\n\nATENCIÓN: lo que se hizo en este navegador con el usuario anterior y no llegó a la base se pierde."
+      : NUBE.pendiente || nubeListaSinSubir().length
       ? "\n\nATENCIÓN: hay cambios que todavía no llegaron a la base y se pierden." : "") +
     "\n\n¿Continuar?";
   if(!confirm(aviso)) return;
   NUBE.saliendo = true;
   if(NUBE.timer){ clearInterval(NUBE.timer); NUBE.timer = null; }
   clearTimeout(nubeTimerEmpuje);
-  try{ [NUBE_SES, NUBE_ROL, NUBE_MARK, CLAVE].forEach(k => localStorage.removeItem(k)); }catch(e){}
+  try{ [NUBE_SES, NUBE_ROL, NUBE_MARK, CLAVE].concat(otra ? [NUBE_FIJO] : []).forEach(k => localStorage.removeItem(k)); }catch(e){}
   // Fase 1g: las fotos guardadas en este navegador también vinieron de la base.
   const fin = () => location.reload();
   try{ caches.delete(FOTOS_CACHE).then(fin, fin); }catch(e){ fin(); }
@@ -6352,9 +7129,12 @@ function nubeCambiosLocales(noBorrar){
   // banco sigue viajando como siempre, sin cambios.
   [["params", D.params], ["banco", D.banco], ["tipo_cambio", D.tipo_cambio || []],
    ["generadores", D.generadores || {}], ["cuentas", D.cuentas || []],
-   ["envio", D.envio || {...ENVIO_DEF}]].forEach(([k, v]) => {
+   ["envio", D.envio || {...ENVIO_DEF}],
+   // Fase Cotización: textos, RTN, logo y WhatsApp de la cotización, y los agentes.
+   ["cotizacion", D.cotizacion || {...COT_DEF}], ["agentes", D.agentes || {}]].forEach(([k, v]) => {
     // Recién llegado de la versión de antes: cuentas y envio no se suben hasta bajarlas.
     if(D.pend_1f && (k === "cuentas" || k === "envio")) return;
+    if(D.pend_cot && (k === "cotizacion" || k === "agentes")) return;
     const f = nubeFirma(v);
     const m = nubeMarcada("config", k);
     // 1F-R4: igual que las colecciones, una copia y su firma (params se cambia en su lugar).
@@ -6545,6 +7325,9 @@ async function nubeBajar(){
     // Fase 1f: cuentas bancarias y reglas de envío (las leen todos los roles).
     if(f.k === "cuentas") D.cuentas = Array.isArray(f.d) ? f.d : [];
     if(f.k === "envio") D.envio = f.d && typeof f.d === "object" && !Array.isArray(f.d) ? f.d : {...ENVIO_DEF};
+    // Fase Cotización: textos de la cotización y agentes (los leen todos los roles).
+    if(f.k === "cotizacion") D.cotizacion = f.d && typeof f.d === "object" && !Array.isArray(f.d) ? f.d : {...COT_DEF};
+    if(f.k === "agentes") D.agentes = f.d && typeof f.d === "object" && !Array.isArray(f.d) ? f.d : {};
     // 180 (fase A): solo admin y coordinador usan los responsables por generador.
     if(f.k === "generadores") D.generadores = puedeAsignar() && f.d && typeof f.d === "object" && !Array.isArray(f.d) ? f.d : {};
     NUBE.espejo.config[f.k] = fi;
@@ -6591,14 +7374,23 @@ async function nubeTraerAjenos(){
 }
 // 12a (fase A): usuarios del equipo con su nombre (admin y coordinador), solo en
 // memoria. Sin la función en la base, la lista queda como estaba.
+// B2-R1: además, equipo_ids_b2() da el identificador interno de cada usuario (el que la
+// base guarda en pago.por y factura.por) con su usuario, para mostrar el nombre. Sin esa
+// función en la base (antes de facturacion-b2.sql), los identificadores quedan como estaban.
 async function nubeTraerEquipo(){
-  if(!puedeAsignar()){ NUBE.equipo = []; return 0; }
+  if(!puedeAsignar()){ NUBE.equipo = []; NUBE.ids = []; return 0; }
   let e;
   try{ e = await nubeRpc("equipo_lista", {}); }catch(x){ return 0; }
   const l = Array.isArray(e) ? e.filter(x => x && x.email) : [];
-  if(nubeFirma(l) === nubeFirma(NUBE.equipo)) return 0;
-  NUBE.equipo = l;
-  return 1;
+  let n = 0;
+  if(nubeFirma(l) !== nubeFirma(NUBE.equipo)){ NUBE.equipo = l; n = 1; }
+  let ids = null;
+  try{ ids = await nubeRpc("equipo_ids_b2", {}); }catch(x){ ids = null; }
+  if(Array.isArray(ids)){
+    const li = ids.filter(x => x && x.id && x.email).map(x => ({id: String(x.id), email: String(x.email)}));
+    if(nubeFirma(li) !== nubeFirma(NUBE.ids || [])){ NUBE.ids = li; n = 1; }
+  }
+  return n;
 }
 
 /* -------------------------------------------------------- sincronización --- */
@@ -6644,8 +7436,14 @@ async function nubeSincronizar(forzar){
       NUBE.espejo.config = NUBE.espejo.config || {};
       delete NUBE.espejo.config.cuentas; delete NUBE.espejo.config.envio;
     }
+    // Fase Cotización: lo mismo con las filas cotizacion y agentes (pend_cot).
+    const estrenaCot = !!D.pend_cot;
+    if(estrenaCot){
+      NUBE.espejo.config = NUBE.espejo.config || {};
+      delete NUBE.espejo.config.cotizacion; delete NUBE.espejo.config.agentes;
+    }
     const rebajar = !!D.rebajar;
-    if(rebajar || estrena1f) NUBE.desde = "1970-01-01T00:00:00Z";
+    if(rebajar || estrena1f || estrenaCot) NUBE.desde = "1970-01-01T00:00:00Z";
     const subidos = await nubeSubir(D.sin_clave || []);
     let bajados = await nubeBajar() + quitadas;
     if(rebajar){ delete D.rebajar; delete D.sin_clave; bajados++; }
@@ -6657,6 +7455,14 @@ async function nubeSincronizar(forzar){
       // 1F-R3 (Q8a): las tarjetas Cuentas y Envío se habilitan solas, aunque haya una
       // ventana abierta y nubeRepintar no vuelva a pintar Ajustes.
       pintarEspera1f();
+    }
+    if(estrenaCot){
+      [["cotizacion", D.cotizacion], ["agentes", D.agentes]].forEach(([k, v]) => {
+        if(NUBE.espejo.config[k] === undefined) NUBE.espejo.config[k] = nubeFirma(v);
+      });
+      delete D.pend_cot; bajados++;
+      pintarEsperaCot();
+      if(!document.querySelector("#modal.on") && document.querySelector("#p-ajustes.on")){ pintarCotizacionCfg(); pintarAgentes(); }
     }
     NUBE.vueltas++;
     const completa = forzar || quitadas > 0 || NUBE.vueltas % 8 === 1;
@@ -6784,6 +7590,8 @@ async function nubePrimeraVez(){
   // Fase 1f: las cuentas y las reglas de envío también las manda la base. Si la base
   // todavía no tiene esas filas, quedan la lista vacía y los valores de C7a, sin subirse.
   D.cuentas = []; D.envio = {...ENVIO_DEF};
+  // Fase Cotización: igual con los textos de la cotización y los agentes.
+  D.cotizacion = {...COT_DEF}; D.agentes = {}; delete D.pend_cot;
   // Responsables (fase 1c): los manda la base; lo anotado aquí es de otra isla.
   D.generadores = {}; D.asignar = {}; D.asignado = {};
   // Fase A: rechazados y responsables también son de la base.
@@ -6809,7 +7617,8 @@ async function nubePrimeraVez(){
   });
   // Parámetros y cuenta que la base no trae se quedan aquí, pero no se suben.
   [["params", D.params], ["banco", D.banco], ["tipo_cambio", D.tipo_cambio],
-   ["generadores", D.generadores], ["cuentas", D.cuentas], ["envio", D.envio]].forEach(([k, v]) => {
+   ["generadores", D.generadores], ["cuentas", D.cuentas], ["envio", D.envio],
+   ["cotizacion", D.cotizacion], ["agentes", D.agentes]].forEach(([k, v]) => {
     if(NUBE.espejo.config[k] === undefined) NUBE.espejo.config[k] = nubeFirma(v);
   });
   await nubeReconciliar();
@@ -6844,9 +7653,10 @@ function nubePintarPill(){
   if(sinSubir) extra = " · " + sinSubir + " sin subir";
   el.style.background = sinSubir ? mapa.error.b : m.b; el.style.color = sinSubir ? mapa.error.c : m.c;
   el.textContent = m.p + " " + m.t + extra;
-  // 161 (fase A): aviso fijo mientras este navegador no tenga sesión.
+  // 161 (fase A): aviso fijo mientras este navegador no tenga sesión. B4: solo donde el
+  // modo local se permite y sin una sesión vencida (en el sitio publicado no sale nunca).
   const av = document.getElementById("avisoLocal");
-  if(av) av.style.display = NUBE.sesion ? "none" : "";
+  if(av) av.style.display = !NUBE.sesion && !NUBE.vencida && modoLocalPermitido() ? "" : "none";
   el.title = NUBE.detalle || (NUBE.sesion ? NUBE.sesion.email : "Los datos viven solo en este navegador");
 }
 
@@ -6864,8 +7674,13 @@ function nubeMontarPill(){
     "#nubeCaja h3{margin:0 0 4px;font-size:16px;color:#1F3864}" +
     "#nubeCaja p.s{margin:0 0 16px;font-size:12.5px;color:#6B7A8F;line-height:1.5}" +
     "" +
-    "#nubeErr{background:#FDECEA;color:#B3261E;font-size:12.5px;padding:9px 11px;" +
-    "border-radius:6px;margin-bottom:12px;display:none}";
+    "#nubeErr,#nbBienErr{background:#FDECEA;color:#B3261E;font-size:12.5px;padding:9px 11px;" +
+    "border-radius:6px;margin-bottom:12px;display:none}" +
+    "#nubeCaja .nbAviso{background:#FFF4DB;color:#8A5A00;font-size:12.5px;padding:9px 11px;" +
+    "border-radius:6px;margin-bottom:12px;line-height:1.45}" +
+    // B4: sin sesión válida (y sin modo local elegido donde se permite) no se ve nada de la app.
+    "body.nb-bloqueo nav,body.nb-bloqueo main,body.nb-bloqueo #nubePill," +
+    "body.nb-bloqueo #modal,body.nb-bloqueo #visor{display:none !important}";
   document.head.appendChild(s);
   const b = document.createElement("button");
   b.id = "nubePill";
@@ -6954,60 +7769,126 @@ function nubeTipoLlave(k){
   return rol === "anon" ? "publica" : rol === "service_role" ? "secreta" : "otra";
 }
 
-function nubeGuardarCfg(){
-  const u = (document.getElementById("nbUrl").value || "").trim().replace(/\/+$/,"");
-  const k = (document.getElementById("nbKey").value || "").trim();
-  if(!/^https:\/\/[a-z0-9-]+\.supabase\.(co|in)$/i.test(u)){
-    alert("La dirección debe verse así:\n\nhttps://abcdefghijkl.supabase.co\n\n" +
-          "La dirección (Project URL) se copia desde el botón Connect, arriba en el panel del proyecto de Supabase."); return;
-  }
+// B4 (D4 a): validación común de la tarjeta de Ajustes y de la ventana de inicio.
+// Devuelve el texto del problema, o "" si la dirección y la llave sirven.
+function nubeValidarCfg(u, k){
+  if(!/^https:\/\/[a-z0-9-]+\.supabase\.(co|in)$/i.test(u))
+    return "La dirección debe verse así:\n\nhttps://abcdefghijkl.supabase.co\n\n" +
+           "La dirección (Project URL) se copia desde el botón Connect, arriba en el panel del proyecto de Supabase.";
   const donde = "La encuentras en Supabase, en Project Settings, API Keys " +
                 "(la publishable; la anon está en el botón View legacy API keys).";
   const tipo = nubeTipoLlave(k);
-  if(tipo === "secreta"){
-    alert("Esa es una llave secreta: no se pega aquí ni en ningún navegador.\n\n" +
-          "Usa la llave pública: la publishable (sb_publishable_...) o la anon.\n\n" + donde); return;
-  }
-  if(tipo !== "publica"){
-    alert("La llave pública se ve así:\n\nsb_publishable_...\n\n" +
-          "o, si es la anon, eyJhbGciOiJIUzI1NiIsInR5cCI6...\n\n" + donde); return;
-  }
+  if(tipo === "secreta")
+    return "Esa es una llave secreta: no se pega aquí ni en ningún navegador.\n\n" +
+           "Usa la llave pública: la publishable (sb_publishable_...) o la anon.\n\n" + donde;
+  if(tipo !== "publica")
+    return "La llave pública se ve así:\n\nsb_publishable_...\n\n" +
+           "o, si es la anon, eyJhbGciOiJIUzI1NiIsInR5cCI6...\n\n" + donde;
+  return "";
+}
+function nubeFijarCfg(u, k){
   try{ localStorage.setItem(NUBE_CFG, JSON.stringify({url:u, key:k})); }catch(e){}
   NUBE.url = u; NUBE.key = k;
+}
+
+function nubeGuardarCfg(){
+  const u = (document.getElementById("nbUrl").value || "").trim().replace(/\/+$/,"");
+  const k = (document.getElementById("nbKey").value || "").trim();
+  const mal = nubeValidarCfg(u, k);
+  if(mal){ alert(mal); return; }
+  nubeFijarCfg(u, k);
   pintarAjustes();
   nubeLogin();
 }
 
+// B4: ¿este navegador tiene datos de ejemplo cargados?
+function nubeHayEjemplos(){
+  return D.pedidos.some(p=>p.ejemplo) || D.clientes.some(c=>c.ejemplo) || D.movimientos.some(m=>m.ejemplo);
+}
+// B4 (D5 a): datos propios del modo local (pedidos, clientes o médicos que no son de
+// ejemplo) en un navegador que nunca estuvo sincronizado: al entrar se reemplazan por los
+// de la base (nubePrimeraVez solo rescata si ya estuvo sincronizado).
+function nubeDatosPropios(){
+  if(NUBE.desde !== "1970-01-01T00:00:00Z") return false;
+  return (D.pedidos || []).some(p=>p && !p.ejemplo) || (D.clientes || []).some(c=>c && !c.ejemplo) ||
+         (D.medicos || []).some(m=>m && !m.ejemplo);
+}
+// B4: aviso de las dos ventanas cuando el navegador no tiene internet.
+function nubeAvisoSinRed(){
+  return '<div class="nbAviso" id="nbSinRed" style="display:' + (navigator.onLine ? 'none' : 'block') + '">' +
+    '<strong>Para entrar hace falta internet.</strong> Conecta este dispositivo y vuelve a intentarlo.</div>';
+}
+function nubePintarSinRed(){
+  const e = document.getElementById("nbSinRed");
+  if(e) e.style.display = navigator.onLine ? "none" : "block";
+}
+
 function nubeLogin(){
   if(document.getElementById("nubeCapa")) return;
+  // D3 a: tras un vencimiento solo vuelve a entrar el mismo usuario.
+  const fijo = NUBE.vencida && NUBE.correoFijo ? NUBE.correoFijo : "";
+  const permitido = modoLocalPermitido();
+  const ejemplos = nubeHayEjemplos();
+  const propios = !fijo && nubeDatosPropios();
   const capa = document.createElement("div");
   capa.id = "nubeCapa";
   capa.innerHTML =
     '<div id="nubeCaja">' +
       '<h3>Entrar a la base compartida</h3>' +
-      '<p class="s">Usa el usuario y la contraseña que creaste en Supabase para ti o para tu equipo. ' +
-      'Solo hay que hacerlo una vez en cada dispositivo.</p>' +
+      (fijo
+        ? '<p class="s"><strong>La sesión venció.</strong> Vuelve a entrar con tu contraseña. ' +
+          'Lo que hiciste en este dispositivo y no llegó a la base se conserva y se envía al entrar.</p>'
+        : '<p class="s">Usa el usuario y la contraseña que creaste en Supabase para ti o para tu equipo. ' +
+          'Solo hay que hacerlo una vez en cada dispositivo.</p>') +
+      nubeAvisoSinRed() +
+      (ejemplos
+        ? '<div class="nbAviso" id="nbEjemplos">Este navegador tiene <strong>datos de ejemplo</strong>. ' +
+          'Para entrar se borran (tus datos reales no se tocan).</div>' : '') +
+      (propios
+        ? '<div class="nbAviso" id="nbPropios">Este navegador tiene datos propios que nunca llegaron a la base. ' +
+          'Al entrar <strong>se reemplazan</strong> por los de la base. Si los necesitas, descarga antes un respaldo.' +
+          '<div style="margin-top:8px"><button class="s" id="nbRespaldo">Descargar respaldo</button></div></div>' : '') +
       '<div id="nubeErr"></div>' +
-      '<div style="margin-bottom:12px"><label>Correo</label><input id="nbMail" type="email" autocomplete="username"></div>' +
+      '<div style="margin-bottom:12px"><label>Correo</label><input id="nbMail" type="email" autocomplete="username"' +
+        (fijo ? ' readonly value="' + esc(fijo) + '"' : '') + '></div>' +
       '<div style="margin-bottom:12px"><label>Contraseña</label><input id="nbPass" type="password" autocomplete="current-password"></div>' +
-      '<div style="margin-top:16px;display:flex;gap:8px">' +
-        '<button class="b" id="nbEntrar">Entrar</button>' +
-        '<button class="s" id="nbCancelar">Cancelar</button>' +
+      '<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">' +
+        (ejemplos ? '<button class="b" id="nbBorrarEj">Borrar los ejemplos y entrar</button>'
+                  : '<button class="b" id="nbEntrar">Entrar</button>') +
+        // B4: Cancelar solo donde el modo local se permite; en el sitio publicado, Volver a la
+        // ventana de inicio. Tras un vencimiento, ninguno de los dos: «Soy otra persona».
+        (fijo ? '<button class="s" id="nbOtra">Soy otra persona</button>'
+              : permitido ? '<button class="s" id="nbCancelar">Cancelar</button>'
+              : '<button class="s" id="nbVolver">Volver</button>') +
       '</div>' +
+      (ejemplos ? '<button id="nbEntrar" style="display:none"></button>' : '') +
     '</div>';
   document.body.appendChild(capa);
   const cerrar = () => capa.remove();
-  document.getElementById("nbCancelar").onclick = cerrar;
   const err = m => { const e = document.getElementById("nubeErr"); e.textContent = m; e.style.display = "block"; };
+  if(fijo) document.getElementById("nbOtra").onclick = () => nubeSalir(true);
+  else if(permitido) document.getElementById("nbCancelar").onclick = () => {
+    cerrar(); NUBE.localElegido = true; nubeAplicarBloqueo(); nubePintarPill(); };
+  else document.getElementById("nbVolver").onclick = () => { cerrar(); nubeBienvenida(); };
+  if(propios) document.getElementById("nbRespaldo").onclick = () => descargarRespaldo();
+  if(ejemplos) document.getElementById("nbBorrarEj").onclick = () => {
+    const mail = fijo || document.getElementById("nbMail").value.trim();
+    if(!mail || !document.getElementById("nbPass").value){ err("Escribe el correo y la contraseña."); return; }
+    if(!navigator.onLine){ err("Para entrar hace falta internet."); return; }
+    borrarEjemplo();
+    if(nubeHayEjemplos()) return;      // no confirmó el borrado
+    document.getElementById("nbEntrar").click();
+  };
 
   document.getElementById("nbEntrar").onclick = async function(){
     const b = this;
-    const mail = document.getElementById("nbMail").value.trim();
+    const mail = fijo || document.getElementById("nbMail").value.trim();
     const pass = document.getElementById("nbPass").value;
     if(!mail || !pass){ err("Escribe el correo y la contraseña."); return; }
+    if(!navigator.onLine){ err("Para entrar hace falta internet."); return; }
     // N6: no se conecta mientras haya datos de ejemplo, para que no lleguen a la base.
-    if(D.pedidos.some(p=>p.ejemplo) || D.clientes.some(c=>c.ejemplo) || D.movimientos.some(m=>m.ejemplo)){
-      err("Hay datos de ejemplo cargados. Bórralos en Ajustes («Borrar solo los ejemplos») antes de entrar."); return; }
+    if(nubeHayEjemplos()){
+      err("Hay datos de ejemplo cargados. Pulsa «Borrar los ejemplos y entrar»."); return; }
     b.disabled = true; b.textContent = "Entrando…";
     try{
       await nubeEntrar(mail, pass);
@@ -7039,9 +7920,18 @@ function nubeLogin(){
     }
   };
   document.getElementById("nbPass").addEventListener("keydown", e => {
-    if(e.key === "Enter") document.getElementById("nbEntrar").click();
+    if(e.key === "Enter") document.getElementById(ejemplos ? "nbBorrarEj" : "nbEntrar").click();
   });
-  setTimeout(() => { const m = document.getElementById("nbMail"); if(m) m.focus(); }, 30);
+  setTimeout(() => { const m = document.getElementById(fijo ? "nbPass" : "nbMail"); if(m) m.focus(); }, 30);
+}
+
+// B4 (D2 a): la sesión venció. Se quita cualquier ventana de la capa y sale la de entrar.
+function nubeVencida(){
+  const vieja = document.getElementById("nubeCapa");
+  if(vieja) vieja.remove();
+  nubeAplicarBloqueo();
+  nubePintarPill();
+  nubeLogin();
 }
 
 /* ------------------------------------------------ ventana de bienvenida --- */
@@ -7055,30 +7945,77 @@ function nubeHaySesion(){
   }catch(e){ return false; }
 }
 
-// Al abrir la app sin sesión se ofrece entrar o seguir en modo local. Usa la
-// misma capa que nubeLogin (#nubeCapa) para heredar su estilo; por eso se
-// quita antes de abrir nubeLogin, que no se abre si ya hay una capa.
+// B4 (161, D1 a): el modo local («Seguir solo en este navegador» y el Cancelar que deja
+// la app abierta sin sesión) solo existe en http://localhost y http://127.0.0.1, para las
+// pruebas y la demostración. Decide solo la dirección: en el sitio publicado ninguna marca
+// lo habilita. La única marca, sdim_como_publicado, solo lo quita (las pruebas B4 la usan
+// para ver en localhost la conducta del sitio publicado).
+function modoLocalPermitido(dir){
+  const d = dir || location;
+  try{ if(localStorage.getItem("sdim_como_publicado")) return false; }catch(e){}
+  return d.protocol === "http:" && (d.hostname === "localhost" || d.hostname === "127.0.0.1");
+}
+// B4: la app no se usa sin sesión válida, salvo modo local elegido donde se permite.
+// Tras un vencimiento se bloquea también en localhost.
+function nubeBloqueado(){
+  return !NUBE.sesion && !NUBE.localElegido && (!modoLocalPermitido() || NUBE.vencida);
+}
+function nubeAplicarBloqueo(){
+  if(document.body) document.body.classList.toggle("nb-bloqueo", nubeBloqueado());
+}
+
+// Al abrir la app sin sesión se ofrece entrar o, donde se permite, seguir en modo
+// local. Usa la misma capa que nubeLogin (#nubeCapa) para heredar su estilo; por eso
+// se quita antes de abrir nubeLogin, que no se abre si ya hay una capa.
+// B4: en el sitio publicado no hay salida a la app: sin conexión guardada la ventana pide
+// aquí mismo la dirección y la llave (D4 a), y la capa no se cierra con Escape ni con un
+// clic fuera (no tiene esos manejadores).
 function nubeBienvenida(){
   if(document.getElementById("nubeCapa")) return;
   const conCfg = !!(NUBE.url && NUBE.key);
+  const permitido = modoLocalPermitido();
+  const pideCfg = !conCfg && !permitido;
+  nubeAplicarBloqueo();
   const capa = document.createElement("div");
   capa.id = "nubeCapa";
   capa.innerHTML =
     '<div id="nubeCaja">' +
       '<h3>Sistema de Distribución — Insumos Médicos</h3>' +
       (conCfg ? '<p class="s">Este navegador ya está preparado para la base del equipo: entra con tu usuario.</p>'
-              : '<p class="s">Entra con tu usuario para trabajar con la base del equipo, ' +
-                'o sigue solo en este navegador como hasta ahora.</p>') +
+       : pideCfg ? '<p class="s">Para entrar, pega la dirección del proyecto y la llave pública que te dio ' +
+                   'el administrador. Después se piden tu usuario y tu contraseña.</p>'
+       : '<p class="s">Entra con tu usuario para trabajar con la base del equipo, ' +
+         'o sigue solo en este navegador.</p>') +
+      nubeAvisoSinRed() +
+      (pideCfg
+        ? '<div id="nbBienErr"></div>' +
+          '<div style="margin-bottom:12px"><label>Dirección del proyecto (Project URL)</label>' +
+          '<input id="nbBienUrl" placeholder="https://xxxxxxxx.supabase.co"></div>' +
+          '<div style="margin-bottom:12px"><label>Llave pública (publishable o anon)</label>' +
+          '<input id="nbBienKey" placeholder="sb_publishable_..."></div>' : '') +
       '<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">' +
         '<button class="b" id="nbBienEntrar">Entrar con mi usuario</button>' +
         // 161 (fase A): un navegador que ya tiene conexión guardada no pasa a modo local.
-        (conCfg ? '' : '<button class="s" id="nbBienLocal">Seguir solo en este navegador</button>') +
+        // B4: y solo donde el modo local se permite.
+        (!conCfg && permitido ? '<button class="s" id="nbBienLocal">Seguir solo en este navegador</button>' : '') +
       '</div>' +
     '</div>';
   document.body.appendChild(capa);
   const cerrar = () => capa.remove();
-  if(!conCfg) document.getElementById("nbBienLocal").onclick = cerrar;
+  if(!conCfg && permitido) document.getElementById("nbBienLocal").onclick = () => {
+    cerrar(); NUBE.localElegido = true; nubeAplicarBloqueo(); nubePintarPill(); };
   document.getElementById("nbBienEntrar").onclick = function(){
+    if(pideCfg){
+      const u = (document.getElementById("nbBienUrl").value || "").trim().replace(/\/+$/,"");
+      const k = (document.getElementById("nbBienKey").value || "").trim();
+      const mal = nubeValidarCfg(u, k);
+      const e = document.getElementById("nbBienErr");
+      if(mal){ e.textContent = mal; e.style.whiteSpace = "pre-line"; e.style.display = "block"; return; }
+      nubeFijarCfg(u, k);
+      cerrar();
+      nubeLogin();
+      return;
+    }
     cerrar();
     if(NUBE.url && NUBE.key){ nubeLogin(); return; }
     // Sin conexión guardada no hay a dónde entrar: se lleva a la tarjeta
@@ -7165,8 +8102,8 @@ if(typeof pintarAjustes === "function"){
   };
 }
 
-window.addEventListener("online",  () => { if(nubeActiva()) nubeSincronizar(true); });
-window.addEventListener("offline", () => nubeEstado("sin_red", "Sin internet — trabajando en este navegador"));
+window.addEventListener("online",  () => { nubePintarSinRed(); if(nubeActiva()) nubeSincronizar(true); });
+window.addEventListener("offline", () => { nubePintarSinRed(); nubeEstado("sin_red", "Sin internet — trabajando en este navegador"); });
 document.addEventListener("visibilitychange", () => {
   if(!document.hidden && nubeActiva()) nubeSincronizar(false);
 });
@@ -7182,8 +8119,19 @@ document.addEventListener("visibilitychange", () => {
     nubeArrancar();
   }else{
     nubeEstado("local", "");
-    if(!nubeHaySesion()) nubeBienvenida();
+    // B4 (D3 a): una sesión venció antes de esta carga y nadie volvió a entrar. Se sigue
+    // como tras el vencimiento: bloqueo y ventana de entrar con el mismo correo fijo.
+    let fijo = "";
+    try{ fijo = localStorage.getItem(NUBE_FIJO) || ""; }catch(e){}
+    if(fijo && NUBE.url && NUBE.key){
+      NUBE.vencida = true; NUBE.correoFijo = fijo;
+      nubeAplicarBloqueo(); nubePintarPill();
+      nubeLogin();
+    }
+    // B4: donde el modo local no se permite, siempre hay ventana (sin ella no habría salida).
+    else if(!nubeHaySesion() || !modoLocalPermitido()) nubeBienvenida();
   }
+  nubeAplicarBloqueo();
 })();
 
 </script>
