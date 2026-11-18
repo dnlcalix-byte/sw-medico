@@ -1762,15 +1762,98 @@ function llevaIva(s){
   const v = s && s.dicosa && typeof s.dicosa === "object" ? s.dicosa.iva : undefined;
   return !(typeof v === "number" && v === 0);
 }
+// Fase Descuento (DS6a, R2 confirmado por Daniel el 2026-11-17): el ISV se calcula sobre el
+// precio CON descuento. Si DICOSA lo calculara sobre el de lista, se cambia SOLO esta
+// constante y su copia en la base (c_isv_sobre_lista, sql/descuento-factura.sql).
+const ISV_SOBRE_LISTA = false;
+// AJUSTE-DS (AJ1b): el monto de una línea con descuento es su importe (redondeo por línea, como
+// DICOSA); precio es solo el precio con descuento de referencia. Sin importe: cantidad × precio.
+// Su copia en la base: la suma de pedido_descuento_ds, pedido_iva_b2 y pedido_costo_ds.
+function importeLinea(l){
+  if(!l) return 0;
+  return l.dscto && esNum(l.importe) ? Number(l.importe) : Number(l.cantidad) * Number(l.precio);
+}
 // toFixed(6) quita el ruido binario antes de redondear (0.7 × 15 da 10.499999999999998).
+// AJUSTE-DS: ISV de la línea = round(importe × tasa, 2), como DICOSA.
 function ivaLinea(l){
   if(!l || !llevaIva(D.skus.find(x => x.codigo === l.codigo))) return 0;
-  const n = Number(l.cantidad) * Number(l.precio) * IVA_TASA;
+  const base = ISV_SOBRE_LISTA && esNum(l.precio_lista) ? Number(l.cantidad) * Number(l.precio_lista) : importeLinea(l);
+  const n = base * IVA_TASA;
   return isFinite(n) ? Math.round(Number(n.toFixed(6))) / 100 : 0;
 }
 function ivaPedido(lineas){
   return Math.round((Array.isArray(lineas) ? lineas : []).reduce((a, l) => a + ivaLinea(l), 0) * 100) / 100;
 }
+
+/* ------------------------------ descuento por línea (fase Descuento, DS8a a DS19a)
+   Solo con clientes de lista Particular. AJUSTE-DS (AJ1b): redondeo POR LÍNEA, como DICOSA:
+   monto = round(cantidad × precio de lista × pct / 100, 2), importe = cantidad × precio de
+   lista − monto; la línea guarda precio_lista, importe (el monto que manda) y
+   dscto = {pct, monto, tipo, texto, letra}, y precio = importe / cantidad a 2 decimales, solo
+   de referencia. Quién lo dio (por, rol, en) lo pone la base. Una línea sin descuento queda
+   igual que antes. El generador (rol pedidos) descuenta hasta DSCTO_TOPE_LIBRE en CUALQUIER
+   categoría (AJUSTE-DS); más que eso lo dan solo administración o coordinación, con Promoción
+   o Autorización y un motivo de 8 a 120 caracteres (DS19a). La base revisa lo mismo
+   (sql/descuento-factura.sql v2, pedido_descuento_ds) y no confía en el navegador. Queda fijo
+   al confirmar: cambiarlo es cancelar y rehacer (DS10a). */
+const DSCTO_TOPE_LIBRE = 25;                                              // c_tope_libre en la base
+const DSCTO_TEXTO_MIN = 8, DSCTO_TEXTO_MAX = 120;                         // c_texto_min y c_texto_max
+const DSCTO_TIPOS = {promocion:"Promoción", autorizacion:"Autorización"};
+const dsR2 = x => Math.round(Number((Number(x) * 100).toFixed(6))) / 100;
+// DS4a: el producto está a precio normal (no en promoción). Hasta que exista el registro de
+// promociones (175) es siempre así; entonces se cambia solo esta función (y su copia en la base).
+function productoPrecioNormal(s){ return true; }
+// Más de 0 y menos de 100, con 2 decimales como máximo (DS14a).
+function pctValido(x){
+  return typeof x === "number" && isFinite(x) && x > 0 && x < 100 && Math.abs(x * 100 - Math.round(x * 100)) < 1e-6;
+}
+function dsctoJefe(){ return ["local","admin","coordinador"].includes(rolPantalla()); }
+function puedeDescontar(){ return listaPedido() === "particular"; }
+// ¿La línea entra con la regla del generador, sin motivo? AJUSTE-DS: en cualquier categoría.
+function dsctoLibre(l){
+  const s = D.skus.find(x => x.codigo === l.codigo);
+  return !!s && !!l.dscto && l.dscto.pct <= DSCTO_TOPE_LIBRE && productoPrecioNormal(s);
+}
+// Los descuentos del pedido en curso: malos (porcentaje que no vale) y fuera (no entran con
+// la regla del generador: más del tope).
+function dsctoEstado(){
+  const con = P.lineas.filter(l => l.dscto);
+  return {con, malos: con.filter(l => !pctValido(l.dscto.pct)),
+          fuera: con.filter(l => pctValido(l.dscto.pct) && !dsctoLibre(l)), jefe: dsctoJefe()};
+}
+function dsctoMotivo(){
+  const t = ($("#dsTipo") || {}).value || "", x = (($("#dsTexto") || {}).value || "").trim();
+  return {tipo: DSCTO_TIPOS[t] ? t : "", texto: x,
+          ok: !!DSCTO_TIPOS[t] && x.length >= DSCTO_TEXTO_MIN && x.length <= DSCTO_TEXTO_MAX};
+}
+// Lo que impide confirmar por los descuentos ("" si nada).
+function dsctoBloqueo(){
+  const e = dsctoEstado();
+  if(e.malos.length) return "El descuento debe ser mayor que 0 y menor que 100, con 2 decimales como máximo.";
+  if(e.fuera.length && !e.jefe) return "Ese descuento solo lo da administración o coordinación: con tu usuario llega hasta " +
+    DSCTO_TOPE_LIBRE + " %.";
+  if(e.fuera.length && !dsctoMotivo().ok) return "Elige Promoción o Autorización y escribe el motivo del descuento (" +
+    DSCTO_TEXTO_MIN + " a " + DSCTO_TEXTO_MAX + " caracteres).";
+  return "";
+}
+// Casilla Dscto % de la línea i. Vacía o 0: sin descuento.
+function ponerDscto(i, v){
+  const l = P.lineas[i]; if(!l) return;
+  const t = String(v ?? "").trim().replace(",", "."), num = /^\d+(\.\d+)?$/.test(t);
+  if(!t || (num && Number(t) === 0)){ delete l.dscto; delete l.precio_lista; delete l.importe; }
+  else l.dscto = {pct: num ? Number(t) : NaN, txt: t};
+  recalc();
+}
+// La línea como se guarda: dscto con tipo, texto (solo si hace falta) y letra; sin txt.
+function lineaConDscto(l, motivo, letra){
+  if(!l.dscto) return l;
+  const libre = dsctoLibre(l);
+  const d = {pct:l.dscto.pct, monto:l.dscto.monto, tipo: libre ? "normal" : motivo.tipo};
+  if(!libre) d.texto = motivo.texto;
+  d.letra = letra;
+  return {...l, dscto: d};
+}
+function pctTexto(x){ return String(Number(x)) + " %"; }
 // Lo que se cobra de un pedido. Uno de antes de B2 no tiene total_con_iva: se cobra su total, como siempre.
 function conIva(p){ return !!p && esNum(p.total_con_iva); }
 function montoCobro(p){ return conIva(p) ? p.total_con_iva : p.total; }
@@ -1778,6 +1861,8 @@ function montoCobro(p){ return conIva(p) ? p.total_con_iva : p.total; }
 function desgloseCobro(p, sep, puntos, envio){
   const d = puntos ? ": " : " ";
   return ["Subtotal sin ISV" + d + L(p.subtotal)]
+    // Fase Descuento: el subtotal ya va con el descuento; se dice cuánto fue.
+    .concat(Number(p.descuento) > 0 ? ["Descuento incluido" + d + L(p.descuento)] : [])
     .concat(Number(p.cargo) > 0 ? [(envio || "Envío") + d + L(p.cargo)] : [])
     .concat(["ISV" + d + L(esNum(p.iva) ? p.iva : 0), "Total con ISV" + d + L(p.total_con_iva)]).join(sep);
 }
@@ -2121,7 +2206,8 @@ function motorCanal(pesoKg, nivel){
    PEDIDO EN CURSO
    ============================================================================ */
 function calcularPedido(){
-  const sub  = P.lineas.reduce((a,l)=>a + l.cantidad*l.precio, 0);
+  // AJUSTE-DS: con descuento, el importe de la línea (redondeo por línea), no cantidad × precio.
+  const sub  = Number(P.lineas.reduce((a,l)=>a + importeLinea(l), 0).toFixed(6));
   // Si a una línea le falta el costo, no hay margen: se guarda null, no un número inventado.
   const sinCosto = P.lineas.filter(l=>!hayCosto(l.costo));
   const cost = sinCosto.length ? null : P.lineas.reduce((a,l)=>a + l.cantidad*l.costo, 0);
@@ -2144,7 +2230,9 @@ function calcularPedido(){
 
   // B2 (D6c): IVA por línea y total con IVA. El cargo no lleva IVA; margen y contribución, sin IVA.
   const iva = ivaPedido(P.lineas);
-  return {sub, cost, peso, nivel, cargo, minimo, zona, margen, contrib, sinCosto,
+  // Fase Descuento: el subtotal ya va con el descuento (precio de cada línea); aquí, cuánto fue.
+  const descuento = dsR2(P.lineas.reduce((a, l) => a + (l.dscto && pctValido(l.dscto.pct) ? Number(l.dscto.monto) || 0 : 0), 0));
+  return {sub, cost, peso, nivel, cargo, minimo, zona, margen, contrib, sinCosto, descuento,
           canal:m.canal, costoEnt:m.costo, motivo:m.motivo, total:sub+cargo,
           iva, totalIva: Number((sub + cargo + iva).toFixed(6))};
 }
@@ -2171,10 +2259,32 @@ function sinZonaPedido(){ return !!P.cliente && !zonaCliente(P.cliente); }
 // Fase 1e: el precio de cada línea es el de la lista del cliente, con los datos
 // de ahora. Se rehace en cada cálculo: al cambiar de cliente, al repetir un
 // pedido viejo o si cambió el Catálogo.
+// Fase Descuento, AJUSTE-DS (AJ1b): con un descuento válido, redondeo POR LÍNEA, como DICOSA:
+// monto = round(cantidad × lista × pct / 100, 2); importe = cantidad × lista − monto; precio =
+// importe / cantidad a 2 decimales (referencia). La línea guarda precio_lista, importe y monto.
+// Si el cliente no tiene lista Particular, los descuentos se quitan (con aviso en Nuevo pedido).
 function repreciar(){
+  const quitar = !puedeDescontar();
   P.lineas.forEach(l => {
     const s = D.skus.find(x => x.codigo === l.codigo);
-    if(s) l.precio = precioPedido(s);
+    if(!s) return;
+    const lista = precioPedido(s);
+    if(l.dscto && quitar){
+      delete l.dscto;
+      if(P.cliente && listaPedido()) P.dsctoQuitado = true;
+    }
+    if(l.dscto && pctValido(l.dscto.pct) && Number(l.cantidad) > 0){
+      const bruto = Number(l.cantidad) * Number(lista);
+      l.precio_lista = lista;
+      l.dscto.monto = dsR2(bruto * l.dscto.pct / 100);
+      l.importe = Number((bruto - l.dscto.monto).toFixed(6));
+      l.precio = dsR2(l.importe / Number(l.cantidad));
+      delete l.dscto.unit;
+    }else{
+      l.precio = lista;
+      delete l.precio_lista;
+      delete l.importe;
+    }
   });
 }
 function sinListaPedido(){ return !!P.cliente && !listaPedido(); }
@@ -2210,7 +2320,19 @@ function recalc(){
 
   const sinLista = sinListaPedido(), sinPrecio = sinLista ? [] : lineasSinPrecio();
   const sinZona = sinZonaPedido();
-  $("#economia").innerHTML = `
+  // Fase Descuento: avisos de los descuentos del pedido en curso.
+  const ds = dsctoEstado(), conDs = c.descuento > 0 ? " (con descuento)" : "";
+  const nombreDs = l => "«" + esc(l.nombre) + "»";
+  const avisoDs =
+    (P.dsctoQuitado ? `<div class="aviso a-med" data-dscto-quitado>Se quitaron los descuentos: Cadena y Sub-distribuidor no llevan descuento.</div>` : "") +
+    (ds.malos.length ? `<div class="aviso a-mal" data-dscto-malo>${ds.malos.map(nombreDs).join(", ")}: el descuento debe ser
+      mayor que 0 y menor que 100, con 2 decimales como máximo.</div>` : "") +
+    (ds.fuera.length && !ds.jefe ? `<div class="aviso a-mal" data-dscto-tope>${ds.fuera.map(nombreDs).join(", ")}: con tu usuario
+      el descuento llega hasta ${DSCTO_TOPE_LIBRE} %. Más que eso lo da administración o coordinación.</div>` : "") +
+    (ds.fuera.length && ds.jefe ? `<div class="aviso a-med" data-dscto-motivo>${ds.fuera.map(nombreDs).join(", ")}: descuento de más
+      de ${DSCTO_TOPE_LIBRE} %. Elige Promoción o Autorización y escribe el motivo
+      (${DSCTO_TEXTO_MIN} a ${DSCTO_TEXTO_MAX} caracteres).</div>` : "");
+  $("#economia").innerHTML = avisoDs + `
     ${sinZona ? `<div class="aviso a-mal" data-sin-zona><strong>Este cliente no tiene zona de envío.</strong>
       No se puede confirmar el pedido: la zona (local o foránea) la pone el administrador o el coordinador en Clientes.
       Sin zona no se sabe el cargo de envío.</div>` : ""}
@@ -2228,12 +2350,12 @@ function recalc(){
     ${conCostos && c.sinCosto.length ? `<div class="aviso a-med">${c.sinCosto.map(l=>
       `«${esc(l.nombre)}» no tiene costo registrado.`).join("<br>")}
       El margen y la contribución no se pueden calcular; el pedido se puede confirmar igual.</div>` : ""}
-    ${c.zona && c.cargo ? `<div class="aviso a-med" data-cargo-envio>Envío ${c.zona==="foraneo"?"foráneo":"local"}: el subtotal es de ${L(c.sub)}
+    ${c.zona && c.cargo ? `<div class="aviso a-med" data-cargo-envio>Envío ${c.zona==="foraneo"?"foráneo":"local"}: el subtotal${conDs} es de ${L(c.sub)}
       y el envío es gratis desde ${L0(c.minimo)} (sin ISV). Se agrega un cargo de envío de ${L(c.cargo)}.
       <strong>Total sin ISV: ${L(c.total)}.</strong></div>` : ""}
     ${c.zona && !c.cargo ? `<div class="aviso a-ok" data-envio-gratis>Envío ${c.zona==="foraneo"?"foráneo":"local"} sin cargo:
-      el subtotal llega al mínimo de ${L0(c.minimo)}.</div>` : ""}
-    <div class="aviso a-info" data-iva>Subtotal sin ISV: ${L(c.sub)}${c.cargo ? ` · Cargo de envío: ${L(c.cargo)}` : ""}
+      el subtotal${conDs} llega al mínimo de ${L0(c.minimo)}.</div>` : ""}
+    <div class="aviso a-info" data-iva>${c.descuento > 0 ? `Descuento: ${L(c.descuento)} · ` : ""}Subtotal sin ISV${conDs}: ${L(c.sub)}${c.cargo ? ` · Cargo de envío: ${L(c.cargo)}` : ""}
       · ISV ${IVA_TASA}%: ${L(c.iva)} · <strong>Total con ISV: ${L(c.totalIva)}</strong>
       <br><span class="mini">El ISV se calcula por producto, según el Catálogo de DICOSA; el cargo de envío no lleva ISV.
       El monto definitivo lo pone la base al guardar el pedido.</span></div>
@@ -2257,7 +2379,18 @@ function recalc(){
   // Al volver a dibujar se conserva lo que ya estaba escrito en los motivos.
   const prev1 = ($("#motivoOverride")||{}).value || "";
   const prev2 = ($("#motivoExistencia")||{}).value || "";
-  $("#overrideZona").innerHTML =
+  // Fase Descuento: un solo motivo por pedido, que se copia a cada línea que lo necesita.
+  const prevT = ($("#dsTipo")||{}).value || "", prevX = ($("#dsTexto")||{}).value || "";
+  const motivoDs = ds.fuera.length && ds.jefe ? `<div style="flex:1">
+      <label>Tipo de descuento</label>
+      <select id="dsTipo" onchange="habilitarConfirmar()"><option value="">Elige…</option>${Object.entries(DSCTO_TIPOS).map(([k, t]) =>
+        `<option value="${k}"${prevT === k ? " selected" : ""}>${t}</option>`).join("")}</select>
+    </div><div style="flex:2">
+      <label>Motivo del descuento (${DSCTO_TEXTO_MIN} a ${DSCTO_TEXTO_MAX} caracteres)</label>
+      <input id="dsTexto" maxlength="${DSCTO_TEXTO_MAX}" placeholder="Ej: promoción de lanzamiento, autoriza Daniel"
+        value="${esc(prevX)}" oninput="habilitarConfirmar()">
+    </div>` : "";
+  $("#overrideZona").innerHTML = motivoDs +
     (pierde ? `<div style="flex:2">
       <label>Para confirmarlo igual, escribe el motivo y quién lo autoriza</label>
       <input id="motivoOverride" placeholder="Ej: cliente estratégico, autoriza Daniel"
@@ -2281,6 +2414,7 @@ function habilitarConfirmar(){
   $("#btnConfirmar").disabled = !P.cliente || !P.lineas.length ||
     sinListaPedido() || lineasSinPrecio().length > 0 ||
     sinZonaPedido() ||                       // fase 1f: sin zona de envío no se confirma
+    !!dsctoBloqueo() ||                      // fase Descuento: porcentaje, rol y motivo
     ex.sinCatalogo.length > 0 || (ex.faltan.length > 0 && !puedeForzarExistencia()) ||
     (!!m1 && m1.value.trim().length < 8) || (!!m2 && m2.value.trim().length < 8);
 }
@@ -2292,16 +2426,30 @@ function kpi(v,l,est){
 
 function pintarLineas(){
   if(!P.lineas.length){ $("#lineas").innerHTML = `<div class="vacio">Aún no has agregado productos.</div>`; return; }
+  // Fase Descuento: con cliente de lista Particular, columnas Precio de lista, Dscto % (casilla)
+  // y Precio con dscto. AJUSTE-DS: la casilla está encendida en cualquier categoría; el rol
+  // pedidos llega hasta el tope. Precio con dscto es de referencia (importe / inners) y el
+  // Importe es el de la línea (redondeo por línea). La casilla es de texto: la de cantidad
+  // sigue siendo la única numérica.
+  const conDs = puedeDescontar(), jefe = dsctoJefe();
+  const casillaDs = (l, i) => {
+    const val = l.dscto ? (l.dscto.txt ?? String(l.dscto.pct)) : "";
+    return `<td class="num"><input type="text" inputmode="decimal" data-dscto value="${esc(val)}" style="width:62px"
+      title="Descuento en por ciento${jefe ? "" : ", hasta " + DSCTO_TOPE_LIBRE}"
+      onchange="ponerDscto(${i}, this.value)"></td>`;
+  };
   $("#lineas").innerHTML = `<div class="tabla-wrap"><table>
-    <thead><tr><th>Producto</th><th class="num" title="La unidad de venta es el inner">Inners</th><th class="num" title="Precio por inner, sin ISV">Precio</th>
+    <thead><tr><th>Producto</th><th class="num" title="La unidad de venta es el inner">Inners</th><th class="num" title="Precio por inner, sin ISV">${conDs ? "Precio de lista" : "Precio"}</th>
+    ${conDs ? `<th class="num">Dscto %</th><th class="num" title="Precio por inner con el descuento, sin ISV">Precio con dscto</th>` : ""}
     <th class="num">Peso</th><th class="num">Importe</th><th></th></tr></thead><tbody>
     ${P.lineas.map((l,i)=>`<tr>
       <td>${esc(l.nombre)}<br><span class="mini">${esc(l.codigo)}</span></td>
       <td class="num"><input type="number" min="1" step="1" value="${l.cantidad}" style="width:70px"
           onchange="cambiarCantidad(${i}, this.value)"></td>
-      <td class="num">${L(l.precio)}</td>
+      <td class="num">${L(esNum(l.precio_lista) ? l.precio_lista : l.precio)}</td>
+      ${conDs ? casillaDs(l, i) + `<td class="num">${L(l.precio)}</td>` : ""}
       <td class="num">${(l.cantidad*l.peso).toFixed(3)}</td>
-      <td class="num">${L(l.cantidad*l.precio)}</td>
+      <td class="num">${L(importeLinea(l))}</td>
       <td><button class="s d" onclick="quitarLinea(${i})">Quitar</button></td></tr>`).join("")}
     </tbody></table></div>`;
 }
@@ -2328,6 +2476,7 @@ $("#buscaCli").oninput = function(){
 };
 function elegirCliente(id){
   P.cliente = D.clientes.find(c=>c.id===id);
+  P.dsctoQuitado = false;      // fase Descuento: el aviso es del último cambio de cliente
   $("#resCli").innerHTML=""; $("#buscaCli").value="";
   $("#cliSel").innerHTML = `<div class="aviso a-ok" style="margin-top:10px">
     <strong>${esc(P.cliente.nombre)}</strong> · ${esc(P.cliente.telefono)}
@@ -2507,7 +2656,8 @@ function repetirUltimo(id){
   P.lineas = p.lineas.filter(l=>{
     const s = D.skus.find(x=>x.codigo===l.codigo);
     return s && !s.restringido && !s.por_completar && !s.fuera_catalogo && !faltaParaVender(s).length;
-  }).map(l=>({...l}));
+  // Fase Descuento (DS13a): se copian sin descuento; el descuento se decide en cada pedido.
+  }).map(l=>{ const {dscto, precio_lista, importe, ...x} = l; return x; });
   const faltan = p.lineas.length - P.lineas.length;
   recalc();
   if(faltan) alert("Se copiaron "+P.lineas.length+" productos. "+faltan+
@@ -2553,6 +2703,10 @@ function confirmarPedido(){
   if(sinVenta.length){
     alert(sinVenta.map(x=>"«"+x.l.nombre+"»: le falta "+x.f.join(" y ")+", quítalo del pedido.").join("\n"));
     return; }
+  // Fase Descuento: porcentaje válido, regla del rol y motivo (la base revisa lo mismo).
+  const bloqDs = dsctoBloqueo();
+  if(bloqDs){ alert("No se confirma el pedido.\n\n" + bloqDs); recalc(); return; }
+  const motivoDs = dsctoMotivo();
   const c = calcularPedido();
   const ahora = new Date().toISOString();
   let motivo = null;
@@ -2595,10 +2749,13 @@ function confirmarPedido(){
     // Fase Cotización: cada línea guarda su unidad y su marca (si el Catálogo las trae) y su
     // ISV, y el pedido guarda la copia del cliente y de su agente (cot), porque quien arma
     // la cotización (facturación) no lee clientes. El ISV de la línea lo vuelve a poner la base.
-    lineas: JSON.parse(JSON.stringify(P.lineas)).map(lineaCotizada),
+    // Fase Descuento: la línea con descuento guarda precio_lista, importe y dscto (sin por, rol
+    // ni en, que pone la base); la que no tiene, queda como antes.
+    lineas: JSON.parse(JSON.stringify(P.lineas.map(l => lineaConDscto(l, motivoDs, letra)))).map(lineaCotizada),
     cot: cotDeCliente(P.cliente),
     nivel: c.nivel, canal: c.canal, estado: "confirmado",
     subtotal: c.sub, costo_prod: c.cost, cargo: c.cargo, total: c.total, envio,
+    ...(c.descuento > 0 ? {descuento: c.descuento} : {}),
     // B2 (D6c): IVA y total con IVA con que se calculó (la base los vuelve a poner).
     iva: c.iva, total_con_iva: c.totalIva,
     peso: c.peso, margen: c.margen,
@@ -2697,6 +2854,8 @@ function pintarInicio(){
   // Cotización DICOSA (Q9a): pedidos empacados, sin factura, a los que nadie les generó la
   // cotización. Solo para quien la genera. Siempre son parte de los que esperan factura.
   const sinCot = puedeCotizar() ? espFactura.filter(p => conIva(p) && !(p.cotizacion && p.cotizacion.generada_en)) : [];
+  // Factura con foto: facturas por revisar, para quien las libera (administración y coordinación).
+  const facRev = puedeCorregirFactura() ? D.pedidos.filter(p => p.estado !== "cancelado" && facturaPorRevisar(p)) : [];
   // Mismo número en dos o más pedidos activos (por ejemplo, dos dispositivos con la misma letra).
   const porNum = {};
   D.pedidos.filter(p=>p.estado!=="entregado" && p.estado!=="cancelado")
@@ -2730,6 +2889,9 @@ function pintarInicio(){
       <button class="s" onclick="ir('despacho')">Ver</button></div>`:""}
     ${espFactura.length ? `<div class="aviso a-med" data-espera-factura>${espFactura.length} pedido(s) empacados esperando factura.
       <button class="s" onclick="ir('despacho')">Ver</button></div>`:""}
+    ${facRev.length ? `<div class="aviso a-mal" data-factura-revisar><strong>${facRev.length} factura(s) por revisar.</strong>
+      ${facRev.map(p=>`#${esc(p.numero)}: ${esc((facturaRev(p).motivos || []).join("; "))}.`).join("<br>")}
+      <button class="s" onclick="ir('despacho')">Ver</button></div>`:""}
     ${sinCot.length ? `<div class="aviso a-med" data-sin-cotizacion>${sinCot.length} pedido(s) empacados sin cotización generada para DICOSA.
       <button class="s" onclick="ir('despacho')">Ver</button></div>`:""}
     ${tarde.length ? `<div class="aviso a-mal">${tarde.length} pedido(s) pasaron su hora prometida.
@@ -2739,7 +2901,7 @@ function pintarInicio(){
     ${repo.length ? `<div class="aviso a-info">${repo.length} cliente(s) por quedarse sin producto.
       <button class="s" onclick="ir('reposicion')">Ver avisos</button></div>`:""}
     ${(!tarde.length && !sinStock.length && !repetidos.length && !repo.length && !negativos.length &&
-       !revisar.length && !sinSubir && !espPago.length && !espFactura.length)
+       !revisar.length && !sinSubir && !espPago.length && !espFactura.length && !facRev.length)
       ? `<div class="vacio">Todo en orden. Nada pendiente.</div>`:""}`;
 
   // serie de 14 días
@@ -2892,15 +3054,18 @@ function cancelarPedido(id){
 }
 function verPedido(id){
   const p = D.pedidos.find(x=>x.id===id);
+  const conDs = (p.lineas || []).some(l => l && l.dscto);      // fase Descuento
   const desvio = esNum(p.contribucion_est) ? (p.contribucion_real??0) - p.contribucion_est : null;
   modal(`<h3 style="margin-top:0">Pedido ${p.numero}</h3>
     <p class="mini">${esc(p.cliente)} · ${esc(p.telefono)}<br>${esc(p.direccion||"")}</p>
     <table style="margin:12px 0"><thead><tr><th>Producto</th><th class="num">Cant</th>
-      <th class="num">Importe</th></tr></thead><tbody>
-      ${p.lineas.map(l=>`<tr><td>${esc(l.nombre)}</td><td class="num">${l.cantidad}</td>
-        <td class="num">${L(l.cantidad*l.precio)}</td></tr>`).join("")}</tbody></table>
+      ${conDs ? `<th class="num">Dscto</th>` : ""}<th class="num">Importe</th></tr></thead><tbody>
+      ${p.lineas.map(l=>`<tr><td>${esc(l.nombre)}${l.dscto ? quienDio(l.dscto) : ""}</td><td class="num">${l.cantidad}</td>
+        ${conDs ? `<td class="num">${l.dscto && esNum(l.dscto.pct) ? pctTexto(l.dscto.pct) : "—"}</td>` : ""}
+        <td class="num">${L(importeLinea(l))}</td></tr>`).join("")}</tbody></table>
     <div class="grid g2">
       ${kpi(L0(p.total),"Total")}${kpi(KG(p.peso),"Peso")}
+      ${Number(p.descuento) > 0 ? kpi(L(p.descuento), "Descuento (incluido)") : ""}
       ${kpi(L0(p.costo_entrega_est),"Entrega estimada")}
       ${kpi(L0(p.costo_entrega_real??0),"Entrega real")}
       ${veCostos() ? kpi(L0o(p.contribucion_real??p.contribucion_est),"Contribución",
@@ -2934,12 +3099,17 @@ function pintarDespacho(){
   const esperando = D.pedidos.filter(p=>p.estado==="listo" && !pagoLibera(p));
   // B2: dos avisos; un mismo pedido puede estar en los dos.
   const sinFactura = D.pedidos.filter(p=>p.estado==="listo" && !facturaEmitida(p));
+  const facRev = D.pedidos.filter(p => p.estado !== "cancelado" && facturaPorRevisar(p));
   const avisoPago = (esperando.length
     ? `<div class="aviso a-med noprint" data-espera-pago><strong>${esperando.length} pedido(s) empacados esperando depósito.</strong>
        Ya están listos: falta verificar el pago para solicitar el transporte.</div>` : "") +
     (sinFactura.length
     ? `<div class="aviso a-med noprint" data-espera-factura><strong>${sinFactura.length} pedido(s) empacados esperando factura.</strong>
-       Sin el número de factura registrado no se solicita el transporte, tampoco a crédito.</div>` : "");
+       Sin el número de factura registrado no se solicita el transporte, tampoco a crédito.</div>` : "") +
+    // Factura con foto: para todos los que cobran (la liberan administración y coordinación).
+    (puedeCobrar() && facRev.length
+    ? `<div class="aviso a-mal noprint" data-factura-revisar><strong>${facRev.length} factura(s) por revisar.</strong>
+       No coinciden con el pedido: el transporte sale cuando administración o coordinación la libera.</div>` : "");
   $("#despachoAvisos").innerHTML = avisoPago + (tarde.length
     ? `<div class="aviso a-mal noprint"><strong>${tarde.length} pedido(s) pasaron su hora prometida.</strong>
        Aparecen con la barra roja.</div>`
@@ -2980,7 +3150,8 @@ function tarjetaPedido(p, f){
       <span class="cro" style="color:${colCro}">${cro}</span></div>
     <div class="cli">${esc(p.cliente)}</div>
     <div class="dir">${esc(p.direccion||"")}<br>${esc(p.telefono)}</div>
-    <ul>${p.lineas.map(l=>`<li><strong>${l.cantidad}×</strong> ${esc(l.nombre)}</li>`).join("")}</ul>
+    <ul>${p.lineas.map(l=>`<li><strong>${l.cantidad}×</strong> ${esc(l.nombre)}${l.dscto && esNum(l.dscto.pct)
+      ? ` <span class="mini" data-dscto-linea>· dscto ${pctTexto(l.dscto.pct)}</span>` : ""}</li>`).join("")}</ul>
     ${conIva(p) ? `<div class="dir" data-cobro>${desgloseCobro(p, " · ", false)}</div>
     <div class="dir">${p.peso.toFixed(2)} kg · <strong>${esc(p.canal)}</strong></div>`
       : `<div class="dir">${L0(p.total)} · ${p.peso.toFixed(2)} kg · <strong>${esc(p.canal)}</strong></div>`}
@@ -2992,6 +3163,8 @@ function tarjetaPedido(p, f){
         <button class="s" ${cobra ? "" : apagado} onclick="pedirDeposito('${p.id}')">Pedir depósito</button>`:""}
       ${!facturaEmitida(p) ? `<button class="s" ${cobra ? "" : apagado} onclick="registrarFactura('${p.id}')">Registrar factura</button>`
         : puedeCorregirFactura() ? `<button class="s" onclick="registrarFactura('${p.id}')">Corregir factura</button>` : ""}
+      ${facturaEmitida(p) && p.factura.foto && puedeVerFactura() ? `<button class="s" onclick="verFactura('${p.id}')">Ver factura</button>` : ""}
+      ${facturaPorRevisar(p) && puedeCorregirFactura() ? `<button class="s" onclick="liberarFactura('${p.id}')">Liberar factura</button>` : ""}
       ${f.e==="listo" && puedeSalir(p) ? `<button class="s" onclick="copiarCourier('${p.id}')">Datos al courier</button>`:""}
       ${f.e==="preparando" ? `<button class="s" onclick="imprimirPicking('${p.id}')">Imprimir</button>`:""}
       ${cotiza ? `<button class="s" ${noCot ? `disabled title="${esc(noCot)}"` : ""} onclick="imprimirCotizacion('${p.id}')">Cotización DICOSA</button>
@@ -3179,16 +3352,27 @@ function datosCotizacion(p){
     // Pedido de antes de la fase: unidad y marca del Catálogo de hoy, si este rol lo tiene.
     const s = nueva ? null : D.skus.find(x => x.codigo === l.codigo);
     const ds = s && s.dicosa && typeof s.dicosa === "object" ? s.dicosa : {};
-    const precio = Number(l.precio) || 0, cantidad = Number(l.cantidad) || 0, subtotal = cotR2(cantidad * precio);
+    const precio = Number(l.precio) || 0, cantidad = Number(l.cantidad) || 0;
+    // AJUSTE-DS (AJ1b): con descuento, SUBTOTAL de la línea = su importe (redondeo por línea).
+    const subtotal = cotR2(importeLinea(l) || 0);
     const iva = esNum(l.iva) ? l.iva : ivaLinea(l);
     sumaIva += iva;
+    // Fase Descuento: PRECIO es el de lista; DSCTO (%) el de la línea; AJUSTE-DS (AJ2a): DSCTO (L)
+    // es el descuento de la LÍNEA (dscto.monto) y PRECIO CON DSCTO el precio de referencia, a 2
+    // decimales. Un pedido v1 (con dscto.unit y sin monto) muestra su monto igual. Sin
+    // descuento: 0 %, L 0 y el mismo precio.
+    const dsc = l.dscto && typeof l.dscto === "object" && esNum(l.dscto.pct) ? l.dscto : null;
+    const montoDs = !dsc ? 0 : esNum(dsc.monto) ? dsc.monto : esNum(dsc.unit) ? cotR2(cantidad * dsc.unit) : 0;
     return {n:i + 1, codigo:t(l.codigo), cantidad, unidad:t(l.unidad ?? ds.unidad), marca:t(l.marca ?? ds.marca),
-            descripcion:t(l.nombre), precio, subtotal, iva, isv: iva > 0 ? "S" : "N", total: cotR2(subtotal + iva)};
+            descripcion:t(l.nombre), lista: dsc && esNum(l.precio_lista) ? l.precio_lista : precio,
+            pct: dsc ? dsc.pct : 0, unit: montoDs,
+            precio, subtotal, iva, isv: iva > 0 ? "S" : "N", total: cotR2(subtotal + iva)};
   });
   const cargo = Number(p.cargo) || 0;
   if(cargo > 0) filas.push({n:filas.length + 1, codigo:"", cantidad:1, unidad:"", marca:"", descripcion:"Cargo de envío",
-    precio:cargo, subtotal:cotR2(cargo), iva:0, isv:"N", total:cotR2(cargo), envio:true});
+    lista:cargo, pct:0, unit:0, precio:cargo, subtotal:cotR2(cargo), iva:0, isv:"N", total:cotR2(cargo), envio:true});
   const isv = esNum(p.iva) ? p.iva : 0, total = conIva(p) ? p.total_con_iva : 0;
+  const descuento = esNum(p.descuento) && p.descuento > 0 ? p.descuento : 0;
   let problema = cotBloqueo(p);
   if(!problema && Math.abs(cotR2(sumaIva) - isv) > 0.005)
     problema = "El ISV de las líneas (L " + cotMonto(sumaIva) + ") no suma el ISV del pedido (L " + cotMonto(isv) +
@@ -3199,9 +3383,12 @@ function datosCotizacion(p){
     sitio:cfg.sitio, logo:cfg.logo, rtn_dicosa:cfg.rtn, forma_pago:cfg.forma_pago, validez:cfg.validez,
     agente:t(ag.codigo), nombre_agente:t(ag.nombre), contacto_agente:t(ag.telefono),
     codigo: t(cot.codigo) || (idc.startsWith(CLI_PREFIJO) ? idc.slice(CLI_PREFIJO.length) : ""),
-    rtn:t(cot.rtn), condicion: p.pago_estado === "credito" ? "CRÉDITO" : "CONTADO",
+    // AJUSTE-DS: sin RTN del cliente, «No disponible» (el R.T.N. de DICOSA es rtn_dicosa y no cambia).
+    rtn:t(cot.rtn) || "No disponible", condicion: p.pago_estado === "credito" ? "CRÉDITO" : "CONTADO",
     contacto:t(cot.contacto), direccion:t(p.direccion), telefono:t(p.telefono), hora:fh.hora, fecha:fh.fecha,
-    filas, subtotal: esNum(p.total) ? p.total : (Number(p.subtotal) || 0), isv, total,
+    // Fase Descuento (3.1): SUBTOTAL a precio de lista (con el cargo de envío) y la fila
+    // DESCUENTOS Y REBAJAS: SUBTOTAL − DESCUENTOS Y REBAJAS + I.S.V = TOTAL.
+    filas, subtotal: cotR2((esNum(p.total) ? p.total : (Number(p.subtotal) || 0)) + descuento), descuento, isv, total,
     observaciones:"Pedido " + t(p.numero),
     copia: facturaEmitida(p) ? "COPIA – factura n.º " + t(p.factura.numero) : "",
     cuentas,
@@ -3215,8 +3402,8 @@ function htmlCotizacion(p){
   const m = n => `<span>L</span> <span>${cotMonto(n)}</span>`, mv = `<span>L</span> <span>-</span>`;
   const td = (c, v, cls) => `<td data-c="${c}"${cls ? ` class="${cls}"` : ""}>${v}</td>`;
   const fila = f => `<tr data-fila="${f.n}">` + td("fila", "N°" + f.n) + td("codigo", e(f.codigo)) + td("cant", e(f.cantidad)) +
-    td("unidad", e(f.unidad)) + td("marca", e(f.marca)) + td("descripcion", e(f.descripcion), "i") + td("precio", m(f.precio), "m") +
-    td("dscto_pct", "0%") + td("dscto", m(0), "m") + td("precio_dscto", m(f.precio), "m") + td("subtotal", m(f.subtotal), "m") +
+    td("unidad", e(f.unidad)) + td("marca", e(f.marca)) + td("descripcion", e(f.descripcion), "i") + td("precio", m(f.lista), "m") +
+    td("dscto_pct", e(String(Number(f.pct) || 0)) + "%") + td("dscto", m(f.unit), "m") + td("precio_dscto", m(f.precio), "m") + td("subtotal", m(f.subtotal), "m") +
     td("isv", f.isv) + td("total", m(f.total), "m") + `</tr>`;
   const vacia = `<tr data-vacia>` + td("fila", "") + td("codigo", "") + td("cant", "") + td("unidad", "") + td("marca", "") +
     td("descripcion", "", "i") + td("precio", mv, "m") + td("dscto_pct", "") + td("dscto", mv, "m") + td("precio_dscto", mv, "m") +
@@ -3231,6 +3418,7 @@ function htmlCotizacion(p){
       <div class="p-cen"><div class="nota-roja">ISV aplicado / descuento aplicado</div>
         <div class="obs">Observaciones: ${e(d.observaciones)}</div></div>
       <table class="tot"><tbody><tr><th>SUBTOTAL</th><td data-t="subtotal" class="m">${m(d.subtotal)}</td></tr>
+        <tr><th>DESCUENTOS Y REBAJAS</th><td data-t="descuento" class="m">${m(d.descuento)}</td></tr>
         <tr><th>I.S.V</th><td data-t="isv" class="m">${m(d.isv)}</td></tr>
         <tr class="gran"><th>TOTAL</th><td data-t="total" class="m">${m(d.total)}</td></tr></tbody></table>
     </div>
@@ -3388,9 +3576,70 @@ function facturaSar(n){
   const m = /^(\d{3})(\d{3})(\d{2})(\d{8})$/.exec(t);
   return m ? m.slice(1).join("-") : "";
 }
-function puedeSalir(p){ return pagoLibera(p) && facturaEmitida(p); }
+/* ---------------------------------------- factura con foto (DF1a, DF3a a DF9a y DS5a)
+   La factura nueva lleva total (con ISV), ISV, «Descuentos y Rebajas» y la foto. Se compara
+   con el pedido, que ya trae el descuento: total contra total_con_iva, ISV contra iva y
+   descuento contra el del pedido, con tolerancia FACTURA_TOL. Resultado en p.factura_rev =
+   {estado: coincide | por_revisar, motivos, dif, en, liberada}. La base lo vuelve a calcular
+   (sql/descuento-factura.sql, factura_compara_ff) y es la que manda. Una factura por revisar
+   solo sale con la liberación de administración o coordinación, con motivo. Una factura de
+   antes de esta fase (sin total) sigue liberando el transporte (DF9a). */
+const FACTURA_TOL = 0.10;            // c_tol en la base (DF4a)
+const FACTURA_MOTIVO_MIN = 8;        // c_motivo_min en la base
+const FAC_DEPOSITO = "facturas";     // depósito privado de Storage (DF6a)
+const FAC_TOPE = 2 * 1024 * 1024;    // tope por foto del depósito
+function puedeVerFactura(){ return ["local","admin","coordinador","facturacion"].includes(rolPantalla()); }
+const centavos = x => Math.round(Number(x) * 100);
+const montoTxt = x => "L " + (Number(x) || 0).toFixed(2);
+function facturaConMontos(f){ return !!f && typeof f === "object" && esNum(f.total); }
+// ISV del pedido calculado sobre el precio de lista (ayuda de DS6), o null si no hay líneas con descuento.
+function ivaSobreLista(p){
+  const ls = Array.isArray(p.lineas) ? p.lineas.filter(l => l && typeof l === "object") : [];
+  if(!ls.some(l => esNum(l.precio_lista))) return null;
+  return ls.reduce((a, l) => a + (Number(l.iva) > 0
+    ? Math.round(Number((Number(l.cantidad) * Number(esNum(l.precio_lista) ? l.precio_lista : l.precio) * IVA_TASA).toFixed(6))) / 100 : 0), 0);
+}
+// La regla de la comparación (la misma que factura_compara_ff de la base).
+function facturaCompara(p, f){
+  if(!conIva(p)) return {estado:"por_revisar", motivos:["pedido sin ISV"], dif:{}};
+  const tol = centavos(FACTURA_TOL), desc = esNum(p.descuento) ? p.descuento : 0, fd = esNum(f.descuento) ? f.descuento : 0;
+  const iva = esNum(p.iva) ? p.iva : 0, cargo = Number(p.cargo) || 0;
+  const dt = centavos(f.total) - centavos(p.total_con_iva), di = centavos(f.isv) - centavos(iva), dd = centavos(fd) - centavos(desc);
+  const motivos = [];
+  if(Math.abs(dt) > tol){
+    if(cargo > 0 && Math.abs(-dt - centavos(cargo)) <= tol) motivos.push("la factura parece no traer el cargo de envío");
+    else motivos.push("total de la factura " + montoTxt(f.total) + " y del pedido " + montoTxt(p.total_con_iva));
+  }
+  if(Math.abs(di) > tol){
+    const il = ivaSobreLista(p);
+    motivos.push(il !== null && Math.abs(centavos(f.isv) - centavos(il)) <= tol
+      ? "el ISV de la factura parece calculado sobre el precio de lista"
+      : "ISV de la factura " + montoTxt(f.isv) + " y del pedido " + montoTxt(iva));
+  }
+  if(Math.abs(dd) > tol) motivos.push("descuento de la factura " + montoTxt(fd) + " y del pedido " + montoTxt(desc));
+  return {estado: motivos.length ? "por_revisar" : "coincide", motivos, dif:{total:dt / 100, isv:di / 100, descuento:dd / 100}};
+}
+// Revisión vigente de la factura del pedido: la guardada o, si falta, la calculada aquí.
+function facturaRev(p){
+  if(!facturaEmitida(p) || !facturaConMontos(p.factura)) return null;
+  const r = p.factura_rev;
+  return r && typeof r === "object" && (r.estado === "coincide" || r.estado === "por_revisar") ? r : facturaCompara(p, p.factura);
+}
+function facturaLiberada(p){
+  const r = facturaRev(p), l = r && r.liberada;
+  return !!(l && typeof l === "object" && String(l.motivo || "").trim().length >= FACTURA_MOTIVO_MIN);
+}
+// ¿La factura deja salir el pedido? Sin montos (factura de antes, DF9a): sí.
+function facturaLibera(p){
+  if(!facturaEmitida(p)) return false;
+  const r = facturaRev(p);
+  return !r || r.estado === "coincide" || facturaLiberada(p);
+}
+function facturaPorRevisar(p){ return facturaEmitida(p) && !facturaLibera(p); }
+function puedeSalir(p){ return pagoLibera(p) && facturaEmitida(p) && facturaLibera(p); }
 function faltaParaSalir(p){
-  return [pagoLibera(p) ? "" : "verificar el depósito", facturaEmitida(p) ? "" : "registrar la factura"].filter(Boolean);
+  return [pagoLibera(p) ? "" : "verificar el depósito", facturaEmitida(p) ? "" : "registrar la factura",
+          facturaPorRevisar(p) ? "revisar la factura (administración o coordinación)" : ""].filter(Boolean);
 }
 // Otros pedidos de este navegador con el mismo número de factura (sin mayúsculas ni espacios).
 const facturaClave = n => String(n || "").replace(/\s+/g, "").toLowerCase();
@@ -3401,8 +3650,13 @@ function pedidosConFactura(numero, salvoId){
 function facturaRepetida(p){ return facturaEmitida(p) ? pedidosConFactura(p.factura.numero, p.id) : []; }
 function badgeFactura(p){
   if(!facturaEmitida(p)) return `<span class="pill p-mal">SIN FACTURA</span>`;
+  const r = facturaRev(p);
   return `<span class="pill p-ok">FACTURA n.º ${esc(p.factura.numero)}</span>` +
-    (facturaRepetida(p).length ? ` <span class="pill p-med" title="Otro pedido tiene este mismo número de factura">repetida</span>` : "");
+    (facturaRepetida(p).length ? ` <span class="pill p-med" title="Otro pedido tiene este mismo número de factura">repetida</span>` : "") +
+    // Factura con foto: resultado de la comparación (las de antes de esta fase no tienen).
+    (!r ? "" : r.estado === "coincide" ? ` <span class="pill p-ok" data-rev>COINCIDE</span>`
+      : facturaLiberada(p) ? ` <span class="pill p-ok" data-rev title="${esc("Motivo: " + r.liberada.motivo)}">LIBERADA</span>${quienLibero(r.liberada)}`
+      : ` <span class="pill p-med" data-rev title="${esc((r.motivos || []).join("; "))}">POR REVISAR</span>`);
 }
 // D2: con depósito o con factura, cancelar es de administración o coordinación.
 function tieneDeposito(p){ return !!p && (p.pago_estado === "verificado" || (!!p.pago && typeof p.pago === "object")); }
@@ -3420,12 +3674,25 @@ function usuarioDeId(id){
   const e = l.find(x => x.id === String(id || ""));
   return e ? e.email : "";
 }
-function quienRegistro(x){
+function quienTexto(x){
   if(!x || typeof x !== "object" || !["admin","coordinador"].includes(rolPantalla())) return "";
   const u = x.por ? usuarioDeId(x.por) : "";
   const n = x.por ? (u ? (nombreEquipo(u) || u) : "otro usuario") : "";
-  const t = [n, x.letra ? "dispositivo " + x.letra : ""].filter(Boolean).join(", ");
+  return [n, x.letra ? "dispositivo " + x.letra : ""].filter(Boolean).join(", ");
+}
+function quienRegistro(x){
+  const t = quienTexto(x);
   return t ? `<br><span class="mini" data-quien>registró: ${esc(t)}</span>` : "";
+}
+// Fase Descuento: quién dio el descuento de una línea (dscto.por y dscto.letra), con la misma regla.
+function quienDio(x){
+  const t = quienTexto(x);
+  return t ? `<br><span class="mini" data-dio>dio: ${esc(t)}</span>` : "";
+}
+// Factura con foto: quién liberó una factura por revisar (factura_rev.liberada), con la misma regla.
+function quienLibero(x){
+  const t = quienTexto(x);
+  return t ? ` <span class="mini" data-libero>liberó: ${esc(t)}</span>` : "";
 }
 // D9a: antes de guardar un depósito o una factura se deja la sincronización al día, para
 // no escribir sobre una copia vieja del pedido. Devuelve el pedido como quedó (la bajada
@@ -3433,13 +3700,18 @@ function quienRegistro(x){
 // se abrió la ventana; si cambió, se avisa en msg y hay que volver a pulsar.
 let COBRO = null;          // {id, firma} del pedido de la ventana abierta
 let COBRO_OCUPADO = false;
-async function cobroAlDia(id, msg){
+// sinConexionNo (factura con foto, DF5a): sin conexión no se pregunta; no se guarda.
+async function cobroAlDia(id, msg, sinConexionNo){
   const aviso = (c, t) => { const x = $(msg); if(x) x.innerHTML = t ? `<div class="aviso ${c}">${t}</div>` : ""; };
   if(typeof nubeActiva === "function" && nubeActiva()){
     aviso("a-info", "Revisando que la sincronización esté al día…");
     for(let i = 0; NUBE.ocupado && i < 200; i++) await new Promise(r => setTimeout(r, 50));
     await nubeSincronizar(true);
     aviso("", "");
+    if(NUBE.estado !== "en_linea" && sinConexionNo){
+      aviso("a-mal", "Sin conexión no se registra la factura: la foto tiene que subir primero. No se guardó; vuelve a pulsar cuando haya conexión.");
+      return null;
+    }
     if(NUBE.estado !== "en_linea" && !confirm("No se pudo revisar la sincronización (sin conexión o con error).\n\n"+
         "El pedido pudo cambiar en otro dispositivo. ¿Guardar de todos modos?")) return null;
   }
@@ -3539,16 +3811,34 @@ async function confirmarDeposito(id){
 }
 
 /* ----------------------------------------------- factura (fase B2, pendiente 169) */
+// Factura con foto: la foto elegida en la ventana abierta, ya reducida (como las del Catálogo:
+// 1600 px de lado mayor, JPEG, sin los datos EXIF), con la huella del archivo original.
+let FAC_FOTO = null;         // {blob, h, bytes, url}
+let FAC_VER_URL = null;      // dirección blob: de la foto que se está viendo
+function facturaSoltarFoto(){
+  if(FAC_FOTO && FAC_FOTO.url) URL.revokeObjectURL(FAC_FOTO.url);
+  FAC_FOTO = null;
+}
+// Monto escrito en la ventana: número no negativo con 2 decimales como máximo, o null.
+function facturaMonto(sel){
+  const t = String(($(sel) || {}).value || "").trim().replace(",", ".");
+  return /^\d+(\.\d{1,2})?$/.test(t) ? Number(t) : null;
+}
+function facturaDescEscrito(){
+  return String(($("#fcDesc") || {}).value || "").trim() === "" ? 0 : facturaMonto("#fcDesc");
+}
 function registrarFactura(id){
   if(!puedeCobrar()) return;
   const p = D.pedidos.find(x=>x.id===id); if(!p) return;
   const corrige = facturaEmitida(p);
   if(corrige && !puedeCorregirFactura()) return;      // D1a
   COBRO = {id, firma: nubeFirmaPedido(p)};
+  facturaSoltarFoto();
   const f = corrige ? p.factura : {};
+  const val = k => esNum(f[k]) ? String(f[k]) : "";
   modal(`<h3 style="margin-top:0">${corrige ? "Corregir" : "Registrar"} factura — pedido ${p.numero}</h3>
-    <p class="mini">Escribe el número de la factura que DICOSA emitió para este pedido. Sin factura registrada
-    no se solicita el transporte, tampoco a crédito.${corrige ? " Al corregir, el número anterior queda guardado." : ""}</p>
+    <p class="mini">Escribe el número de la factura que DICOSA emitió para este pedido, sus montos y su foto. Sin factura
+    registrada no se solicita el transporte, tampoco a crédito.${corrige ? " Al corregir, la factura anterior queda guardada." : ""}</p>
     <div class="aviso a-info">${conIva(p) ? desgloseCobro(p, " · ", true, "Cargo de envío") : "Total del pedido: " + L0(p.total)}</div>
     <div class="grid g2" style="margin:12px 0">
       <div><label>Número de factura</label><input id="fcNumero" value="${esc(f.numero || "")}" inputmode="numeric"
@@ -3557,21 +3847,74 @@ function registrarFactura(id){
         También se puede escribir con los 18 dígitos seguidos: los guiones se ponen solos.</p></div>
       <div><label>Fecha de emisión</label><input id="fcFecha" type="date" value="${esc(f.fecha || fechaLocal())}"></div>
     </div>
+    <div class="grid g3" style="margin:0 0 12px">
+      <div><label>Total de la factura (con ISV), L.</label><input id="fcTotal" inputmode="decimal" value="${val("total")}"
+        oninput="facturaVerComp('${id}')"></div>
+      <div><label>ISV de la factura, L.</label><input id="fcIsv" inputmode="decimal" value="${val("isv")}"
+        oninput="facturaVerComp('${id}')"></div>
+      <div><label>Descuentos y Rebajas, L.</label><input id="fcDesc" inputmode="decimal" value="${corrige ? val("descuento") : "0"}"
+        oninput="facturaVerComp('${id}')"></div>
+    </div>
+    <div><label>Foto de la factura</label>
+      <input type="file" id="fcCamara" accept="image/*" capture="environment" style="display:none" onchange="facturaFoto(this)">
+      <input type="file" id="fcArchivo" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="facturaFoto(this)">
+      <button class="s" onclick="document.getElementById('fcCamara').click()">Tomar foto</button>
+      <button class="s" onclick="document.getElementById('fcArchivo').click()">Elegir archivo</button>
+      <img id="fcVista" alt="Vista previa de la foto de la factura" style="display:none;max-height:140px;max-width:100%;margin-top:8px;border:1px solid var(--borde)">
+    </div>
+    <div id="fcComp" style="margin-top:10px"></div>
     <div id="fcMsg"></div><hr>
-    <button class="b" onclick="confirmarFactura('${id}')">Guardar factura</button>
+    <button class="b" id="fcGuardar" onclick="confirmarFactura('${id}')">Guardar factura</button>
     <button class="s" onclick="cerrarModal()">Cancelar</button>`);
+  facturaVerComp(id);
+}
+// Resultado de la comparación mientras se escribe (la que vale es la de la base).
+function facturaVerComp(id){
+  const x = $("#fcComp"), p = D.pedidos.find(q => q.id === id); if(!x || !p) return;
+  const total = facturaMonto("#fcTotal"), isv = facturaMonto("#fcIsv"), descuento = facturaDescEscrito();
+  if(total === null || isv === null || descuento === null){ x.innerHTML = ""; return; }
+  const r = facturaCompara(p, {total, isv, descuento});
+  x.innerHTML = r.estado === "coincide"
+    ? `<div class="aviso a-ok">Coincide con el pedido.</div>`
+    : `<div class="aviso a-med">Quedará por revisar: ${esc(r.motivos.join("; "))}. La libera administración o coordinación.</div>`;
+}
+// La foto elegida (cámara o archivo): se reduce y se muestra en pequeño. No sube nada todavía.
+async function facturaFoto(input){
+  const file = input && input.files && input.files[0];
+  const fcMal = t => { const x = $("#fcMsg"); if(x) x.innerHTML = t ? `<div class="aviso a-mal">${t}</div>` : ""; };
+  if(!file) return;
+  let bytes, blob;
+  try{
+    bytes = await file.arrayBuffer();
+    blob = await fotoReducir(bytes, file.type);
+  }catch(e){ fcMal("No se pudo leer la imagen. Toma la foto con la cámara o guárdala como JPEG."); return; }
+  if(blob.size > FAC_TOPE){ fcMal("La foto pesa " + (blob.size / 1048576).toFixed(1) + " MB aun reducida; el tope es 2 MB. Tómala de nuevo."); return; }
+  const h = (await fotoHuella(bytes)).slice(0, 12);
+  facturaSoltarFoto();
+  FAC_FOTO = {blob, h, bytes: blob.size, url: URL.createObjectURL(blob)};
+  const v = $("#fcVista");
+  if(v){ v.src = FAC_FOTO.url; v.style.display = "block"; }
+  fcMal("");
 }
 async function confirmarFactura(id){
   if(!puedeCobrar() || COBRO_OCUPADO) return;
   const fcMal = t => { const x = $("#fcMsg"); if(x) x.innerHTML = `<div class="aviso a-mal">${t}</div>`; };
-  const escrito = $("#fcNumero").value.trim(), fechaFac = $("#fcFecha").value;
+  const escrito = String(($("#fcNumero") || {}).value || "").trim(), fechaFac = ($("#fcFecha") || {}).value || "";
   if(!escrito){ fcMal("Escribe el número de factura."); return; }
   const numero = facturaSar(escrito);
   if(!numero){ fcMal(FACTURA_SAR); return; }
   if(!/^\d{4}-\d{2}-\d{2}$/.test(fechaFac)){ fcMal("Escribe la fecha de emisión de la factura."); return; }
+  // Factura con foto (DF1a): foto, total, ISV y Descuentos y Rebajas, con 2 decimales como máximo.
+  const total = facturaMonto("#fcTotal"), isv = facturaMonto("#fcIsv"), descuento = facturaDescEscrito();
+  const faltan = [FAC_FOTO ? "" : "la foto de la factura",
+    total === null ? "el total de la factura (con ISV; un número con 2 decimales como máximo)" : "",
+    isv === null ? "el ISV de la factura (un número con 2 decimales como máximo)" : "",
+    descuento === null ? "los Descuentos y Rebajas (0 si la factura no trae)" : ""].filter(Boolean);
+  if(faltan.length){ fcMal("Falta " + faltan.join(", ") + "."); return; }
+  const fotoSel = FAC_FOTO;
   COBRO_OCUPADO = true;
   let p;
-  try{ p = await cobroAlDia(id, "#fcMsg"); } finally { COBRO_OCUPADO = false; }
+  try{ p = await cobroAlDia(id, "#fcMsg", true); } finally { COBRO_OCUPADO = false; }
   if(!p) return;
   const corrige = facturaEmitida(p);
   if(corrige && !puedeCorregirFactura()){ fcMal("Este pedido ya tiene la factura n.º "+esc(p.factura.numero)+
@@ -3580,16 +3923,94 @@ async function confirmarFactura(id){
   const otros = pedidosConFactura(numero, id);
   if(otros.length && !confirm("El número de factura "+numero+" ya está en "+
       otros.map(x => "el pedido #"+x.numero+" ("+x.cliente+")").join(" y en ")+".\n\n¿Guardarlo de todos modos?")) return;
+  // La foto sube ANTES de guardar la factura (DF5a), a <pedido>/<huella>.jpg del depósito
+  // facturas, sin x-upsert. Si ya estaba (subió y no se guardó), se da por subida (como R3).
+  // En modo local no hay depósito: se guardan solo la huella y el tamaño.
+  let foto;
+  if(typeof nubeActiva === "function" && nubeActiva()){
+    const ruta = p.id + "/" + fotoSel.h + ".jpg";
+    COBRO_OCUPADO = true;
+    try{ await nubeStorage("POST", ruta, fotoSel.blob, FAC_DEPOSITO); }
+    catch(e){
+      if(!e.yaExiste){
+        fcMal("No se subió la foto de la factura (" + esc(e.message) + "). No se guardó la factura: revisa la conexión y pulsa «Reintentar subida».");
+        const b = $("#fcGuardar"); if(b) b.textContent = "Reintentar subida";
+        return;
+      }
+    }finally{ COBRO_OCUPADO = false; }
+    foto = {ruta, h: fotoSel.h, bytes: fotoSel.bytes, subida_en: new Date().toISOString()};
+  }else foto = {h: fotoSel.h, bytes: fotoSel.bytes, local: true};
   const nueva = {numero, fecha:fechaFac, registrada_en:new Date().toISOString(),
-                 letra: letraDispositivo() || null};     // quién la registró lo pone la base (factura.por, identificador interno)
+                 letra: letraDispositivo() || null,      // quién la registró lo pone la base (factura.por, identificador interno)
+                 total, isv, descuento, foto};
   if(corrige){
     // D1a: al corregir se guarda lo anterior (la base lo vuelve a armar con lo que ella tenía).
+    // Factura con foto (DF7a): también si cambian los montos o la foto; la foto anterior queda de respaldo.
     const {anteriores, ...vieja} = p.factura;
-    nueva.anteriores = (Array.isArray(anteriores) ? anteriores : []).concat(
-      String(vieja.numero || "").trim() === numero && vieja.fecha === fechaFac ? [] : [vieja]);
+    const misma = String(vieja.numero || "").trim() === numero && vieja.fecha === fechaFac &&
+      vieja.total === total && vieja.isv === isv && (vieja.descuento ?? 0) === descuento &&
+      ((vieja.foto || {}).h || "") === foto.h;
+    nueva.anteriores = (Array.isArray(anteriores) ? anteriores : []).concat(misma ? [] : [vieja]);
     if(!nueva.anteriores.length) delete nueva.anteriores;
   }
   p.factura = nueva;
+  // La revisión se recalcula y la liberación anterior se borra (la base hace lo mismo).
+  p.factura_rev = {...facturaCompara(p, nueva), en: new Date().toISOString()};
+  COBRO = null;
+  facturaSoltarFoto();
+  guardar(); cerrarModal(); pintarDespacho(); pintarPedidos(); pintarInicio();
+}
+// Ver la foto de la factura (DF6a): se pide con el token del usuario y se muestra con una
+// dirección blob: que se suelta al cerrar. No se guarda en la caché del navegador.
+async function verFactura(id){
+  if(!puedeVerFactura()) return;
+  const p = D.pedidos.find(x => x.id === id), f = p && p.factura;
+  if(!f || !f.foto || typeof f.foto !== "object") return;
+  if(f.foto.local || !f.foto.ruta){ alert("Esta factura se registró sin base compartida: su foto no se guardó."); return; }
+  modal(`<h3 style="margin-top:0">Factura n.º ${esc(f.numero)} — pedido ${esc(p.numero)}</h3>
+    <div id="vfMsg" class="mini">Bajando la foto…</div><div id="vfFoto"></div><hr>
+    <button class="s" onclick="cerrarVerFactura()">Cerrar</button>`);
+  try{
+    const blob = await nubeStorage("GET", f.foto.ruta, null, FAC_DEPOSITO);
+    if(FAC_VER_URL) URL.revokeObjectURL(FAC_VER_URL);
+    FAC_VER_URL = URL.createObjectURL(blob);
+    const x = $("#vfFoto"), m = $("#vfMsg");
+    if(x) x.innerHTML = `<img data-factura src="${FAC_VER_URL}" alt="Foto de la factura" style="max-width:100%">`;
+    if(m) m.textContent = "";
+  }catch(e){
+    const m = $("#vfMsg"); if(m) m.innerHTML = `<div class="aviso a-mal">No se pudo bajar la foto: ${esc(e.message)}</div>`;
+  }
+}
+function cerrarVerFactura(){
+  if(FAC_VER_URL){ URL.revokeObjectURL(FAC_VER_URL); FAC_VER_URL = null; }
+  cerrarModal();
+}
+// Liberar una factura por revisar: solo administración o coordinación, con motivo de 8 o más.
+// La base pone quién (liberada.por) y cuándo; la de otro rol la ignora.
+function liberarFactura(id){
+  if(!puedeCorregirFactura()) return;
+  const p = D.pedidos.find(x => x.id === id); if(!p || !facturaPorRevisar(p)) return;
+  COBRO = {id, firma: nubeFirmaPedido(p)};
+  modal(`<h3 style="margin-top:0">Liberar factura — pedido ${esc(p.numero)}</h3>
+    <div class="aviso a-med">Factura n.º ${esc(p.factura.numero)}: ${esc((facturaRev(p).motivos || []).join("; "))}.</div>
+    <div style="margin:12px 0"><label>Motivo (${FACTURA_MOTIVO_MIN} caracteres o más)</label>
+      <input id="lbMotivo" placeholder="Ej: revisado con DICOSA, el descuento lo autorizó Daniel"></div>
+    <div id="lbMsg"></div><hr>
+    <button class="b" onclick="confirmarLiberar('${id}')">Liberar</button>
+    <button class="s" onclick="cerrarModal()">Cancelar</button>`);
+}
+async function confirmarLiberar(id){
+  if(!puedeCorregirFactura() || COBRO_OCUPADO) return;
+  const motivo = String(($("#lbMotivo") || {}).value || "").trim();
+  if(motivo.length < FACTURA_MOTIVO_MIN){
+    const x = $("#lbMsg"); if(x) x.innerHTML = `<div class="aviso a-mal">Escribe el motivo, con ${FACTURA_MOTIVO_MIN} caracteres o más.</div>`;
+    return;
+  }
+  COBRO_OCUPADO = true;
+  let p;
+  try{ p = await cobroAlDia(id, "#lbMsg"); } finally { COBRO_OCUPADO = false; }
+  if(!p || !facturaPorRevisar(p)) return;
+  p.factura_rev = {...facturaRev(p), liberada: {motivo, letra: letraDispositivo() || null, en: new Date().toISOString()}};
   COBRO = null;
   guardar(); cerrarModal(); pintarDespacho(); pintarPedidos(); pintarInicio();
 }
@@ -6464,7 +6885,9 @@ function exportarPedidosCSV(){
     "pago_estado","pago_monto","pago_referencia","pago_banco","pago_fecha",
     "forzado_fecha","forzado_letra","forzado_existencia","forzado_existencia_fecha","forzado_existencia_letra",
     // B2 (D4a): columnas nuevas al final, sin mover las de antes.
-    "factura_numero","factura_fecha","pago_cuenta"]];
+    "factura_numero","factura_fecha","pago_cuenta",
+    // Factura con foto y Descuento: al final, sin mover las de antes.
+    "factura_total","factura_isv","factura_descuento","factura_revision","descuento"]];
   D.pedidos.forEach(p=>f.push([p.numero,p.fecha,p.cliente,p.telefono,p.canal,p.nivel,p.hecho_por??"",p.estado,
     // Margen y contribuciones: celda vacía si no son número, nunca NaN.
     p.total,p.peso,esNum(p.margen)?p.margen:"",p.costo_entrega_est,esNum(p.contribucion_est)?p.contribucion_est:"",
@@ -6473,7 +6896,12 @@ function exportarPedidosCSV(){
     p.override_fecha??"",p.override_letra??"",p.override_existencia??"",
     p.override_existencia_fecha??"",p.override_existencia_letra??"",
     facturaEmitida(p)?p.factura.numero:"",facturaEmitida(p)?(p.factura.fecha??""):"",
-    p.pago?.cuenta ? [p.pago.cuenta.banco, p.pago.cuenta.numero].filter(Boolean).join(" ") : ""]));
+    p.pago?.cuenta ? [p.pago.cuenta.banco, p.pago.cuenta.numero].filter(Boolean).join(" ") : "",
+    facturaEmitida(p) && esNum(p.factura.total) ? p.factura.total : "",
+    facturaEmitida(p) && esNum(p.factura.isv) ? p.factura.isv : "",
+    facturaEmitida(p) && esNum(p.factura.descuento) ? p.factura.descuento : "",
+    (() => { const r = facturaRev(p); return !r ? "" : r.estado === "coincide" ? "coincide" : facturaLiberada(p) ? "liberada" : "por_revisar"; })(),
+    esNum(p.descuento) && p.descuento > 0 ? p.descuento : ""]));
   bajar("pedidos-"+hoy()+".csv", csv(f));
 }
 function exportarClientesCSV(){
@@ -6995,20 +7423,22 @@ function fotoYaExiste(status, txt){
   if(!j || typeof j !== "object") return false;
   return j.error === "Duplicate" || /already exists/i.test(String(j.message || ""));
 }
-async function nubeStorage(metodo, ruta, cuerpo){
+// Factura con foto: el depósito es un parámetro (por defecto, el de las fotos del Catálogo).
+async function nubeStorage(metodo, ruta, cuerpo, deposito){
+  const dep = deposito || NUBE_DEPOSITO;
   const tk = await nubeToken();
   const partes = String(ruta).split("/").map(encodeURIComponent).join("/");
   const base = NUBE.url + "/storage/v1/object/";
   const cab = {"apikey": NUBE.key, "Authorization": "Bearer " + tk};
   let url, body;
-  if(metodo === "GET") url = base + "authenticated/" + NUBE_DEPOSITO + "/" + partes;
+  if(metodo === "GET") url = base + "authenticated/" + dep + "/" + partes;
   else if(metodo === "POST"){
-    url = base + NUBE_DEPOSITO + "/" + partes;
+    url = base + dep + "/" + partes;
     cab["Content-Type"] = cuerpo.type || "image/jpeg";
     // Los bytes y no el Blob: así el envío es igual en todos los navegadores.
     body = new Uint8Array(await cuerpo.arrayBuffer());
   }else{
-    url = base + NUBE_DEPOSITO;
+    url = base + dep;
     cab["Content-Type"] = "application/json";
     body = JSON.stringify({prefixes: [String(ruta)]});
   }
